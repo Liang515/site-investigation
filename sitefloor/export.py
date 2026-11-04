@@ -20,7 +20,7 @@ TABLES = {
     "addresses": (None, "base, county, town"),
     "buildings": (None, "minlon, minlat"),
     "trades": (
-        "county, town, base, total_floors, structure, btype, built_year, trade_date, source",
+        "county, town, base, floor, total_floors, structure, btype, built_year, trade_date, source",
         "base, county, town",
     ),
     "door_trade": (None, "county, town, base"),

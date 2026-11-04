@@ -88,11 +88,11 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["trades", "derive", "osm", "permits", "coverage", "export"]
+PIPELINE = ["trades", "derive", "osm", "permits", "coverage", "export", "smoke"]
 NEEDS = {
-    "trades": {"trades", "derive", "osm", "permits", "coverage", "export"},
-    "osm": {"osm", "coverage", "export"},
-    "permits": {"permits", "coverage", "export"},
+    "trades": {"trades", "derive", "osm", "permits", "coverage", "export", "smoke"},
+    "osm": {"osm", "coverage", "export", "smoke"},
+    "permits": {"permits", "coverage", "export", "smoke"},
 }
 
 
