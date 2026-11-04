@@ -254,6 +254,13 @@ map.on("load", () => document.querySelectorAll(".maplibregl-ctrl-attrib.maplibre
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const v = x => x == null || x === "" ? "—" : esc(x);
+// 標準化地址 → Google 地圖搜尋（官方網址格式，不需金鑰）；輸入沒寫縣市時補上查到的縣市區，避免找到別的城市
+function gmapLink(r) {
+  if (!r.normalized) return "—";
+  const full = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(full)}`;
+  return `<a href="${esc(url)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">${esc(full)} ↗</a>`;
+}
 
 function select(uid) { map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]); }
 
@@ -302,7 +309,7 @@ async function doLookup(q) {
   }
   const r = await resp.json();
   const head = `<dl style="margin-top:10px">
-      <dt>標準化</dt><dd>${v(r.normalized)}</dd>
+      <dt>標準化</dt><dd>${gmapLink(r)}</dd>
       <dt>所在樓層</dt><dd>${v(r.unit_floor)}</dd>
       <dt>比對方式</dt><dd>${v(r.level)}</dd>
       <dt>信心</dt><dd><span class="badge b-${esc(r.confidence)}">${esc(r.confidence)}</span></dd>
