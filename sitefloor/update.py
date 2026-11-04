@@ -9,6 +9,8 @@
   uv run python -m sitefloor.update            # 檢查並更新
   uv run python -m sitefloor.update --check    # 只檢查哪些來源有新版，不下載
   uv run python -m sitefloor.update --force    # 不管有沒有新版，全部重跑
+  uv run python -m sitefloor.update --setup-notify   # 建立 ntfy 手機推播頻道（data/state/notify.json）
+  uv run python -m sitefloor.update --test-notify    # 發一則測試推播
 排程：每週一 09:00 由 launchd 執行（scripts/install_schedule.sh）。
 """
 
@@ -302,18 +304,58 @@ def run_step(step: str, log: list[str]):
         raise RuntimeError(f"步驟 {step} 失敗（exit {r.returncode}）")
 
 
-def notify(title: str, msg: str):
-    """macOS 通知（AppleScript 字串只認 \\ 與 \" 跳脫，不認 \\uXXXX，所以不能用 json.dumps）。"""
-    if sys.platform != "darwin":
+NOTIFY_FILE = (
+    ROOT / "data" / "state" / "notify.json"
+)  # {"ntfy_topic": "...", "ntfy_server": "https://ntfy.sh"}；不進版控
+
+
+def notify(title: str, msg: str, priority: int = 3):
+    """通知：macOS 通知（本機）＋ ntfy 手機推播（有設定 notify.json 時）。"""
+    if sys.platform == "darwin":
+        # AppleScript 字串只認 \\ 與 \" 跳脫，不認 \\uXXXX，所以不能用 json.dumps
+        def q(x: str) -> str:
+            return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+        first = msg.splitlines()[0] if msg else ""
+        subprocess.run(["osascript", "-e", f"display notification {q(first)} with title {q(title)}"], check=False)
+    if NOTIFY_FILE.exists():
+        cfg = json.loads(NOTIFY_FILE.read_text())
+        # JSON 發布：標題、內文可用中文（HTTP header 只能 latin-1）
+        body = json.dumps(
+            {"topic": cfg["ntfy_topic"], "title": title, "message": msg[:3800], "priority": priority},
+            ensure_ascii=False,
+        ).encode()
+        req = urllib.request.Request(
+            cfg.get("ntfy_server", "https://ntfy.sh"),
+            data=body,
+            method="POST",
+            headers={**UA, "Content-Type": "application/json"},
+        )
+        try:
+            urllib.request.urlopen(req, timeout=30, context=CTX).read()
+        except OSError as e:
+            print(f"  ntfy 推播失敗：{e}")
+
+
+def setup_notify():
+    """產生隨機（猜不到的）ntfy 頻道名稱，寫進 data/state/notify.json。"""
+    import secrets
+
+    if NOTIFY_FILE.exists():
+        topic = json.loads(NOTIFY_FILE.read_text())["ntfy_topic"]
+        print(f"已設定過：頻道 {topic}")
         return
-
-    def q(x: str) -> str:
-        return '"' + x.replace("\\", "\\\\").replace('"', '\\"') + '"'
-
-    subprocess.run(["osascript", "-e", f"display notification {q(msg)} with title {q(title)}"], check=False)
+    topic = f"siteinv-{secrets.token_urlsafe(12).replace('_', '').replace('-', '')}"
+    NOTIFY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    NOTIFY_FILE.write_text(json.dumps({"ntfy_topic": topic, "ntfy_server": "https://ntfy.sh"}, indent=1))
+    print(f"已建立推播頻道：{topic}\n手機裝 ntfy App → 訂閱（Subscribe）→ 頻道名稱填上面這串")
 
 
 def main(argv: list[str]):
+    if "--setup-notify" in argv:
+        return setup_notify()
+    if "--test-notify" in argv:
+        return notify("地址樓層查詢：測試", "收到這則就代表推播設定成功")
     force, check_only = "--force" in argv, "--check" in argv
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     new, steps, notes, manual = check_sources(state, force)
@@ -384,10 +426,15 @@ def main(argv: list[str]):
         ]
         report.write_text("\n".join(body) + "\n")
         print(f"報告：{report}")
-        notify("地址樓層查詢：資料已更新", f"{n_changed:,} 筆門牌異動，看過報告後再部署")
+        cov = [x for x in lines if x.startswith("- ") and "→" in x and "%" in x][:3]
+        summary = [f"{n_changed:,} 個門牌異動", *notes[:4], *cov]
+        if manual:
+            summary.append(f"另有 {len(manual)} 項要手動更新")
+        summary.append(f"報告：data/reports/{today}.md；確認後執行 vercel deploy --prod --yes")
+        notify("地址樓層查詢：資料已更新", "\n".join(summary))
     except Exception as e:
         report.write_text(f"# {today} 資料更新失敗\n\n{e}\n\n```\n{traceback.format_exc()}\n```\n\n" + "\n".join(log))
-        notify("地址樓層查詢：更新失敗", f"{e}（報告：data/reports/{today}.md）")
+        notify("地址樓層查詢：更新失敗", f"{e}\n報告：data/reports/{today}.md", priority=4)
         raise
 
 

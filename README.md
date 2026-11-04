@@ -118,6 +118,8 @@ data/raw/              原始資料（不進版控）
 
 - `--check` 只檢查不下載；`--force` 全部重跑。版本紀錄在 `data/state/sources.json`。
 - 每週一 09:00 自動執行：`zsh scripts/install_schedule.sh`（移除：加 `remove`）；紀錄在 `data/logs/update.log`。
+- 手機推播（ntfy）：`--setup-notify` 建立隨機頻道（存在 `data/state/notify.json`，不進版控），手機 ntfy App 訂閱該頻道；`--test-notify` 測試。
+- 搬到常開機的電腦（Mac mini）：見 [docs/mac-mini.md](docs/mac-mini.md)。
 
 ## 授權
 
