@@ -805,21 +805,25 @@ wheels = [
 name = "site-investigation"
 version = "0.1.0"
 source = { virtual = "." }
+default-groups = ["build", "dev"]
 dependencies = [
     { name = "duckdb" },
     { name = "fastapi" },
-    { name = "geopandas" },
     { name = "openpyxl" },
     { name = "pandas" },
-    { name = "pyarrow" },
-    { name = "pyogrio" },
-    { name = "pypdf" },
     { name = "python-multipart" },
     { name = "rapidfuzz" },
+    { name = "shapely" },
     { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
+build = [
+    { name = "geopandas" },
+    { name = "pyarrow" },
+    { name = "pyogrio" },
+    { name = "pypdf" },
+]
 dev = [
     { name = "pytest" },
 ]
@@ -828,18 +832,21 @@ dev = [
 requires-dist = [
     { name = "duckdb", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.162.0" },
-    { name = "geopandas", specifier = ">=1.2.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.1.0" },
-    { name = "pyarrow", specifier = ">=26.0.1" },
-    { name = "pyogrio", specifier = ">=0.13.0" },
-    { name = "pypdf", specifier = ">=6.21.4" },
     { name = "python-multipart", specifier = ">=0.0.33" },
     { name = "rapidfuzz", specifier = ">=3.14.6" },
+    { name = "shapely", specifier = ">=2.0" },
     { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]
+build = [
+    { name = "geopandas", specifier = ">=1.2.0" },
+    { name = "pyarrow", specifier = ">=26.0.1" },
+    { name = "pyogrio", specifier = ">=0.13.0" },
+    { name = "pypdf", specifier = ">=6.21.4" },
+]
 dev = [{ name = "pytest", specifier = ">=9.2.0" }]
 
 [[package]]
