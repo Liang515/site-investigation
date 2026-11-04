@@ -4,6 +4,9 @@
   trade_floors＝落在這棟裡的門牌的實價總樓層眾數。三者都沒有的建物不存。
   height 換算樓層只有 30% 相符（樓高差異大），所以只拿來畫地圖，不當樓層。
 - door_osm：門牌號（county, town, base）落在哪棟 OSM 建物裡。
+- same_osm：OSM 同棟推估。同一 OSM 外框內有實價的門牌的總樓層眾數（n＝有實價的門牌數、spread＝最大減最小、
+  btype＝建物型態眾數）。留一驗證（2026-11-04，17.9 萬門牌）：spread=0 時完全相符 97.0%、差一層內 98.6%；
+  spread>0 時 62.4%。查詢只用 spread=0 的（見 lookup.py）。
 
 OSM building:levels 的準確度（2026-11-04，6.4 萬個有實價的門牌）：完全相符 71.5%、差一層內 89%。
 查詢時當信心「低」的備援，排在同巷推估之後、建物圖之前（見 lookup.py）。
@@ -94,6 +97,17 @@ def main():
         f"  寫入 osm_buildings {len(odf):,}（OSM 樓層 {odf.levels.notna().sum():,}、"
         f"有實價樓層 {odf.trade_floors.notna().sum():,}）（{time.time() - t:.0f}s）"
     )
+
+    con.execute("""
+        CREATE OR REPLACE TABLE same_osm AS
+        SELECT o.county, o.town, o.base, g.floors, g.n, g.spread, g.btype
+        FROM door_osm o JOIN (
+            SELECT o.osm_uid, mode(t.floors) AS floors, count(DISTINCT o.county || o.town || o.base) AS n,
+                   max(t.floors) - min(t.floors) AS spread, mode(t.btype) AS btype
+            FROM door_osm o JOIN door_trade t USING (county, town, base) GROUP BY 1
+        ) g USING (osm_uid)""")
+    n = con.execute("SELECT count(*), count(*) FILTER (WHERE spread = 0) FROM same_osm").fetchone()
+    print(f"  same_osm {n[0]:,}（棟內樓層一致 {n[1]:,}）")
 
 
 if __name__ == "__main__":

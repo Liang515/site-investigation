@@ -114,6 +114,13 @@ QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY (o.base = q.base) DESC, (
 """
 
 
+# OSM 同棟：同一 OSM 外框內其他門牌的實價（osm.py 預先算好）
+_SAME_OSM_SQL = f"""
+SELECT q.idx, s.floors AS so_floors, s.n AS so_n, s.spread AS so_spread, s.btype AS so_btype
+FROM q JOIN same_osm s ON s.base = q.base AND {_MATCH.format(t="s")}
+QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY s.spread, s.n DESC) = 1
+"""
+
 # 使用執照：門牌直接比對；之號沒有使照時退回主號
 _PERMIT_SQL = f"""
 SELECT q.idx, p.floors_above AS p_floors, p.floors_below AS p_below, p.structure AS p_structure, p.year AS p_year,
@@ -196,7 +203,7 @@ def _resolve(r, covered: set[str]) -> dict:
         notes.append("實價登錄紀錄的總樓層不一致，取眾數")
     same_ok = not _na(r.s_floors) and r.s_spread == 0
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
-    #   自己的實價 > 同棟／同點位一致（94–98%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
+    #   自己的實價 > 同棟／同點位一致（94–98%）> OSM 同棟一致（97%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
     #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
     tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
     if not _na(t):
@@ -210,6 +217,12 @@ def _resolve(r, covered: set[str]) -> dict:
         floors, src, conf = r.s_floors, f"推估：{r.s_method}", "高"
         notes.append(f"本門牌無實價，取{r.s_method} {int(r.s_n)} 個門牌的實價（一致）")
         if _is_factory(r.b_btype, r.s_btype):
+            conf = "中"
+            notes.append("工廠／倉庫的同棟推估準確率約 8 成，信心降一級")
+    elif not _na(r.so_floors) and r.so_spread == 0:
+        floors, src, conf = r.so_floors, "推估：同棟（OSM 外框）", "高"
+        notes.append(f"本門牌無實價，取同一棟（OSM 建物外框）{int(r.so_n)} 個門牌的實價（一致）")
+        if _is_factory(r.b_btype, r.so_btype):
             conf = "中"
             notes.append("工廠／倉庫的同棟推估準確率約 8 成，信心降一級")
     elif not _na(r.p_floors):
@@ -261,6 +274,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     same = con.execute(_SAME_SQL).df()
     nb = con.execute(_NB_SQL).df()
     osm = _optional(con, _OSM_SQL, ["idx", "osm_uid", "o_floors", "o_name"])
+    same_osm = _optional(con, _SAME_OSM_SQL, ["idx", "so_floors", "so_n", "so_spread", "so_btype"])
     permit = _optional(con, _PERMIT_SQL, ["idx", "p_floors", "p_below", "p_structure", "p_year", "p_no", "p_source",
                                           "p_exact"])
     con.unregister("q")
@@ -268,7 +282,8 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
         "SELECT county FROM addresses UNION SELECT county FROM trades").fetchall()}
     df = (q.merge(hit, on="idx", how="left", suffixes=("_q", ""))
           .merge(trade, on="idx", how="left").merge(same, on="idx", how="left").merge(nb, on="idx", how="left")
-          .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left"))
+          .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left")
+          .merge(same_osm, on="idx", how="left"))
     df["unit_floor"] = df.floor
     resolved = pd.DataFrame([_resolve(r, covered) for r in df.itertuples()], index=df.index)
     for c in ("county", "town"):

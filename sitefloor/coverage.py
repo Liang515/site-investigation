@@ -1,6 +1,6 @@
 """各縣市涵蓋率（預先算好存成 coverage 表，網頁統計直接讀）。
 
-單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致 → 使用執照 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖。
+單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致（市府外框／同點位／OSM 外框）→ 使用執照 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖。
 工廠／倉庫的推估信心各降一級（同 lookup.py）。
 用法：uv run python -m sitefloor.coverage   （建庫、匯入實價、derive 之後跑）
 """
@@ -27,8 +27,9 @@ nb AS (
 flags AS (
     SELECT a.county,
            (t.base IS NOT NULL) AS own,
-           (s.spread = 0) AS same_ok,
-           (s.spread = 0 AND NOT regexp_matches(coalesce(s.btype, '') || '/' || coalesce(b.btype, ''), '{FACTORY_PAT}')) AS same_high,
+           (s.spread = 0 OR so.spread = 0) AS same_ok,
+           ((s.spread = 0 AND NOT regexp_matches(coalesce(s.btype, '') || '/' || coalesce(b.btype, ''), '{FACTORY_PAT}'))
+            OR (so.spread = 0 AND NOT regexp_matches(coalesce(so.btype, '') || '/' || coalesce(b.btype, ''), '{FACTORY_PAT}'))) AS same_high,
            (nb.base IS NOT NULL AND NOT nb.fac AND NOT regexp_matches(coalesce(b.btype, ''), '{FACTORY_PAT}')) AS near,
            (nb.base IS NOT NULL) AS near_any,
            (s.base IS NOT NULL) AS same_any,
@@ -40,6 +41,7 @@ flags AS (
     FROM a
     LEFT JOIN door_trade t USING (county, town, base)
     LEFT JOIN same_bldg s USING (county, town, base)
+    LEFT JOIN same_osm so USING (county, town, base)
     LEFT JOIN nb USING (county, town, base)
     LEFT JOIN buildings b ON b.uid = a.bldg_uid
     LEFT JOIN permits pm USING (county, town, base)
