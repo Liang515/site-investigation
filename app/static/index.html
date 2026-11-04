@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>地址樓層查詢</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc;
+    --accent: #1f5fbf; --hi: #1e7a46; --mid: #b7791f; --lo: #b42318;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; color: var(--ink); background: var(--bg); }
+  #app { display: grid; grid-template-columns: 380px 1fr; height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font-size: 18px; margin: 0; }
+  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; letter-spacing: .04em; }
+  form { display: flex; gap: 6px; }
+  input[type=text] { flex: 1; font-size: 15px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  button { font-size: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .big { font-size: 34px; font-weight: 700; line-height: 1; }
+  .big small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+  dl { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; margin: 12px 0 0; font-size: 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; }
+  .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; color: #fff; font-weight: 600; }
+  .b-高 { background: var(--hi); } .b-中 { background: var(--mid); } .b-低, .b-無, .b-待確認 { background: var(--lo); }
+  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
+  .addrs { font-size: 13px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
+  .legend { display: flex; gap: 0; font-size: 11px; color: var(--muted); }
+  .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
+  .legend span::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 10px; background: var(--c); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  #drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+  #drop.over { border-color: var(--accent); color: var(--accent); }
+  .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  .tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 6px 12px; }
+  .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; margin-bottom: 8px; }
+  .crumbs button { background: #eef3fb; color: var(--accent); padding: 4px 10px; font-size: 13px; }
+  .crumbs .cur { color: var(--muted); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; padding: 2px; }
+  .tiles.wide { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+  .tiles.num { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
+  .tile { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 9px 4px; font-size: 14px; line-height: 1.2; position: relative; }
+  .tile:hover { border-color: var(--accent); color: var(--accent); }
+  .tile small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tile.has::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--hi); }
+  #pickFilter { width: 100%; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+  #map { height: 100%; }
+  .hint { font-size: 12px; color: var(--muted); }
+  @media (max-width: 760px) {
+    html, body { height: auto; }
+    #app { grid-template-columns: 1fr; grid-template-rows: auto 60vh; height: auto; }
+    #map { height: 60vh; }
+    aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside>
+    <div>
+      <h1>地址樓層查詢</h1>
+      <div class="hint">放大地圖到街區可看到 3D 建物，點建物看屬性。立體優先用 OpenStreetMap 的建物（每棟分開），其次市府建物圖；都沒有的地方把實價登錄樓層畫成小方柱</div>
+    </div>
+
+    <section>
+      <div class="tabs"><button type="button" id="tabPick" class="on">用選的</button><button type="button" id="tabType">打字</button></div>
+      <div id="pickBox">
+        <div class="crumbs" id="crumbs"></div>
+        <input id="pickFilter" type="search" placeholder="篩選（可不填）" hidden>
+        <div class="tiles" id="tiles"></div>
+        <div class="hint" id="pickHint" style="margin-top:6px"></div>
+      </div>
+      <form id="f" hidden><input id="q" type="text" placeholder="例：臺中市西屯區市政路390號、台北101"><button>查詢</button></form>
+      <div id="result" style="margin-top:12px"></div>
+    </section>
+
+    <section>
+      <h2>整批查詢</h2>
+      <label id="drop">拖曳 Excel / CSV 到這裡，或點擊選檔<br><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel</span>
+        <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden></label>
+      <div id="batchMsg" class="note"></div>
+    </section>
+
+    <section>
+      <h2>地上樓層</h2>
+      <div class="legend" id="legend"></div>
+    </section>
+
+    <section>
+      <h2>已建置範圍</h2>
+      <table id="stats"></table>
+    </section>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script>
+const RAMP = [[1, "#d9e6f2"], [3, "#a9c6e3"], [6, "#6f9fd0"], [13, "#3a6fb3"], [21, "#7a3fa0"], [31, "#c2185b"]];
+const LABELS = ["1–2", "3–5", "6–12", "13–20", "21–30", "31+"];
+document.getElementById("legend").innerHTML =
+  RAMP.map((r, i) => `<span style="--c:${r[1]}">${LABELS[i]}</span>`).join("");
+
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: {
+      emap: { type: "raster", tileSize: 256, maxzoom: 19,
+        tiles: ["https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}"],
+        attribution: "© 內政部國土測繪中心" },
+      bldg: { type: "geojson", data: { type: "FeatureCollection", features: [] },
+        attribution: "建物：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OpenStreetMap 貢獻者</a>、臺中市／臺北市政府" },
+      pin: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+    },
+    layers: [
+      { id: "emap", type: "raster", source: "emap" },
+      { id: "bldg", type: "fill-extrusion", source: "bldg", paint: {
+          // 沒有樓層、只有 OSM 高度的建物：以 高度÷3.2m 上色
+          "fill-extrusion-color": ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
+            ["step", ["coalesce", ["get", "floors"], ["/", ["get", "h"], 3.2]], RAMP[0][1], ...RAMP.slice(1).flat()]],
+          "fill-extrusion-height": ["coalesce", ["get", "h"], 3.2],
+          "fill-extrusion-opacity": 0.85 } },
+      { id: "bldg-sel", type: "line", source: "bldg", filter: ["==", ["get", "uid"], ""],
+        paint: { "line-color": "#ff6d00", "line-width": 3 } },
+      { id: "pin", type: "circle", source: "pin",
+        paint: { "circle-radius": 7, "circle-color": "#ff6d00", "circle-stroke-color": "#fff", "circle-stroke-width": 2 } },
+    ],
+  },
+  center: [120.6466, 24.1626], zoom: 16, pitch: 50, bearing: -15,
+});
+map.addControl(new maplibregl.NavigationControl());
+
+let timer;
+async function loadBuildings() {
+  if (map.getZoom() < 15.5) { map.getSource("bldg").setData({ type: "FeatureCollection", features: [] }); return; }
+  const b = map.getBounds();
+  const r = await fetch(`/api/buildings?bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`);
+  map.getSource("bldg").setData(await r.json());
+}
+map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
+map.on("load", loadBuildings);
+
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const v = x => x == null || x === "" ? "—" : esc(x);
+
+function select(uid) { map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]); }
+
+// 點地圖上的建物：只看建物圖屬性
+async function showBuilding(uid) {
+  const b = await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json();
+  select(uid);
+  document.getElementById("result").innerHTML = card(b, "", b);
+}
+
+// 查詢結果（圖資＋實價合併後）為主；有對到建物就附上同棟門牌
+function card(r, head, bldg) {
+  return `
+    <div class="card">
+      <div class="big">${v(r.floors_above)}<small>層（地上）</small></div>
+      ${head}
+      <dl>
+        <dt>地下樓層</dt><dd>${v(r.floors_below)}</dd>
+        <dt>構造</dt><dd>${v(r.structure)}</dd>
+        <dt>建物型態</dt><dd>${v(r.btype)}</dd>
+        <dt>${v(r.year_kind || "年份")}</dt><dd>${v(r.year)}</dd>
+        <dt>資料來源</dt><dd>${v(r.source)}</dd>
+        ${r.t_n != null ? `<dt>實價筆數</dt><dd>${v(r.t_n)}</dd>` : ""}
+        ${bldg ? `<dt>同棟門牌</dt><dd>${v(bldg.n_units)}</dd>` : ""}
+      </dl>
+      ${bldg && bldg.osm && bldg.note ? `<div class="note">OSM 建物：${esc(bldg.note)}</div>` : ""}
+      ${bldg && String(bldg.source || "").includes("建照套繪") ? `<div class="note">臺北市建照套繪圖是一張建照一個外框，只記最高樓層；同一張建照裡較低的部分（裙樓、附屬建物等）也會被畫成同樣高度。</div>` : ""}
+      ${bldg ? `<div class="addrs">${bldg.addresses.map(esc).join("<br>")}</div>` : ""}
+    </div>`;
+}
+
+document.getElementById("f").addEventListener("submit", e => {
+  e.preventDefault();
+  const q = document.getElementById("q").value.trim();
+  if (q) doLookup(q);
+});
+
+async function doLookup(q) {
+  const r = await (await fetch(`/api/lookup?q=${encodeURIComponent(q)}`)).json();
+  const head = `<dl style="margin-top:10px">
+      <dt>標準化</dt><dd>${v(r.normalized)}</dd>
+      <dt>所在樓層</dt><dd>${v(r.unit_floor)}</dd>
+      <dt>比對方式</dt><dd>${v(r.level)}</dd>
+      <dt>信心</dt><dd><span class="badge b-${esc(r.confidence)}">${esc(r.confidence)}</span></dd>
+    </dl>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}`;
+  if (r.lon != null) {
+    map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
+    map.flyTo({ center: [r.lon, r.lat], zoom: 18, pitch: 55 });
+  }
+  // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
+  const uid = r.osm_uid || r.bldg_uid;
+  const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
+  select(uid);
+  document.getElementById("result").innerHTML = card(r, head, bldg);
+}
+
+// ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick 回傳下一層） ──
+const LEVELS = ["county", "town", "road", "lane"];
+const LEVEL_NAME = { county: "縣市", town: "鄉鎮市區", road: "路／街", lane: "巷弄", door: "門牌號" };
+const pick = { county: "", town: "", road: "", lane: null };
+const tilesEl = document.getElementById("tiles"), filterEl = document.getElementById("pickFilter");
+let pickItems = [], pickLevel = "county";
+const laneLabel = l => l === "" ? "沿路門牌" : l;
+const isSet = k => k === "lane" ? pick.lane != null : pick[k] !== "";
+
+async function loadPick() {
+  const p = new URLSearchParams();
+  for (const k of LEVELS) if (isSet(k)) p.set(k, pick[k]);
+  tilesEl.innerHTML = `<span class="hint">載入中…</span>`;
+  const r = await (await fetch(`/api/pick?${p}`)).json();
+  pickLevel = r.level; pickItems = r.items;
+  if (r.level === "door") pick.lane = r.lane;  // 只有一種巷弄時後端直接給門牌
+  filterEl.value = "";
+  filterEl.hidden = pickItems.length <= 40;
+  filterEl.placeholder = r.level === "door" ? "篩選門牌號，例：390" : `篩選${LEVEL_NAME[r.level]}，例：${r.level === "road" ? "中山" : "1"}`;
+  renderCrumbs(); renderTiles();
+}
+
+function renderCrumbs() {
+  const chosen = LEVELS.filter(isSet);
+  document.getElementById("crumbs").innerHTML =
+    (chosen.length ? `<button data-back="-1">全部</button>` : "")
+    + chosen.map((k, i) => `<span class="cur">›</span><button data-back="${i}">${esc(k === "lane" ? laneLabel(pick[k]) : pick[k])}</button>`).join("")
+    + `<span class="cur">${chosen.length ? "›" : ""} 選${LEVEL_NAME[pickLevel]}</span>`;
+}
+
+function renderTiles() {
+  const f = filterEl.value.trim();
+  const items = f ? pickItems.filter(x => (pickLevel === "lane" ? laneLabel(x.name) : x.name).includes(f)) : pickItems;
+  tilesEl.className = "tiles" + (pickLevel === "door" ? " num" : pickLevel === "road" || pickLevel === "lane" ? " wide" : "");
+  tilesEl.innerHTML = items.length ? items.map((x, i) => {
+    const label = pickLevel === "lane" ? laneLabel(x.name) : x.name;
+    const sub = pickLevel === "county" ? `${x.n} 區` : pickLevel === "door" ? "" : `${x.n.toLocaleString()} 門牌`;
+    const has = pickLevel === "door" ? x.has : false;
+    return `<button class="tile${has ? " has" : ""}" data-i="${pickItems.indexOf(x)}">${esc(label)}${sub ? `<small>${sub}</small>` : ""}</button>`;
+  }).join("") : `<span class="hint">沒有符合的${LEVEL_NAME[pickLevel]}</span>`;
+  document.getElementById("pickHint").innerHTML = pickLevel === "door"
+    ? `<span style="color:var(--hi)">●</span> 這個門牌自己有實價登錄（最可能查到樓層）；沒有的也會用同棟、同巷推估`
+    : pickLevel === "road" ? "依門牌數排序，常見的路在前面" : "";
+}
+
+tilesEl.addEventListener("click", e => {
+  const b = e.target.closest(".tile"); if (!b) return;
+  const x = pickItems[+b.dataset.i];
+  if (pickLevel === "door") {
+    const q = pick.county + pick.town + x.base;
+    document.getElementById("q").value = q;
+    tilesEl.querySelectorAll(".tile").forEach(t => t.style.outline = "");
+    b.style.outline = "2px solid var(--accent)";
+    doLookup(q);
+    return;
+  }
+  pick[pickLevel] = x.name;
+  loadPick();
+});
+document.getElementById("crumbs").addEventListener("click", e => {
+  const b = e.target.closest("button[data-back]"); if (!b) return;
+  const keep = +b.dataset.back;  // 保留到第 keep 層（含），之後清掉
+  LEVELS.forEach((k, i) => { if (i > keep) pick[k] = k === "lane" ? null : ""; });
+  loadPick();
+});
+filterEl.addEventListener("input", renderTiles);
+
+const tabPick = document.getElementById("tabPick"), tabType = document.getElementById("tabType");
+function setTab(t) {
+  tabPick.classList.toggle("on", t === "pick"); tabType.classList.toggle("on", t === "type");
+  document.getElementById("pickBox").hidden = t !== "pick";
+  document.getElementById("f").hidden = t !== "type";
+  if (t === "type") document.getElementById("q").focus();
+  try { localStorage.setItem("searchTab", t); } catch {}
+}
+tabPick.addEventListener("click", () => setTab("pick"));
+tabType.addEventListener("click", () => setTab("type"));
+let savedTab = "pick";
+try { savedTab = localStorage.getItem("searchTab") || "pick"; } catch {}
+setTab(savedTab);
+loadPick();
+
+// 方柱（沒有建物外框、用實價登錄樓層畫的門牌）點了直接查該門牌
+map.on("click", "bldg", e => {
+  const p = e.features[0].properties;
+  if (p.pillar) { document.getElementById("q").value = p.addr; doLookup(p.addr); }
+  else showBuilding(p.uid);
+});
+map.on("mouseenter", "bldg", () => map.getCanvas().style.cursor = "pointer");
+map.on("mouseleave", "bldg", () => map.getCanvas().style.cursor = "");
+
+// 整批
+const drop = document.getElementById("drop"), fileIn = document.getElementById("file"), msg = document.getElementById("batchMsg");
+async function upload(file) {
+  msg.textContent = `處理中：${file.name}…`;
+  const fd = new FormData(); fd.append("file", file);
+  const r = await fetch("/api/batch", { method: "POST", body: fd });
+  if (!r.ok) { msg.textContent = `失敗：${(await r.json()).detail || r.status}`; return; }
+  const blob = await r.blob();
+  const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: file.name.replace(/\.[^.]+$/, "") + "_樓層.xlsx" });
+  a.click();
+  msg.textContent = `完成：已下載 ${a.download}`;
+}
+fileIn.addEventListener("change", () => fileIn.files[0] && upload(fileIn.files[0]));
+drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]); });
+
+fetch("/api/stats").then(r => r.json()).then(rows => {
+  const pct = x => `${(x * 100).toFixed(0)}%`;
+  document.getElementById("stats").innerHTML =
+    `<tr><td></td><td class="n hint">門牌號</td><td class="n hint">實價</td><td class="n hint">高＋中</td><td class="n hint">任一</td></tr>`
+    + rows.map(s => `<tr><td>${esc(s.county)}</td><td class="n">${s.addresses.toLocaleString()}</td>`
+      + `<td class="n">${pct(s.by_trade)}</td><td class="n">${pct(s.high_mid)}</td><td class="n">${pct(s.any_floor)}</td></tr>`).join("")
+    + `<tr><td colspan="5" class="hint">實價＝該門牌自己有實價登錄；高＋中＝含同棟、同巷推估；任一＝再含低信心（建物圖、不一致的同棟）</td></tr>`;
+});
+</script>
+</body>
+</html>
