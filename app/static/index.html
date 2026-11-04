@@ -154,7 +154,8 @@ catch (e) { console.error("MapLibre 載入失敗", e); }
 const RAMP = [[1, "#d9e6f2"], [3, "#a9c6e3"], [6, "#6f9fd0"], [13, "#3a6fb3"], [21, "#7a3fa0"], [31, "#c2185b"]];
 const LABELS = ["1–2", "3–5", "6–12", "13–20", "21–30", "31+"];
 document.getElementById("legend").innerHTML =
-  RAMP.map((r, i) => `<span style="--c:${r[1]}">${LABELS[i]}</span>`).join("");
+  RAMP.map((r, i) => `<span style="--c:${r[1]}">${LABELS[i]}</span>`).join("")
+  + `<span style="--c:#bdbdbd">未知</span>`;
 
 // 瀏覽器不支援 WebGL（硬體加速關閉、部分公司電腦／遠端桌面）時地圖畫不出來：
 // 在地圖區顯示原因，並用不做事的替身物件，讓查詢等其他功能照常運作

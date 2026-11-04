@@ -144,6 +144,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
         rows = _cur().execute(f"""
             SELECT uid, coalesce(trade_floors, levels), height, name, wkb FROM osm_buildings
             WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
+            ORDER BY coalesce(trade_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
         osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w in rows]
@@ -206,7 +207,7 @@ def _osm_building(uid: str) -> dict:
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
     n = cur.execute("SELECT count(*) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()[0]
     src = "實價登錄（棟內門牌）" if tf is not None else "OpenStreetMap"
-    note = []
+    note = [] if (tf is not None or levels is not None) else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
     if name:
         note.append(name)
     if levels is not None and tf is not None and levels != tf:

@@ -96,6 +96,7 @@ sitefloor/trades.py    實價資料 → trades 表（全國實價登錄季檔／
 sitefloor/derive.py    推估用的衍生表：door_trade、trade_doors（同巷）、same_bldg（同棟）
 sitefloor/permits.py   使用執照（臺北、新北、新竹市、臺南公寓大廈）→ permits
 sitefloor/osm.py       OpenStreetMap 建物 → osm_buildings、door_osm
+sitefloor/gaps.py      樓層缺口盤點（依建物類型統計、輸出 data/reports/gaps.md 與 missing_landmarks.csv）
 sitefloor/suggest.py   模糊搜尋（路名比對用 derive 產生的 roads 表）
 sitefloor/coverage.py  各縣市涵蓋率 → coverage 表
 sitefloor/landmarks.py 地標名稱 → 門牌
