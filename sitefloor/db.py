@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import duckdb
@@ -28,7 +29,9 @@ CREATE TABLE IF NOT EXISTS trades (
 
 def connect(write: bool = False) -> duckdb.DuckDBPyConnection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(DB_PATH), read_only=not write)
+    # Vercel 等唯讀環境：暫存與擴充套件目錄改到 /tmp
+    config = {"temp_directory": "/tmp/duckdb", "home_directory": "/tmp"} if os.environ.get("VERCEL") else {}
+    con = duckdb.connect(str(DB_PATH), read_only=not write, config=config)
     if write:
         con.execute(SCHEMA)
     return con

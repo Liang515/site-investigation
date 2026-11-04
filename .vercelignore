@@ -1,0 +1,10 @@
+# 上傳到 Vercel 時排除；data/db/sitefloor.duckdb 要保留（函式會讀它）
+.venv/
+.git/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+data/raw/
+tests/
+scripts/
+docs/

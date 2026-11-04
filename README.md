@@ -110,5 +110,6 @@ data/raw/              原始資料（不進版控）
 
 ## 公開部署注意
 
-- 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 5 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
-- 資料庫約 1.1 GB，需要有持久硬碟的主機（不適合 Vercel 等 serverless）。
+- 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 4 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
+- 資料庫約 1.1 GB，打包進 Vercel 函式（大型函式 beta，上限 5 GB）：`vercel.json` 的 `includeFiles`；`.vercelignore` 排除原始資料。
+- 部署：`npm i -g vercel` → `vercel login` → 在專案根目錄 `vercel deploy --prod`（從本機上傳，資料庫不在 git 裡）。

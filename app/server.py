@@ -31,15 +31,16 @@ RATE_LIMITS = {  # 路徑前綴：(次數, 秒)
     "/api/batch": (5, 3600),
     "/api/": (120, 60),
 }
-BATCH_MAX_BYTES = 5 * 1024 * 1024
+BATCH_MAX_BYTES = 4 * 1024 * 1024  # Vercel 函式的請求上限是 4.5 MB
 BATCH_MAX_ROWS = 2000
 _hits: dict[tuple[str, str], deque] = defaultdict(deque)
 
 
 def _client_ip(request: Request) -> str:
-    # 部署在反向代理後面時，真實 IP 在 Fly-Client-IP／X-Forwarded-For
+    # 部署在反向代理後面時，真實 IP 在 X-Vercel-Forwarded-For／Fly-Client-IP／X-Real-IP／X-Forwarded-For
     h = request.headers
-    return (h.get("fly-client-ip") or h.get("x-forwarded-for", "").split(",")[0].strip()
+    return (h.get("x-vercel-forwarded-for") or h.get("fly-client-ip") or h.get("x-real-ip")
+            or h.get("x-forwarded-for", "").split(",")[0].strip()
             or (request.client.host if request.client else "?"))
 
 
