@@ -9,9 +9,9 @@ def test_is_factory():
 
 
 def test_extrude_height():
-    from app.server import _extrude_height
+    from sitefloor.render import extrude_height
 
-    assert _extrude_height(85, 50) == 85 * 3.2  # OSM 高度標錯（85 層只標 50 m）
-    assert _extrude_height(101, 508) == 508  # 合理的標示高度照用
-    assert _extrude_height(None, 40) == 40
-    assert _extrude_height(5, None) == 16.0
+    assert extrude_height(85, 50) == 85 * 3.2  # OSM 高度標錯（85 層只標 50 m）
+    assert extrude_height(101, 508) == 508  # 合理的標示高度照用
+    assert extrude_height(None, 40) == 40
+    assert extrude_height(5, None) == 16.0

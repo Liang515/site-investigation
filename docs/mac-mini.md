@@ -58,7 +58,7 @@ zsh scripts/install_schedule.sh
 3. 沒問題就部署（Mac mini 上，或從筆電遠端）：
    ```bash
    ssh <Mac mini 使用者名稱>@<Mac mini 名稱>.local "zsh -lc 'cd ~/Documents/site-investigation && vercel deploy --prod --yes'"
-   （`zsh -lc` 讓 ssh 載入 Homebrew 的路徑，否則找不到 `vercel`）
    ```
+   （`zsh -lc` 讓 ssh 載入 Homebrew 的路徑，否則找不到 `vercel`）
 
 搬完之後，**筆電上的 `data/` 就不再是最新的**：之後部署、重建都在 Mac mini 上做。
