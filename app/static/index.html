@@ -26,8 +26,9 @@
   h2 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 8px; letter-spacing: .04em; }
   form { display: flex; gap: 6px; }
   input[type=text] { flex: 1; min-width: 0; font-size: 14px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
-  button { font-size: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
-  button:disabled { opacity: .5; cursor: default; }
+  /* 只套用到左側面板的按鈕；地圖上的縮放按鈕用 MapLibre 自己的樣式 */
+  :where(aside) button { font-size: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  :where(aside) button:disabled { opacity: .5; cursor: default; }
   .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .big { font-size: 34px; font-weight: 700; line-height: 1; }
   .big small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 4px; }
