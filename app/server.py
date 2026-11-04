@@ -273,6 +273,10 @@ def _osm_building(uid: str) -> dict:
     u, name, _btype, levels, tf, h, lon, lat, cf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
     n = cur.execute("SELECT count(*) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()[0]
+    below = None
+    if cf is not None:
+        row = cur.execute("SELECT max(floors_below) FROM corrections WHERE osm_uid = ?", [uid]).fetchone()
+        below = row[0] if row else None
     src = "人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None else "OpenStreetMap"
     known_floors = next((x for x in (cf, tf, levels) if x is not None), None)
     note = [] if known_floors is not None else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
@@ -282,7 +286,7 @@ def _osm_building(uid: str) -> dict:
         note.append(f"OSM 標 {levels} 層、實價登錄 {tf} 層，採實價登錄")
     if h is not None:
         note.append(f"OSM 標高 {h:g} m（地圖高度統一用 樓層×3.2m）")
-    return {"uid": u, "source": src, "floors_above": known_floors, "floors_below": None,
+    return {"uid": u, "source": src, "floors_above": known_floors, "floors_below": below,
             "structure": None, "btype": None, "year": None,
             "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
             "note": "；".join(note), "osm": True}
