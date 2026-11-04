@@ -2,6 +2,8 @@
 
 輸入台灣地址，回傳建物地上樓層、構造、建物型態，並附上資料來源和信心等級。
 
+公開網址：https://site-investigation.vercel.app
+
 ## 使用
 
 ```bash
