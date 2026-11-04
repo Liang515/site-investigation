@@ -187,7 +187,24 @@ window.map = map;  // 方便在主控台除錯
 
 // ── 地圖診斷：網址加 ?debug=1，或地圖 10 秒還沒載入完成時，在地圖上顯示狀態，方便回報問題 ──
 const mapErrors = [];
-map.on("error", e => mapErrors.push(String(e?.error?.message || e?.error || e).slice(0, 160)));
+let lostCount = 0;
+map.on("error", e => {
+  const msg = String(e?.error?.message || e?.error || e).slice(0, 160);
+  mapErrors.push(msg);
+  // WebGL 一直被瀏覽器收回（例：Safari 27.0）：顯示說明，不要只剩空白
+  if (/context lost/i.test(msg) && ++lostCount === 20) showGLLost();
+});
+function showGLLost() {
+  if (document.getElementById("gllost")) return;
+  const box = document.createElement("div");
+  box.id = "gllost";
+  box.style.cssText = "position:absolute;inset:0;z-index:8;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--bg)";
+  box.innerHTML = `<div style="max-width:440px;color:var(--muted);font-size:14px;line-height:1.7">
+    <b style="color:var(--ink)">瀏覽器的 3D 繪圖（WebGL）一直失效，地圖無法顯示</b><br>
+    請更新到最新版瀏覽器（Safari：系統設定 → 一般 → 軟體更新），或改用 Chrome。<br>
+    查詢功能不受影響，可以照常使用。</div>`;
+  document.getElementById("map").appendChild(box);
+}
 if (MAP_OK) map.getCanvas().addEventListener("webglcontextlost", () => mapErrors.push("WebGL context lost"));
 function showDiag(reason) {
   if (!MAP_OK || document.getElementById("diag")) return;
