@@ -4,9 +4,9 @@ FLOOR_M = 3.2  # 立體高度：每層公尺數
 
 
 def extrude_height(floors, height):
-    """立體高度（公尺）。OSM 標的 height 與樓層不合理時（例：高雄八五大樓標 85 層、高 50 m）改用 樓層×3.2m。"""
-    if floors and height and 2.5 * floors <= height <= 6 * floors:
-        return height
+    """立體高度（公尺）。知道樓層就一律用 樓層×3.2m，讓不同來源的建物可以直接比高低
+    （混用 OSM 實測高度會讓 31 層的 C棟 134 m、旁邊 30 層的臺北建照外框 96 m，看起來差很多）。
+    OSM 標的 height 只用在不知道樓層的建物。"""
     if floors:
         return floors * FLOOR_M
     return height

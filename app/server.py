@@ -135,7 +135,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM
       （例：富邦 A25 塔樓 54 層一致，OSM 把同建照的美術館分開畫）；不一致時（例：遼寧街 177 號建照 20 層、
       OSM 標 19 層）保留建照外框，並拿掉大半落在框內的 OSM 建物。
-    高度：OSM 有標 height 就用它（公尺），否則 樓層×3.2m；樓層（上色）實價優先，其次 OSM building:levels／建物圖。"""
+    高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。"""
     x0, y0, x1, y1 = map(float, bbox.split(","))
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
@@ -212,9 +212,7 @@ def _osm_building(uid: str) -> dict:
     if levels is not None and tf is not None and levels != tf:
         note.append(f"OSM 標 {levels} 層、實價登錄 {tf} 層，採實價登錄")
     if h is not None:
-        shown = tf if tf is not None else levels
-        ok = extrude_height(shown, h) == h
-        note.append(f"OSM 標高 {h:g} m" + ("" if ok else "（與樓層不符，地圖未採用）"))
+        note.append(f"OSM 標高 {h:g} m（地圖高度統一用 樓層×3.2m）")
     return {"uid": u, "source": src, "floors_above": tf if tf is not None else levels, "floors_below": None,
             "structure": None, "btype": None, "year": None,
             "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,

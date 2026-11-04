@@ -19,12 +19,24 @@ SUGGEST_LANE = r"^(.*?)((?:\d+巷)?(?:\d+弄)?)$"
 DOOR_RE = r"^(.*?)(\d+)(之(\d+))?號$"
 
 SQL = f"""
+-- 總樓層取眾數；平手時優先「有記載所在樓層」的紀錄（例：松江路169號 2 筆整棟出租記 2 層、
+-- 2 筆 4 樓、7 樓的記 17 層 → 17），再取最近一筆成交、再取較高（DuckDB 的 mode() 平手時每次結果不同）
 CREATE OR REPLACE TABLE door_trade AS
-SELECT county, town, base, mode(total_floors) AS floors, count(*) AS n,
-       count(DISTINCT total_floors) AS nfl, mode(btype) AS btype
-FROM trades
-WHERE total_floors IS NOT NULL AND town IS NOT NULL AND base LIKE '%號'
-GROUP BY ALL;
+WITH t AS (
+    SELECT * FROM trades WHERE total_floors IS NOT NULL AND town IS NOT NULL AND base LIKE '%號'
+),
+c AS (
+    SELECT county, town, base, total_floors, count(*) AS k, count(floor) AS kf, max(trade_date) AS d
+    FROM t GROUP BY ALL
+),
+r AS (
+    SELECT *, sum(k) OVER w AS n, count(*) OVER w AS nfl,
+           row_number() OVER (PARTITION BY county, town, base ORDER BY k DESC, kf DESC, d DESC NULLS LAST, total_floors DESC) AS rn
+    FROM c WINDOW w AS (PARTITION BY county, town, base)
+),
+b AS (SELECT county, town, base, mode(btype) AS btype FROM t GROUP BY ALL)
+SELECT r.county, r.town, r.base, r.total_floors AS floors, r.n, r.nfl, b.btype
+FROM r JOIN b USING (county, town, base) WHERE rn = 1;
 
 CREATE OR REPLACE TABLE trade_doors AS
 SELECT county, town, base, floors, n, btype,

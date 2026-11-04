@@ -56,16 +56,23 @@ WITH m AS (
     SELECT q.idx, 3, t.* FROM q JOIN trades t
       ON q.base_main <> q.base AND t.base = q.base_main AND {_TMATCH}
 ),
-best AS (SELECT * FROM m QUALIFY tlvl = min(tlvl) OVER (PARTITION BY idx))
+best AS (SELECT * FROM m QUALIFY tlvl = min(tlvl) OVER (PARTITION BY idx)),
+-- 總樓層眾數：平手取有記載所在樓層的、再取最近一筆成交、再取較高（與 derive.door_trade 相同，結果固定）
+fl AS (
+    SELECT idx, total_floors AS fl_floors FROM (
+        SELECT idx, total_floors, count(*) AS k, count(floor) AS kf, max(trade_date) AS d FROM best
+        WHERE total_floors IS NOT NULL GROUP BY ALL)
+    QUALIFY row_number() OVER (PARTITION BY idx ORDER BY k DESC, kf DESC, d DESC NULLS LAST, total_floors DESC) = 1
+)
 SELECT idx, min(tlvl) AS tlvl, count(*) AS t_n,
        count(DISTINCT county || '/' || coalesce(town, '')) FILTER (WHERE town IS NOT NULL) AS t_ntown,
-       mode(total_floors) AS t_floors,
+       any_value(fl.fl_floors) AS t_floors,
        count(DISTINCT total_floors) AS t_nfloors,
        mode(structure) AS t_structure, mode(btype) AS t_btype,
        max(built_year) AS t_year, max(trade_date) AS t_last,
        any_value(county) AS t_county, any_value(town) AS t_town,
        string_agg(DISTINCT source, '、') AS t_source
-FROM best GROUP BY idx
+FROM best LEFT JOIN fl USING (idx) GROUP BY idx
 """
 
 # 同棟：查詢門牌所在建物多邊形／同點位的其他門牌實價（derive.py 預先算好）
