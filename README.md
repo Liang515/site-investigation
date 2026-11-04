@@ -105,6 +105,20 @@ docs/                  盤點報告
 data/raw/              原始資料（不進版控）
 ```
 
+## 定期更新
+
+`uv run python -m sitefloor.update` 檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `vercel deploy --prod --yes`。
+
+| 來源 | 偵測方式 | 有新版時 |
+|---|---|---|
+| 實價登錄本期、新季檔 | 下載站的修改時間；季檔試下一季 | 自動下載 → trades 之後全部重跑 |
+| 臺北市實價週報、使用執照 | data.gov.tw 資料集更新時間 | 自動下載重跑 |
+| OpenStreetMap | Geofabrik 的修改時間 | 自動下載 → osm 之後重跑 |
+| 各縣市門牌點位、臺中／臺北建物圖 | data.gov.tw 資料集更新時間 | 只在報告列出，要手動更新 |
+
+- `--check` 只檢查不下載；`--force` 全部重跑。版本紀錄在 `data/state/sources.json`。
+- 每週一 09:00 自動執行：`zsh scripts/install_schedule.sh`（移除：加 `remove`）；紀錄在 `data/logs/update.log`。
+
 ## 授權
 
 - 程式碼：MIT（見 `LICENSE`）。

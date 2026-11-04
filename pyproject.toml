@@ -17,6 +17,7 @@ dependencies = [
 [dependency-groups]
 # 建庫用（讀 shapefile、OSM pbf、匯出 parquet 等）；部署不需要
 build = [
+    "certifi>=2024.0",
     "geopandas>=1.2.0",
     "pyarrow>=26.0.1",
     "pyogrio>=0.13.0",

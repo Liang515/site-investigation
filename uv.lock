@@ -819,6 +819,7 @@ dependencies = [
 
 [package.dev-dependencies]
 build = [
+    { name = "certifi" },
     { name = "geopandas" },
     { name = "pyarrow" },
     { name = "pyogrio" },
@@ -842,6 +843,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 build = [
+    { name = "certifi", specifier = ">=2024.0" },
     { name = "geopandas", specifier = ">=1.2.0" },
     { name = "pyarrow", specifier = ">=26.0.1" },
     { name = "pyogrio", specifier = ">=0.13.0" },
