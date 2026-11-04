@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, lookup, lookup_many
+from sitefloor.suggest import Suggester, split_base
 
 STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
@@ -38,6 +39,18 @@ def index():
 @app.get("/api/lookup")
 def api_lookup(q: str):
     return lookup(_cur(), q)
+
+
+@lru_cache(maxsize=1)
+def _suggester() -> Suggester | None:
+    return Suggester(_cur()) if _has_table("roads") else None
+
+
+@app.get("/api/suggest")
+def api_suggest(q: str, limit: int = 8):
+    """模糊搜尋：錯字、沒寫縣市區、只打一半都列出最接近的真實門牌（見 sitefloor/suggest.py）。"""
+    sg = _suggester()
+    return sg.suggest(_cur(), q, min(limit, 20)) if sg else []
 
 
 @app.get("/api/stats")
@@ -159,8 +172,6 @@ def api_building(uid: str):
 
 # ── 用選的查地址：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號 ──
 # 門牌來源＝門牌點位 ∪ 實價登錄（沒有點位的縣市也能選）；has＝這個門牌自己有實價登錄
-_DOOR = re.compile(r"^(.*?)(臨)?(\d+)(?:之(\d+))?號$")
-_LANE = re.compile(r"^(.*?)((?:\d+巷)?(?:\d+弄)?)$")
 
 
 COUNTY_ORDER = ["基隆市", "臺北市", "新北市", "桃園市", "新竹市", "新竹縣", "苗栗縣", "臺中市", "彰化縣", "南投縣",
@@ -198,15 +209,12 @@ def _doors(county: str, town: str) -> list[dict]:
         [county, town] * 3).fetchall()
     out = []
     for base, has in rows:
-        m = _DOOR.match(base)
-        if not m:  # 地號、中文數字等不規則門牌不列
+        p = split_base(base)
+        if not p:  # 地號、中文數字等不規則門牌不列
             continue
-        road, lane = _LANE.match(m[1]).groups()
-        if not road:
-            continue
-        num = ("臨" if m[2] else "") + m[3] + (f"之{m[4]}" if m[4] else "")
-        out.append({"road": road, "lane": lane, "num": num, "base": base, "has": has,
-                    "key": (int(m[3]), int(m[4] or 0), bool(m[2]))})
+        road, lane, num, sub, near = p
+        label = ("臨" if near else "") + str(num) + (f"之{sub}" if sub else "")
+        out.append({"road": road, "lane": lane, "num": label, "base": base, "has": has, "key": (num, sub, near)})
     out.sort(key=lambda d: d["key"])
     return out
 

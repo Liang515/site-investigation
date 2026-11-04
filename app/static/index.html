@@ -53,6 +53,15 @@
   .tile:hover { border-color: var(--accent); color: var(--accent); }
   .tile small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
   .tile.has::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--hi); }
+  #f { position: relative; }
+  #sugg { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.08); max-height: 320px; overflow-y: auto; }
+  .sg { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border-radius: 0; padding: 8px 10px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  .sg:last-child { border-bottom: 0; }
+  .sg:hover, .sg.on { background: #eef3fb; }
+  .sg small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .sg .dot { color: var(--hi); }
+  .didyou { margin-top: 10px; }
+  .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
   #pickFilter { width: 100%; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
   #map { height: 100%; }
   .hint { font-size: 12px; color: var(--muted); }
@@ -80,7 +89,7 @@
         <div class="tiles" id="tiles"></div>
         <div class="hint" id="pickHint" style="margin-top:6px"></div>
       </div>
-      <form id="f" hidden><input id="q" type="text" placeholder="例：臺中市西屯區市政路390號、台北101"><button>查詢</button></form>
+      <form id="f" hidden autocomplete="off"><input id="q" type="text" placeholder="例：臺中市西屯區市政路390號、台北101；打錯字或打一半也行"><button>查詢</button><div id="sugg" hidden></div></form>
       <div id="result" style="margin-top:12px"></div>
     </section>
 
@@ -186,6 +195,7 @@ function card(r, head, bldg) {
 document.getElementById("f").addEventListener("submit", e => {
   e.preventDefault();
   const q = document.getElementById("q").value.trim();
+  hideSugg();
   if (q) doLookup(q);
 });
 
@@ -206,7 +216,59 @@ async function doLookup(q) {
   const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
   select(uid);
   document.getElementById("result").innerHTML = card(r, head, bldg);
+  // 查不到時：列出模糊搜尋的候選
+  if (r.confidence === "無" || r.confidence === "待確認") {
+    const items = (await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json())
+      .filter(x => x.kind !== "road" && x.text !== r.normalized);
+    if (items.length) document.getElementById("result").insertAdjacentHTML("beforeend",
+      `<div class="didyou"><h2>你是不是要找</h2>${items.map(sgHtml).join("")}</div>`);
+  }
 }
+
+// ── 打字時的模糊搜尋建議（/api/suggest） ──
+const qEl = document.getElementById("q"), suggEl = document.getElementById("sugg");
+let suggItems = [], suggOn = -1, suggTimer, suggSeq = 0;
+function sgHtml(x, i) {
+  const dot = x.has ? `<span class="dot">●</span> ` : "";
+  return `<button type="button" class="sg" data-text="${esc(x.text)}" data-kind="${esc(x.kind)}">${dot}${esc(x.text)}`
+    + `${x.hint ? `<small>${esc(x.hint)}</small>` : ""}</button>`;
+}
+function hideSugg() { suggEl.hidden = true; suggOn = -1; }
+async function updateSugg() {
+  const q = qEl.value.trim();
+  if (q.length < 2) { hideSugg(); return; }
+  const seq = ++suggSeq;
+  const items = await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json();
+  if (seq !== suggSeq) return;  // 有更新的輸入，丟掉舊結果
+  suggItems = items; suggOn = -1;
+  suggEl.innerHTML = items.map(sgHtml).join("");
+  suggEl.hidden = !items.length;
+}
+function chooseSugg(text, kind) {
+  qEl.value = text;
+  hideSugg();
+  if (kind === "road") { qEl.focus(); updateSugg(); return; }  // 選了路，接著打門牌號
+  doLookup(text);
+}
+qEl.addEventListener("input", () => { clearTimeout(suggTimer); suggTimer = setTimeout(updateSugg, 200); });
+qEl.addEventListener("keydown", e => {
+  if (suggEl.hidden || !suggItems.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    suggOn = (suggOn + (e.key === "ArrowDown" ? 1 : -1) + suggItems.length) % suggItems.length;
+    suggEl.querySelectorAll(".sg").forEach((b, i) => b.classList.toggle("on", i === suggOn));
+  } else if (e.key === "Enter" && suggOn >= 0) {
+    e.preventDefault();
+    chooseSugg(suggItems[suggOn].text, suggItems[suggOn].kind);
+  } else if (e.key === "Escape") hideSugg();
+});
+qEl.addEventListener("blur", () => setTimeout(hideSugg, 150));
+document.getElementById("result").addEventListener("click", e => {
+  const b = e.target.closest(".sg"); if (b) chooseSugg(b.dataset.text, b.dataset.kind);
+});
+suggEl.addEventListener("mousedown", e => {
+  const b = e.target.closest(".sg"); if (b) { e.preventDefault(); chooseSugg(b.dataset.text, b.dataset.kind); }
+});
 
 // ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick 回傳下一層） ──
 const LEVELS = ["county", "town", "road", "lane"];

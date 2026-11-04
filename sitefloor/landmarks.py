@@ -53,15 +53,15 @@ LANDMARKS: list[tuple[str, list[str]]] = [
 ]
 
 
-def _key(text: str) -> str:
+def key(text: str) -> str:
     t = unicodedata.normalize("NFKC", str(text or "")).lower().replace("台", "臺")
     return "".join(t.split())
 
 
-_INDEX = {_key(name): addr for addr, names in LANDMARKS for name in names}
+_INDEX = {key(name): addr for addr, names in LANDMARKS for name in names}
 
 
 def resolve(text: str) -> tuple[str, str] | None:
     """地標名稱 → (門牌地址, 原名稱)；不是地標回 None。"""
-    addr = _INDEX.get(_key(text))
+    addr = _INDEX.get(key(text))
     return (addr, str(text).strip()) if addr else None

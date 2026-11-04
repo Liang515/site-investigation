@@ -10,6 +10,7 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 
 - **單筆**：在搜尋框輸入地址；地圖會飛到該建物，並以 3D 顯示樓層。
 - **用選的**：預設分頁，依序點選縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號，不用打字；路和門牌太多時可以篩選。綠點表示這個門牌自己有實價登錄。
+- **打字（模糊搜尋）**：邊打邊列出最接近的真實門牌，可用滑鼠或上下鍵＋Enter 選。錯字（市正路→市政路）、簡寫（台中西屯→臺中市西屯區）、區名錯字（板僑區→板橋區）、只打一半都可以；沒有這個號碼時列最接近的號碼。查不到時結果下方會出現「你是不是要找」。
 - **地標**：約 35 個常用地標名稱（台北101、85大樓、各市政府、車站…）可以直接查，清單在 `sitefloor/landmarks.py`。公共建物很少買賣，常常查不到樓層。
 - **整批**：把 Excel/CSV 拖到「整批查詢」。程式會自動找含「地址」或「門牌」的欄位，回傳 `<檔名>_樓層.xlsx`，裡面有「結果」和「摘要」兩個工作表。
 
@@ -82,6 +83,7 @@ sitefloor/build.py     各來源 → DuckDB（buildings, addresses）
 sitefloor/trades.py    實價資料 → trades 表（全國實價登錄季檔／本期、臺北市週報）
 sitefloor/derive.py    推估用的衍生表：door_trade、trade_doors（同巷）、same_bldg（同棟）
 sitefloor/osm.py       OpenStreetMap 建物 → osm_buildings、door_osm
+sitefloor/suggest.py   模糊搜尋（路名比對用 derive 產生的 roads 表）
 sitefloor/coverage.py  各縣市涵蓋率 → coverage 表
 sitefloor/landmarks.py 地標名稱 → 門牌
 sitefloor/lookup.py    單筆/批次查詢：實價、同棟、同巷、建物圖依信心排序合併

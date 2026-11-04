@@ -12,6 +12,7 @@ dependencies = [
     "pyogrio>=0.13.0",
     "pypdf>=6.21.4",
     "python-multipart>=0.0.33",
+    "rapidfuzz>=3.14.6",
     "uvicorn>=0.54.0",
 ]
 
