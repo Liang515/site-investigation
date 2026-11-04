@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>資料來源與授權</title>
+<style>
+  :root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc; --accent: #1f5fbf; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f; --accent: #7fa8ea; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; line-height: 1.7; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 8px; }
+  p, li { font-size: 15px; }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; }
+  blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--line); color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <p><a href="/">← 回查詢頁</a></p>
+  <h1>資料來源與授權</h1>
+  <p class="muted">本站整合政府開放資料與 OpenStreetMap，查詢臺灣地址的建物樓層、構造與年份。</p>
+
+  <h2>免責聲明</h2>
+  <div class="box">
+    <p>本站為個人製作的非官方查詢工具，<strong>結果僅供參考</strong>，不代表任何政府機關的見解，也未經任何機關建議、認可或贊同。
+    推估值（同棟、同巷、OSM 等）可能與實際不符，每筆結果都標示資料來源與信心等級；涉及交易、保險、法律等重要決定，請以建物登記謄本、使用執照等官方文件為準。
+    本站不保證資料的正確性、完整性與即時性，使用者應自行判斷並承擔使用風險。</p>
+  </div>
+
+  <h2>政府開放資料</h2>
+  <p>下列資料皆依<a href="https://data.gov.tw/license" target="_blank" rel="noopener">政府資料開放授權條款－第1版</a>取得與利用：</p>
+  <blockquote>此資料係依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款：https://data.gov.tw/license</blockquote>
+  <div class="table-wrap">
+  <table>
+    <tr><th>提供機關</th><th>資料集</th><th>用途</th></tr>
+    <tr><td>內政部</td><td><a href="https://plvr.land.moi.gov.tw/DownloadOpenData" target="_blank" rel="noopener">不動產成交案件實際資訊（實價登錄）</a></td><td>總樓層、建材、建築完成年、建物型態</td></tr>
+    <tr><td>臺北市政府地政局</td><td><a href="https://data.gov.tw/dataset/145630" target="_blank" rel="noopener">臺北市實價周報</a></td><td>同上（最新成交）</td></tr>
+    <tr><td>臺中市政府數位發展局</td><td><a href="https://data.gov.tw/dataset/158889" target="_blank" rel="noopener">臺中市建物GIS圖資（114年版本）</a></td><td>建物外框、地上樓層</td></tr>
+    <tr><td>臺北市建築管理工程處</td><td><a href="https://data.gov.tw/dataset/151936" target="_blank" rel="noopener">臺北市建築執照套繪圖</a></td><td>建物外框、地上樓層、構造</td></tr>
+    <tr><td>臺北市建築管理工程處</td><td><a href="https://data.gov.tw/dataset/128203" target="_blank" rel="noopener">臺北市歷年使用執照摘要</a>、<a href="https://data.gov.tw/dataset/128199" target="_blank" rel="noopener">臺北市115年度使用執照摘要</a></td><td>地上／地下層數、構造、竣工年</td></tr>
+    <tr><td>新北市政府工務局</td><td><a href="https://data.gov.tw/dataset/123639" target="_blank" rel="noopener">新北市建築執照存查</a></td><td>地上／地下層數、竣工年</td></tr>
+    <tr><td>新竹市政府都市發展處</td><td><a href="https://data.gov.tw/dataset/163823" target="_blank" rel="noopener">新竹市使用執照清冊101~114年</a></td><td>地上／地下層數、構造、年份</td></tr>
+    <tr><td>臺南市政府工務局</td><td><a href="https://data.gov.tw/dataset/120168" target="_blank" rel="noopener">臺南公寓大廈管理委員清冊</a></td><td>地上／地下層數</td></tr>
+    <tr><td>臺中市政府數位發展局</td><td><a href="https://data.gov.tw/dataset/177460" target="_blank" rel="noopener">臺中市GIS門牌資料</a></td><td>門牌位置</td></tr>
+    <tr><td>臺北市政府民政局</td><td><a href="https://data.gov.tw/dataset/155472" target="_blank" rel="noopener">臺北市門牌位置數值資料</a></td><td>門牌位置</td></tr>
+    <tr><td>新北市政府民政局</td><td><a href="https://data.gov.tw/dataset/168887" target="_blank" rel="noopener">新北市門牌位置數值資料</a></td><td>門牌位置</td></tr>
+    <tr><td>桃園市政府民政局</td><td><a href="https://data.gov.tw/dataset/157689" target="_blank" rel="noopener">桃園市門牌位置坐標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>臺南市政府民政局</td><td><a href="https://data.gov.tw/dataset/120044" target="_blank" rel="noopener">臺南市門牌坐標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>高雄市政府民政局</td><td><a href="https://data.gov.tw/dataset/172400" target="_blank" rel="noopener">高雄市114年門牌坐標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>新竹市政府民政處</td><td><a href="https://data.gov.tw/dataset/157547" target="_blank" rel="noopener">新竹市門牌坐標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>新竹縣政府民政處</td><td><a href="https://data.gov.tw/dataset/172380" target="_blank" rel="noopener">新竹縣門牌位置</a></td><td>門牌位置</td></tr>
+    <tr><td>苗栗縣政府民政處</td><td><a href="https://data.gov.tw/dataset/176511" target="_blank" rel="noopener">苗栗縣門牌座標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>彰化縣政府民政處</td><td><a href="https://data.gov.tw/dataset/170727" target="_blank" rel="noopener">彰化縣門牌點位資料</a></td><td>門牌位置</td></tr>
+    <tr><td>雲林縣政府</td><td><a href="https://data.gov.tw/dataset/166201" target="_blank" rel="noopener">雲林縣門牌座標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>嘉義縣政府</td><td><a href="https://data.gov.tw/dataset/172873" target="_blank" rel="noopener">嘉義縣門牌位置</a></td><td>門牌位置</td></tr>
+    <tr><td>屏東縣政府</td><td><a href="https://data.gov.tw/dataset/170847" target="_blank" rel="noopener">屏東縣全縣門牌檔</a></td><td>門牌位置</td></tr>
+    <tr><td>花蓮縣政府</td><td><a href="https://data.gov.tw/dataset/175221" target="_blank" rel="noopener">花蓮縣門牌點位資料</a></td><td>門牌位置</td></tr>
+    <tr><td>臺東縣政府</td><td><a href="https://data.gov.tw/dataset/165619" target="_blank" rel="noopener">臺東縣門牌坐標資料</a></td><td>門牌位置</td></tr>
+    <tr><td>澎湖縣政府</td><td><a href="https://data.gov.tw/dataset/170852" target="_blank" rel="noopener">澎湖縣門牌位置數值資料</a></td><td>門牌位置</td></tr>
+    <tr><td>金門縣政府民政處</td><td><a href="https://data.gov.tw/dataset/171571" target="_blank" rel="noopener">金門縣門牌位置數值資料</a></td><td>門牌位置</td></tr>
+    <tr><td>內政部國土測繪中心</td><td><a href="https://data.gov.tw/dataset/7441" target="_blank" rel="noopener">鄉鎮市區界線</a></td><td>門牌所屬行政區</td></tr>
+    <tr><td>內政部國土測繪中心</td><td><a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">臺灣通用電子地圖（WMTS 圖磚）</a></td><td>底圖</td></tr>
+  </table>
+  </div>
+  <p class="muted">本站對上述資料做了正規化、比對與推估（例如以同棟、同巷門牌推估樓層），結果與原始資料可能不同；原始資料以各機關公告為準。</p>
+
+  <h2>OpenStreetMap</h2>
+  <p>建物外框、部分建物樓層與高度，以及「同棟（OSM 外框）」推估使用 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 貢獻者</a>的資料，
+  依 <a href="https://opendatacommons.org/licenses/odbl/" target="_blank" rel="noopener">Open Database License（ODbL）</a>授權。</p>
+  <p>依 ODbL 第 4.6 條，本站以 OSM 產生衍生資料庫（OSM 建物、門牌與建物的對應、同棟推估）的方法公開於本站的原始碼：
+  <a id="repo" href="https://github.com/Liang515/site-investigation" target="_blank" rel="noopener">github.com/Liang515/site-investigation</a>
+  （<code>sitefloor/osm.py</code>）。OSM 原始資料取自 <a href="https://download.geofabrik.de/asia/taiwan.html" target="_blank" rel="noopener">Geofabrik</a>。</p>
+
+  <h2>本站原始碼</h2>
+  <p>原始碼以 MIT 授權公開於 <a href="https://github.com/Liang515/site-investigation" target="_blank" rel="noopener">GitHub</a>。上述資料的授權不受本站程式碼授權影響。</p>
+
+  <h2>個人資料</h2>
+  <p>本站只提供建物層級的資訊（樓層、構造、年份），不顯示成交價格，也不保存使用執照上的起造人、設計人等姓名。本站不另外保存或分析查詢內容；上傳的整批查詢檔案只在記憶體中處理、不存檔。主機的存取紀錄（含請求網址，可能包含查詢的地址）會因維運需要短期保留。</p>
+</main>
+</body>
+</html>

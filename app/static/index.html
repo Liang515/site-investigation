@@ -78,6 +78,7 @@
   <aside>
     <div>
       <h1>地址樓層查詢</h1>
+      <div class="hint">非官方查詢工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
       <div class="hint">放大地圖到街區可看到 3D 建物，點建物看屬性。立體優先用 OpenStreetMap 的建物（每棟分開），其次市府建物圖；都沒有的地方把實價登錄樓層畫成小方柱</div>
     </div>
 
@@ -95,7 +96,7 @@
 
     <section>
       <h2>整批查詢</h2>
-      <label id="drop">拖曳 Excel / CSV 到這裡，或點擊選檔<br><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel</span>
+      <label id="drop">拖曳 Excel / CSV 到這裡，或點擊選檔<br><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel（一次最多 2,000 筆）</span>
         <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden></label>
       <div id="batchMsg" class="note"></div>
     </section>
@@ -200,7 +201,13 @@ document.getElementById("f").addEventListener("submit", e => {
 });
 
 async function doLookup(q) {
-  const r = await (await fetch(`/api/lookup?q=${encodeURIComponent(q)}`)).json();
+  const resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}`);
+  if (!resp.ok) {  // 例：查詢太頻繁（429）
+    const err = await resp.json().catch(() => ({}));
+    document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
+    return;
+  }
+  const r = await resp.json();
   const head = `<dl style="margin-top:10px">
       <dt>標準化</dt><dd>${v(r.normalized)}</dd>
       <dt>所在樓層</dt><dd>${v(r.unit_floor)}</dd>
@@ -238,7 +245,9 @@ async function updateSugg() {
   const q = qEl.value.trim();
   if (q.length < 2) { hideSugg(); return; }
   const seq = ++suggSeq;
-  const items = await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json();
+  const resp = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
+  if (!resp.ok) { hideSugg(); return; }
+  const items = await resp.json();
   if (seq !== suggSeq) return;  // 有更新的輸入，丟掉舊結果
   suggItems = items; suggOn = -1;
   suggEl.innerHTML = items.map(sgHtml).join("");
@@ -367,7 +376,7 @@ async function upload(file) {
   msg.textContent = `處理中：${file.name}…`;
   const fd = new FormData(); fd.append("file", file);
   const r = await fetch("/api/batch", { method: "POST", body: fd });
-  if (!r.ok) { msg.textContent = `失敗：${(await r.json()).detail || r.status}`; return; }
+  if (!r.ok) { msg.textContent = `失敗：${(await r.json().catch(() => ({}))).detail || r.status}`; return; }
   const blob = await r.blob();
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: file.name.replace(/\.[^.]+$/, "") + "_樓層.xlsx" });
   a.click();

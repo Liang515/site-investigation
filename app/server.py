@@ -3,14 +3,16 @@ import io
 import json
 import math
 import re
+import time
+from collections import defaultdict, deque
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
 import pandas as pd
 import shapely
-from fastapi import FastAPI, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, lookup, lookup_many
@@ -23,6 +25,40 @@ FLOOR_M = 3.2  # 立體高度：每層公尺數
 CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
 app = FastAPI(title="地址樓層查詢")
+
+# ── 查詢次數限制（公開部署時避免被大量抓取）：每個 IP 在時間窗內的次數上限 ──
+RATE_LIMITS = {  # 路徑前綴：(次數, 秒)
+    "/api/batch": (5, 3600),
+    "/api/": (120, 60),
+}
+BATCH_MAX_BYTES = 5 * 1024 * 1024
+BATCH_MAX_ROWS = 2000
+_hits: dict[tuple[str, str], deque] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    # 部署在反向代理後面時，真實 IP 在 Fly-Client-IP／X-Forwarded-For
+    h = request.headers
+    return (h.get("fly-client-ip") or h.get("x-forwarded-for", "").split(",")[0].strip()
+            or (request.client.host if request.client else "?"))
+
+
+@app.middleware("http")
+async def rate_limit(request: Request, call_next):
+    path = request.url.path
+    rule = next(((p, lim) for p, lim in RATE_LIMITS.items() if path.startswith(p)), None)
+    if rule:
+        prefix, (n, window) = rule
+        q = _hits[(_client_ip(request), prefix)]
+        now = time.monotonic()
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= n:
+            wait = int(window - (now - q[0])) + 1
+            return JSONResponse({"detail": f"查詢太頻繁，請 {wait} 秒後再試"}, status_code=429,
+                                headers={"Retry-After": str(wait)})
+        q.append(now)
+    return await call_next(request)
 con = connect()
 
 
@@ -34,6 +70,11 @@ def _cur():
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/about")
+def about():
+    return FileResponse(STATIC / "about.html")
 
 
 @app.get("/api/lookup")
@@ -276,7 +317,9 @@ def _guess_col(df: pd.DataFrame) -> str:
 
 @app.post("/api/batch")
 async def api_batch(file: UploadFile, column: str | None = None):
-    raw = await file.read()
+    raw = await file.read(BATCH_MAX_BYTES + 1)
+    if len(raw) > BATCH_MAX_BYTES:
+        raise HTTPException(413, f"檔案太大，上限 {BATCH_MAX_BYTES // 1024 // 1024} MB")
     name = file.filename or "input"
     if name.lower().endswith((".xlsx", ".xls")):
         df = pd.read_excel(io.BytesIO(raw), dtype=str)
@@ -285,6 +328,8 @@ async def api_batch(file: UploadFile, column: str | None = None):
             df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="utf-8-sig")
         except UnicodeDecodeError:
             df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="cp950")
+    if len(df) > BATCH_MAX_ROWS:
+        raise HTTPException(413, f"一次最多 {BATCH_MAX_ROWS:,} 筆，這個檔案有 {len(df):,} 筆，請分批上傳")
     col = column or _guess_col(df)
     if col not in df.columns:
         raise HTTPException(400, f"找不到欄位：{col}")

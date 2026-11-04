@@ -101,3 +101,14 @@ app/server.py          FastAPI；app/static/index.html 地圖介面
 docs/                  盤點報告
 data/raw/              原始資料（不進版控）
 ```
+
+## 授權
+
+- 程式碼：MIT（見 `LICENSE`）。
+- 資料：不在本 repo 內（`data/` 不進版控），各資料依其原授權使用：政府開放資料依「政府資料開放授權條款－第1版」，OpenStreetMap 依 ODbL。完整出處與顯名聲明見網頁的「資料來源與授權」（`app/static/about.html`）。
+- ODbL 第 4.6 條：以 OSM 產生衍生資料庫（`osm_buildings`、`door_osm`、`same_osm`）的方法即本 repo 的 `sitefloor/osm.py`。
+
+## 公開部署注意
+
+- 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 5 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
+- 資料庫約 1.1 GB，需要有持久硬碟的主機（不適合 Vercel 等 serverless）。
