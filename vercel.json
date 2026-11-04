@@ -10,5 +10,8 @@
       "maxDuration": 120,
       "memory": 2048
     }
+  },
+  "git": {
+    "deploymentEnabled": false
   }
 }

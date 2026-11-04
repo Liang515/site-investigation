@@ -116,3 +116,4 @@ data/raw/              原始資料（不進版控）
 - 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 4 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
 - Vercel 上傳單一檔案上限 100 MB，所以不上傳 1.1 GB 的資料庫，改上傳 `sitefloor.export` 產生的 Parquet（約 340 MB，每檔 80 MB 左右）。部署環境（`VERCEL` 環境變數，或本機設 `SITEFLOOR_PARQUET=1` 測試）由 `db.connect()` 直接讀 Parquet，查詢速度與資料庫檔相近。
 - 部署：更新資料後先跑 `sitefloor.export`，再在專案根目錄 `vercel deploy --prod --yes`（從本機上傳，資料不在 git 裡）。
+- GitHub 推送**不會**自動部署（`vercel.json` 的 `git.deploymentEnabled: false`）：GitHub 上沒有資料檔，從 git 建出來的版本會壞掉並蓋掉正式網站。
