@@ -170,7 +170,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
         tiles: ["https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}"],
         attribution: "© 內政部國土測繪中心" },
       bldg: { type: "geojson", data: { type: "FeatureCollection", features: [] },
-        attribution: "建物：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OpenStreetMap 貢獻者</a>、臺中市／臺北市政府" },
+        attribution: "建物外框：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OpenStreetMap 貢獻者</a>、臺中市政府、臺北市政府｜樓層與門牌：內政部實價登錄、各縣市政府門牌與使用執照資料（<a href=\"/about\">完整來源</a>）" },
       pin: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
     },
     layers: [
