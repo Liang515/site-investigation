@@ -16,51 +16,56 @@
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; color: var(--ink); background: var(--bg); }
   #app { display: grid; grid-template-columns: 380px 1fr; height: 100%; }
-  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-  h1 { font-size: 18px; margin: 0; }
-  .brand { display: flex; align-items: center; gap: 10px; }
-  .brand img { border-radius: 8px; flex: none; }
-  h2 { font-size: 13px; color: var(--muted); font-weight: 600; margin: 0 0 8px; letter-spacing: .04em; }
+  /* 字級只用三種：20 標題、14 內文、12 輔助說明（查詢結果的大數字除外） */
+  html, body { font-size: 14px; line-height: 1.5; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 24px; }
+  h1 { font-size: 20px; line-height: 28px; margin: 0; font-weight: 700; }
+  .brand { display: flex; align-items: center; gap: 8px; }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; flex: none; }
+  .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  h2 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 8px; letter-spacing: .04em; }
   form { display: flex; gap: 6px; }
-  input[type=text] { flex: 1; font-size: 15px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  input[type=text] { flex: 1; min-width: 0; font-size: 14px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; }
   button { font-size: 14px; padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
   .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .big { font-size: 34px; font-weight: 700; line-height: 1; }
   .big small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 4px; }
-  dl { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; margin: 12px 0 0; font-size: 14px; }
+  dl { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; margin: 12px 0 0; }
   dt { color: var(--muted); }
   dd { margin: 0; }
   .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; color: #fff; font-weight: 600; }
   .b-高 { background: var(--hi); } .b-中 { background: var(--mid); } .b-低, .b-無, .b-待確認 { background: var(--lo); }
-  .note { font-size: 13px; color: var(--muted); margin-top: 8px; }
-  .addrs { font-size: 13px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
-  .legend { display: flex; gap: 0; font-size: 11px; color: var(--muted); }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .addrs { font-size: 12px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
+  .legend { display: flex; gap: 0; font-size: 12px; color: var(--muted); }
   .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
   .legend span::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 10px; background: var(--c); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  details summary { cursor: pointer; font-size: 12px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
-  #drop { display: block; border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px 16px; text-align: center; font-size: 14px; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--panel); }
+  #drop { display: block; border: 1.5px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--panel); }
   #drop:hover { border-color: var(--accent); }
   #drop .hint { display: block; margin-top: 6px; }
   #drop.over { border-color: var(--accent); color: var(--accent); }
-  .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
-  .tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 6px 12px; }
-  .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 13px; margin-bottom: 8px; }
-  .crumbs button { background: #eef3fb; color: var(--accent); padding: 4px 10px; font-size: 13px; }
+  /* 分頁：整條切換鈕 */
+  .tabs { display: flex; padding: 3px; margin-bottom: 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; }
+  .tabs button { flex: 1; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font-weight: 600; }
+  .tabs button.on { background: var(--panel); color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,.12); }
+  .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; margin-bottom: 8px; }
+  .crumbs button { background: #eef3fb; color: var(--accent); padding: 4px 10px; font-size: 12px; }
   .crumbs .cur { color: var(--muted); }
   .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; padding: 2px; }
   .tiles.wide { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .tiles.num { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
   .tile { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 9px 4px; font-size: 14px; line-height: 1.2; position: relative; }
   .tile:hover { border-color: var(--accent); color: var(--accent); }
-  .tile small { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tile small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
   .tile.has::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--hi); }
   #f { position: relative; }
   #sugg { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.08); max-height: 320px; overflow-y: auto; }
-  .sg { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border-radius: 0; padding: 8px 10px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  .sg { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border-radius: 0; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   .sg:last-child { border-bottom: 0; }
   .sg:hover, .sg.on { background: #eef3fb; }
   .sg small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
@@ -80,7 +85,7 @@
     #map { order: 2; height: 45vh; }
     aside > section:nth-of-type(1) { order: 3; padding-top: 12px; padding-bottom: 12px; }
     aside > section:nth-of-type(n+2) { order: 4; padding-top: 16px; }
-    .long-hint { display: none; }
+    input[type=text], #pickFilter { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
     .tiles { max-height: 230px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
@@ -90,20 +95,22 @@
 <div id="app">
   <aside>
     <div>
-      <h1 class="brand"><img src="/logo.png" alt="" width="36" height="36">地址樓層查詢</h1>
-      <div class="hint">非官方查詢工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
-      <div class="hint long-hint">放大地圖到街區可看到 3D 建物，點建物看屬性。立體優先用 OpenStreetMap 的建物（每棟分開），其次市府建物圖；都沒有的地方把實價登錄樓層畫成小方柱</div>
+      <h1 class="brand"><img src="/logo.png" alt="" width="28" height="28">地址樓層查詢</h1>
+      <div class="sub">非官方查詢工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
     </div>
 
     <section>
-      <div class="tabs"><button type="button" id="tabPick" class="on">用選的</button><button type="button" id="tabType">打字</button></div>
+      <div class="tabs"><button type="button" id="tabPick" class="on">選擇地址</button><button type="button" id="tabType">輸入地址</button></div>
       <div id="pickBox">
         <div class="crumbs" id="crumbs"></div>
         <input id="pickFilter" type="search" placeholder="篩選（可不填）" hidden>
         <div class="tiles" id="tiles"></div>
         <div class="hint" id="pickHint" style="margin-top:6px"></div>
       </div>
-      <form id="f" hidden autocomplete="off"><input id="q" type="text" placeholder="例：臺中市西屯區市政路390號、台北101；打錯字或打一半也行"><button>查詢</button><div id="sugg" hidden></div></form>
+      <div id="typeBox" hidden>
+        <form id="f" autocomplete="off"><input id="q" type="text" placeholder="地址或地標，例：市政路390號"><button>查詢</button><div id="sugg" hidden></div></form>
+        <div class="hint" style="margin-top:6px">可以打錯字、用簡寫或只打一部分，會列出最接近的門牌</div>
+      </div>
       <div id="result" style="margin-top:12px"></div>
     </section>
 
@@ -117,11 +124,11 @@
     <section>
       <h2>地上樓層</h2>
       <div class="legend" id="legend"></div>
+      <div class="hint" style="margin-top:8px">放大到街區可看到 3D 建物，點建物看屬性</div>
     </section>
 
     <section>
-      <h2>已建置範圍</h2>
-      <table id="stats"></table>
+      <details><summary>各縣市涵蓋率</summary><table id="stats"></table></details>
     </section>
   </aside>
   <div id="map"></div>
@@ -429,7 +436,7 @@ const tabPick = document.getElementById("tabPick"), tabType = document.getElemen
 function setTab(t) {
   tabPick.classList.toggle("on", t === "pick"); tabType.classList.toggle("on", t === "type");
   document.getElementById("pickBox").hidden = t !== "pick";
-  document.getElementById("f").hidden = t !== "type";
+  document.getElementById("typeBox").hidden = t !== "type";
   if (t === "type") document.getElementById("q").focus();
   try { localStorage.setItem("searchTab", t); } catch {}
 }
