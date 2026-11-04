@@ -193,7 +193,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
 map.addControl(new maplibregl.NavigationControl());
 window.map = map;  // 方便在主控台除錯
 
-// ── 地圖診斷：網址加 ?debug=1，或地圖 10 秒還沒載入完成時，在地圖上顯示狀態，方便回報問題 ──
+// ── 地圖診斷：只有網址加 ?debug=1 時才在地圖上顯示狀態（一般使用者看不到） ──
 const mapErrors = [];
 let lostCount = 0;
 map.on("error", e => {
@@ -228,7 +228,6 @@ function showDiag(reason) {
   document.getElementById("map").appendChild(box);
 }
 if (new URLSearchParams(location.search).has("debug")) setTimeout(() => showDiag("debug"), 6000);
-setTimeout(() => { if (MAP_OK && !map.loaded()) showDiag("10 秒仍未載入完成"); }, 10000);
 
 let timer;
 async function loadBuildings() {
