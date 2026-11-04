@@ -123,6 +123,15 @@ def _has_table(name: str) -> bool:
         "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [name]).fetchone()[0])
 
 
+def _extrude_height(floors, height):
+    """立體高度（公尺）。OSM 標的 height 與樓層不合理時（例：高雄八五大樓標 85 層、高 50 m）改用 樓層×3.2m。"""
+    if floors and height and 2.5 * floors <= height <= 6 * floors:
+        return height
+    if floors:
+        return floors * FLOOR_M
+    return height
+
+
 def _feature(i: int, geom: dict, **props) -> dict:
     return {"type": "Feature", "id": i, "properties": props, "geometry": geom}
 
@@ -174,7 +183,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     for i, (u, f, h, name, g) in enumerate(osm):
         if i not in drop_osm:
             feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
-                                  h=h or (f * FLOOR_M if f else None), name=name, src="osm"))
+                                  h=_extrude_height(f, h), name=name, src="osm"))
     for u, f, g in city:
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
                               h=f * FLOOR_M if f else None, src="city"))
@@ -212,7 +221,9 @@ def _osm_building(uid: str) -> dict:
     if levels is not None and tf is not None and levels != tf:
         note.append(f"OSM 標 {levels} 層、實價登錄 {tf} 層，採實價登錄")
     if h is not None:
-        note.append(f"OSM 標高 {h:g} m")
+        shown = tf if tf is not None else levels
+        ok = _extrude_height(shown, h) == h
+        note.append(f"OSM 標高 {h:g} m" + ("" if ok else "（與樓層不符，地圖未採用）"))
     return {"uid": u, "source": src, "floors_above": tf if tf is not None else levels, "floors_below": None,
             "structure": None, "btype": None, "year": None,
             "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,

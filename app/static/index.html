@@ -288,6 +288,7 @@ function card(r, head, bldg) {
 document.getElementById("f").addEventListener("submit", e => {
   e.preventDefault();
   const q = document.getElementById("q").value.trim();
+  lastSubmitted = q; clearTimeout(suggTimer); suggSeq++;  // 取消還在路上的建議請求
   hideSugg();
   if (q) doLookup(q);
 });
@@ -338,9 +339,10 @@ function sgHtml(x, i) {
     + `${x.hint ? `<small>${esc(x.hint)}</small>` : ""}</button>`;
 }
 function hideSugg() { suggEl.hidden = true; suggOn = -1; }
+let lastSubmitted = "";
 async function updateSugg() {
   const q = qEl.value.trim();
-  if (q.length < 2) { hideSugg(); return; }
+  if (q.length < 2 || q === lastSubmitted) { hideSugg(); return; }  // 已送出查詢的文字不再跳建議
   const seq = ++suggSeq;
   const resp = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
   if (!resp.ok) { hideSugg(); return; }
