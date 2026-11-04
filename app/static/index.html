@@ -259,7 +259,12 @@ function gmapLink(r) {
   if (!r.normalized) return "—";
   const full = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(full)}`;
-  return `<a href="${esc(url)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">${esc(full)} ↗</a>`;
+  const link = `<a href="${esc(url)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">${esc(full)} ↗</a>`;
+  // 有門牌座標時加街景：Google 會開在離這個點最近的街景
+  const pano = r.lat != null && r.lon != null
+    ? ` · <a href="${esc(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${r.lat},${r.lon}`)}" target="_blank" rel="noopener">街景 ↗</a>`
+    : "";
+  return link + pano;
 }
 
 function select(uid) { map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]); }
