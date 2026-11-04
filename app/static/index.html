@@ -76,16 +76,25 @@
   #pickFilter { width: 100%; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
   #map { height: 100%; position: relative; }
   .hint { font-size: 12px; color: var(--muted); }
+  .mob-only { display: none; }
   @media (max-width: 760px) {
     html, body { height: auto; }
-    /* 手機：標題 → 地圖 → 查詢 → 其他 */
+    /* 手機：標題 → 地圖 → 查詢結果 → 選地址／輸入地址 → 其他 */
     #app { display: flex; flex-direction: column; height: auto; }
-    aside { display: contents; }
+    aside, aside > section:first-of-type { display: contents; }
     aside > * { padding: 0 16px; }
     aside > div:first-child { order: 1; padding-top: 12px; padding-bottom: 10px; }
     #map { order: 2; height: 45vh; }
-    aside > section:nth-of-type(1) { order: 3; padding-top: 12px; padding-bottom: 12px; }
-    aside > section:nth-of-type(n+2) { order: 4; padding-top: 16px; }
+    #result { order: 3; padding: 0 16px; margin-top: 12px !important; }
+    #result:empty { display: none; }
+    .tabs { order: 4; margin: 16px 16px 12px; }
+    #pickBox, #typeBox { order: 5; padding: 0 16px; }
+    aside > section:not(:first-of-type) { order: 6; padding-top: 24px; }
+    aside > section:last-of-type { padding-bottom: 24px; }
+    .tiles { max-height: none; overflow: visible; }  /* 不要在整頁捲動裡再包一層捲動 */
+    .crumbs button { padding: 6px 12px; }
+    .desk-only { display: none; }
+    .mob-only { display: inline !important; }
     input[type=text], #pickFilter { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
     .tiles { max-height: 230px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
@@ -117,7 +126,7 @@
 
     <section>
       <h2>整批查詢</h2>
-      <label id="drop"><b>拖曳 Excel / CSV 到這裡</b>，或點擊選檔<span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
+      <label id="drop"><b class="desk-only">拖曳 Excel / CSV 到這裡</b><span class="desk-only">，或點擊選檔</span><b class="mob-only">點擊選擇 Excel / CSV 檔</b><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
         <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden></label>
       <div id="batchMsg" class="note"></div>
     </section>
@@ -309,6 +318,8 @@ async function doLookup(q) {
   const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
+  // 手機：結果卡片排在地圖正下方，查詢完捲到地圖，地圖與結果一起看
+  if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "start" });
   // 查不到時：列出模糊搜尋的候選
   if (r.confidence === "無" || r.confidence === "待確認") {
     const items = (await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json())
