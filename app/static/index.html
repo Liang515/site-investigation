@@ -42,7 +42,9 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
-  #drop { border: 1.5px dashed var(--line); border-radius: 10px; padding: 16px; text-align: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+  #drop { display: block; border: 1.5px dashed var(--line); border-radius: 10px; padding: 18px 16px; text-align: center; font-size: 14px; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--panel); }
+  #drop:hover { border-color: var(--accent); }
+  #drop .hint { display: block; margin-top: 6px; }
   #drop.over { border-color: var(--accent); color: var(--accent); }
   .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
   .tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 6px 12px; }
@@ -67,19 +69,20 @@
   .didyou { margin-top: 10px; }
   .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
   #pickFilter { width: 100%; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
-  #map { height: 100%; }
+  #map { height: 100%; position: relative; }
   .hint { font-size: 12px; color: var(--muted); }
   @media (max-width: 760px) {
     html, body { height: auto; }
-    /* 手機：地圖排在搜尋區下面，不要被整批查詢、統計表擠到最底 */
+    /* 手機：標題 → 地圖 → 查詢 → 其他 */
     #app { display: flex; flex-direction: column; height: auto; }
     aside { display: contents; }
     aside > * { padding: 0 16px; }
-    aside > div:first-child { order: 1; padding-top: 16px; }
-    aside > section:nth-of-type(1) { order: 2; padding-bottom: 12px; }
-    #map { order: 3; }
+    aside > div:first-child { order: 1; padding-top: 12px; padding-bottom: 10px; }
+    #map { order: 2; height: 45vh; }
+    aside > section:nth-of-type(1) { order: 3; padding-top: 12px; padding-bottom: 12px; }
     aside > section:nth-of-type(n+2) { order: 4; padding-top: 16px; }
-    #map { height: 60vh; }
+    .long-hint { display: none; }
+    .tiles { max-height: 230px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
 </style>
@@ -90,7 +93,7 @@
     <div>
       <h1 class="brand"><img src="/logo.png" alt="" width="36" height="36">地址樓層查詢</h1>
       <div class="hint">非官方查詢工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
-      <div class="hint">放大地圖到街區可看到 3D 建物，點建物看屬性。立體優先用 OpenStreetMap 的建物（每棟分開），其次市府建物圖；都沒有的地方把實價登錄樓層畫成小方柱</div>
+      <div class="hint long-hint">放大地圖到街區可看到 3D 建物，點建物看屬性。立體優先用 OpenStreetMap 的建物（每棟分開），其次市府建物圖；都沒有的地方把實價登錄樓層畫成小方柱</div>
     </div>
 
     <section>
@@ -107,7 +110,7 @@
 
     <section>
       <h2>整批查詢</h2>
-      <label id="drop">拖曳 Excel / CSV 到這裡，或點擊選檔<br><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel（一次最多 2,000 筆、4 MB）</span>
+      <label id="drop"><b>拖曳 Excel / CSV 到這裡</b>，或點擊選檔<span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
         <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden></label>
       <div id="batchMsg" class="note"></div>
     </section>
@@ -172,8 +175,29 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
     ],
   },
   center: [120.6466, 24.1626], zoom: 16, pitch: 50, bearing: -15,
+  attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl());
+
+// ── 地圖診斷：網址加 ?debug=1，或地圖 10 秒還沒載入完成時，在地圖上顯示狀態，方便回報問題 ──
+const mapErrors = [];
+map.on("error", e => mapErrors.push(String(e?.error?.message || e?.error || e).slice(0, 160)));
+if (MAP_OK) map.getCanvas().addEventListener("webglcontextlost", () => mapErrors.push("WebGL context lost"));
+function showDiag(reason) {
+  if (!MAP_OK || document.getElementById("diag")) return;
+  const c = map.getCanvas();
+  const box = document.createElement("div");
+  box.id = "diag";
+  box.style.cssText = "position:absolute;left:10px;bottom:30px;z-index:9;max-width:440px;background:rgba(255,255,255,.95);border:1px solid #ccc;border-radius:8px;padding:10px 12px;font:12px/1.5 monospace;color:#222;white-space:pre-wrap";
+  box.textContent = [`地圖診斷（${reason}）`,
+    `loaded=${map.loaded()} style=${map.isStyleLoaded()} 畫布=${c.width}x${c.height} 容器=${map.getContainer().offsetWidth}x${map.getContainer().offsetHeight} dpr=${devicePixelRatio}`,
+    `中心=${map.getCenter().lng.toFixed(4)},${map.getCenter().lat.toFixed(4)} zoom=${map.getZoom().toFixed(1)}`,
+    `錯誤(${mapErrors.length})：${mapErrors.slice(0, 5).join(" | ") || "無"}`,
+    navigator.userAgent].join("\n");
+  document.getElementById("map").appendChild(box);
+}
+if (new URLSearchParams(location.search).has("debug")) setTimeout(() => showDiag("debug"), 6000);
+setTimeout(() => { if (MAP_OK && !map.loaded()) showDiag("10 秒仍未載入完成"); }, 10000);
 
 let timer;
 async function loadBuildings() {
@@ -185,6 +209,9 @@ async function loadBuildings() {
 }
 map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
 map.on("load", loadBuildings);
+// 資料來源標示一開始就收成 ⓘ（點開才顯示），不擋地圖
+map.on("load", () => document.querySelectorAll(".maplibregl-ctrl-attrib.maplibregl-compact-show")
+  .forEach(e => e.classList.remove("maplibregl-compact-show")));
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const v = x => x == null || x === "" ? "—" : esc(x);
