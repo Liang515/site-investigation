@@ -128,6 +128,18 @@ FROM q JOIN same_osm s ON s.base = q.base AND {_MATCH.format(t="s")}
 QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY s.spread, s.n DESC) = 1
 """
 
+# 人工校正（curated/floor_corrections.csv）：門牌直接指定，或門牌落在指定的 OSM 建物裡
+_CORR_SQL = f"""
+SELECT idx, c_floors, c_below, c_source FROM (
+    SELECT q.idx, c.floors_above AS c_floors, c.floors_below AS c_below, c.source AS c_source, 0 AS pri
+    FROM q JOIN corrections c ON c.base = q.base AND {_MATCH.format(t="c")}
+    UNION ALL
+    SELECT q.idx, c.floors_above, c.floors_below, c.source, 1
+    FROM q JOIN door_osm o ON o.base = q.base AND {_MATCH.format(t="o")}
+    JOIN corrections c ON c.osm_uid = o.osm_uid
+) QUALIFY row_number() OVER (PARTITION BY idx ORDER BY pri) = 1
+"""
+
 # 使用執照：門牌直接比對；之號沒有使照時退回主號
 _PERMIT_SQL = f"""
 SELECT q.idx, p.floors_above AS p_floors, p.floors_below AS p_below, p.structure AS p_structure, p.year AS p_year,
@@ -196,7 +208,7 @@ def _resolve(r, covered: set[str]) -> dict:
 
     out = dict(
         county=r.county if has_addr else r.t_county, town=r.town if has_addr else r.t_town,
-        floors_below=r.p_below if not _na(r.p_below) else r.floors_below,
+        floors_below=next((x for x in (r.c_below, r.p_below, r.floors_below) if not _na(x)), None),
         structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure) if not _na(x)), None),
         btype=r.t_btype if not _na(r.t_btype) else r.b_btype,
         year=next((x for x in (r.t_year, r.p_year, r.b_year) if not _na(x)), None),
@@ -210,10 +222,15 @@ def _resolve(r, covered: set[str]) -> dict:
         notes.append("實價登錄紀錄的總樓層不一致，取眾數")
     same_ok = not _na(r.s_floors) and r.s_spread == 0
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
-    #   自己的實價 > 同棟／同點位一致（94–98%）> OSM 同棟一致（97%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
+    #   人工校正 > 自己的實價 > 同棟／同點位一致（94–98%）> OSM 同棟一致（97%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
     #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
     tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
-    if not _na(t):
+    if not _na(r.c_floors):
+        floors, src, conf = r.c_floors, "人工校正", "高"
+        notes.append(f"人工校正（依據：{r.c_source or '未註明'}）")
+        if not _na(t) and int(t) != int(r.c_floors):
+            notes.append(f"實價登錄記 {int(t)} 層，已校正")
+    elif not _na(t):
         floors, src = t, r.t_source
         if not _na(b) and int(b) != int(t):
             notes.append(f"建物圖 {int(b)} 層、實價登錄 {int(t)} 層，採實價登錄")
@@ -281,6 +298,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     same = con.execute(_SAME_SQL).df()
     nb = con.execute(_NB_SQL).df()
     osm = _optional(con, _OSM_SQL, ["idx", "osm_uid", "o_floors", "o_name"])
+    corr = _optional(con, _CORR_SQL, ["idx", "c_floors", "c_below", "c_source"])
     same_osm = _optional(con, _SAME_OSM_SQL, ["idx", "so_floors", "so_n", "so_spread", "so_btype"])
     permit = _optional(con, _PERMIT_SQL, ["idx", "p_floors", "p_below", "p_structure", "p_year", "p_no", "p_source",
                                           "p_exact"])
@@ -290,7 +308,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     df = (q.merge(hit, on="idx", how="left", suffixes=("_q", ""))
           .merge(trade, on="idx", how="left").merge(same, on="idx", how="left").merge(nb, on="idx", how="left")
           .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left")
-          .merge(same_osm, on="idx", how="left"))
+          .merge(same_osm, on="idx", how="left").merge(corr, on="idx", how="left"))
     df["unit_floor"] = df.floor
     resolved = pd.DataFrame([_resolve(r, covered) for r in df.itertuples()], index=df.index)
     for c in ("county", "town"):

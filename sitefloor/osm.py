@@ -90,6 +90,11 @@ def main():
         QUALIFY row_number() OVER (PARTITION BY uid ORDER BY k DESC, floors DESC) = 1""").df()
     b = b.merge(tf, on="uid", how="left")
     b.loc[b.building.isin(NO_TRADE_FLOORS), "trade_floors"] = None
+    # 人工校正（curated.py）：指定 OSM 建物的樓層
+    has_corr = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'corrections'").fetchone()[0]
+    cur = (con.execute("SELECT osm_uid AS uid, any_value(floors_above) AS curated_floors FROM corrections "
+                       "WHERE osm_uid IS NOT NULL GROUP BY 1").df() if has_corr else pd.DataFrame(columns=["uid", "curated_floors"]))
+    b = b.merge(cur, on="uid", how="left")
     # 樓層不明的外框也收（地圖畫成灰色「樓層未知」），例：大葉高島屋、美麗華百樂園
     bounds = b.geometry.bounds
     odf = pd.DataFrame(
@@ -100,6 +105,7 @@ def main():
             "levels": b.levels,
             "height": b.height,
             "trade_floors": b.trade_floors.astype("Int16"),
+            "curated_floors": b.curated_floors.astype("Int16"),
             "minlon": bounds.minx,
             "minlat": bounds.miny,
             "maxlon": bounds.maxx,

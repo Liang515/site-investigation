@@ -1,6 +1,8 @@
 """建庫：各縣市建物圖＋門牌點位 → data/db/sitefloor.duckdb
 
 用法：uv run python -m sitefloor.build taichung taipei
+      uv run python -m sitefloor.build osm_addr   （基隆、宜蘭、南投、嘉義市、連江：用 OSM 地址點當門牌座標）
+      uv run python -m sitefloor.build road_towns （嘉義市：用 OSM 道路判斷每條路在哪一區，補實價登錄缺的區）
 """
 import json
 import sys
@@ -196,7 +198,77 @@ def build_addr_only(con, county: str):
     _write(con, county, empty, a)
 
 
-BUILDERS = {"taichung": build_taichung, "taipei": build_taipei}
+# ── 沒有開放門牌點位的縣市：改用 OpenStreetMap 的地址點（addr:full；基隆市幾乎是完整匯入） ──
+OSM_PBF = Path("data/raw/osm/taiwan-latest.osm.pbf")
+OSM_ADDR_COUNTIES = ["基隆市", "宜蘭縣", "南投縣", "嘉義市", "連江縣"]
+
+
+def build_osm_addr(con):
+    import re
+
+    where = " OR ".join(f"other_tags LIKE '%\"addr:city\"=>\"{c}\"%'" for c in OSM_ADDR_COUNTIES)
+    parts = []
+    for layer in ("points", "multipolygons"):
+        g = pyogrio.read_dataframe(OSM_PBF, layer=layer, columns=["other_tags"], where=where)
+        if layer == "multipolygons":
+            g["geometry"] = g.geometry.representative_point()
+        parts.append(g)
+    g = gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), crs=4326)
+    tags = g.other_tags.fillna("")
+
+    def tag(k):
+        return tags.str.extract(r'"' + re.escape(k) + r'"=>"([^"]*)"')[0]
+
+    city, full = tag("addr:city"), tag("addr:full")
+    # 沒有 addr:full 的用 縣市＋區＋路＋號 組起來
+    full = full.fillna(city.fillna("") + tag("addr:district").fillna("") + tag("addr:street").fillna("")
+                       + tag("addr:housenumber").fillna(""))
+    rows = []
+    for c, text, geom in zip(city, full, g.geometry):
+        a = from_parts(c, "", text, "", "", "", "") if isinstance(text, str) else None
+        if a and a.base.endswith("號") and a.town and a.county == c:
+            rows.append((c, a.town, a.base, a.full, a.floor, geom))
+    a = gpd.GeoDataFrame(pd.DataFrame(rows, columns=["county", "town", "base", "full", "floor", "geometry"]),
+                         geometry="geometry", crs=4326).to_crs(3826)
+    a = a.drop_duplicates(subset=["county", "town", "full"])
+    a["floor"] = pd.array(a["floor"], dtype="Int16")
+    a["bldg_uid"], a["match"], a["dist_m"] = None, None, None
+    empty = gpd.GeoDataFrame(columns=["uid", "source", "floors_above", "floors_below", "structure",
+                                      "btype", "year", "year_kind"], geometry=[], crs=3826)
+    for c in OSM_ADDR_COUNTIES:
+        sub = a[a.county == c]
+        print(f"  {c}：OSM 地址點 {len(sub):,}（門牌號 {sub.base.nunique():,}）")
+        if len(sub):
+            _write(con, c, empty, sub)
+
+
+# ── 實價登錄沒寫區、又沒有門牌點位可對的縣市（嘉義市）：用 OSM 道路線與行政區界判斷每條路在哪一區 ──
+ROAD_TOWN_COUNTIES = ["嘉義市"]
+ROAD_TOWN_SHARE = 0.9  # 道路長度九成以上在同一區才採用
+
+
+def build_road_towns(con):
+    towns = _towns()
+    rows = []
+    for county in ROAD_TOWN_COUNTIES:
+        t = towns[towns.COUNTYNAME == county]
+        x0, y0, x1, y1 = t.to_crs(4326).total_bounds
+        roads = pyogrio.read_dataframe(OSM_PBF, layer="lines", columns=["name", "highway"], bbox=(x0, y0, x1, y1),
+                                       where="highway IS NOT NULL AND name IS NOT NULL").to_crs(3826)
+        seg = gpd.overlay(roads[["name", "geometry"]], t[["TOWNNAME", "geometry"]], how="intersection",
+                          keep_geom_type=True)
+        seg["len"] = seg.geometry.length
+        g = seg.groupby(["name", "TOWNNAME"]).len.sum().reset_index()
+        g["share"] = g.len / g.groupby("name").len.transform("sum")
+        ok = g[g.share >= ROAD_TOWN_SHARE]
+        rows += [(county, r.name, r.TOWNNAME, round(r.share, 3)) for r in ok.itertuples()]
+        print(f"  {county}：道路 {g.name.nunique():,} 條，可判斷區別 {len(ok):,} 條")
+    df = pd.DataFrame(rows, columns=["county", "road", "town", "share"])
+    con.execute("CREATE OR REPLACE TABLE road_towns AS SELECT * FROM df")
+
+
+BUILDERS = {"taichung": build_taichung, "taipei": build_taipei, "osm_addr": build_osm_addr,
+            "road_towns": build_road_towns}
 for _c in ["新北市", "桃園市", "臺南市", "高雄市", "新竹市", "新竹縣", "苗栗縣", "彰化縣",
            "雲林縣", "嘉義縣", "屏東縣", "花蓮縣", "臺東縣", "澎湖縣", "金門縣"]:
     BUILDERS[_c] = lambda con, c=_c: build_addr_only(con, c)

@@ -32,12 +32,13 @@
   .card { border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
   .big { font-size: 34px; font-weight: 700; line-height: 1; }
   .big small { font-size: 14px; font-weight: 500; color: var(--muted); margin-left: 4px; }
-  dl { display: grid; grid-template-columns: 84px 1fr; gap: 6px 10px; margin: 12px 0 0; }
+  dl { display: grid; grid-template-columns: 96px 1fr; gap: 6px 10px; margin: 12px 0 0; }
+  dd { overflow-wrap: anywhere; }
   dt { color: var(--muted); }
   dd { margin: 0; }
   .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; color: #fff; font-weight: 600; }
   .b-高 { background: var(--hi); } .b-中 { background: var(--mid); } .b-低, .b-無, .b-待確認 { background: var(--lo); }
-  .note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
   .addrs { font-size: 12px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
   .legend { display: flex; gap: 0; font-size: 12px; color: var(--muted); }
   .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
@@ -72,6 +73,14 @@
   .sg small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
   .sg .dot { color: var(--hi); }
   .didyou { margin-top: 10px; }
+  .fb { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .fb summary { cursor: pointer; font-size: 12px; color: var(--accent); }
+  .fbform { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .fbform label { display: flex; flex-direction: column; gap: 4px; }
+  .fbform .wide { grid-column: 1 / -1; }
+  .fbform input { font-size: 14px; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); }
+  .fbform button { justify-self: start; }
+  .card .again { margin-top: 12px; width: 100%; }
   .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
   #pickFilter { width: 100%; font-size: 14px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
   #map { height: 100%; position: relative; }
@@ -95,7 +104,8 @@
     .crumbs button { padding: 6px 12px; }
     .desk-only { display: none; }
     .mob-only { display: inline !important; }
-    input[type=text], #pickFilter { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
+    .card .again { display: block !important; }
+    input[type=text], #pickFilter, .fbform input { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
     .tiles { max-height: 230px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
@@ -332,6 +342,10 @@ async function doLookup(q) {
   const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
+  const cardEl = document.getElementById("result").querySelector(".card");
+  if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", feedbackHtml(r));
+  // 手機：結果在地圖下方、選單更下面，給一顆回到選單的按鈕
+  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
   // 手機：結果卡片排在地圖正下方，查詢完捲到地圖，地圖與結果一起看
   if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "start" });
   // 查不到時：列出模糊搜尋的候選
@@ -389,6 +403,34 @@ document.getElementById("result").addEventListener("click", e => {
 });
 suggEl.addEventListener("mousedown", e => {
   const b = e.target.closest(".sg"); if (b) { e.preventDefault(); chooseSugg(b.dataset.text, b.dataset.kind); }
+});
+
+// ── 樓層回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
+function feedbackHtml(r) {
+  const addr = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
+  return `<details class="fb"><summary>樓層有誤？回報正確樓層</summary>
+    <form class="fbform" data-addr="${esc(addr)}" data-shown="${esc(r.floors_above ?? "")}">
+      <label>地上樓層<input name="floors_above" type="number" min="1" max="110" required></label>
+      <label>地下樓層<input name="floors_below" type="number" min="0" max="20" placeholder="可不填"></label>
+      <label class="wide">依據<input name="basis" maxlength="200" placeholder="例：住在這裡、使用執照、建案資料"></label>
+      <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
+      <button type="submit">送出</button><span class="fbmsg hint"></span>
+    </form></details>`;
+}
+document.getElementById("result").addEventListener("click", e => {
+  if (e.target.closest(".again")) document.querySelector(".tabs").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+document.getElementById("result").addEventListener("submit", async e => {
+  const f = e.target.closest(".fbform"); if (!f) return;
+  e.preventDefault();
+  const msg = f.querySelector(".fbmsg"), btn = f.querySelector("button");
+  btn.disabled = true; msg.textContent = "送出中…";
+  const data = Object.fromEntries(new FormData(f));
+  data.address = f.dataset.addr; data.shown = f.dataset.shown;
+  const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  const out = await resp.json().catch(() => ({}));
+  if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input").forEach(i => i.disabled = true); }
+  else { msg.textContent = out.detail || `送出失敗（${resp.status}）`; btn.disabled = false; }
 });
 
 // ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick 回傳下一層） ──

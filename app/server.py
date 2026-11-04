@@ -2,6 +2,8 @@
 import io
 import json
 import math
+import os
+import urllib.request
 import re
 import time
 from collections import defaultdict, deque
@@ -27,8 +29,9 @@ CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改�
 app = FastAPI(title="地址樓層查詢")
 
 # ── 查詢次數限制（公開部署時避免被大量抓取）：每個 IP 在時間窗內的次數上限 ──
-RATE_LIMITS = {  # 路徑前綴：(次數, 秒)
+RATE_LIMITS = {  # 路徑前綴：(次數, 秒)；依序比對，越特定的放越前面
     "/api/batch": (5, 3600),
+    "/api/feedback": (5, 3600),
     "/api/": (120, 60),
 }
 BATCH_MAX_BYTES = 4 * 1024 * 1024  # Vercel 函式的請求上限是 4.5 MB
@@ -87,6 +90,55 @@ def static_png(name: str):
                         headers={"Cache-Control": "public, max-age=86400"})
 
 
+# ── 樓層回報：使用者覺得樓層有誤時送出，推播給維護者（ntfy），審核後寫進 curated/floor_corrections.csv ──
+def _ntfy_topic() -> tuple[str, str] | None:
+    """部署環境用 Vercel 環境變數 NTFY_TOPIC（不放在公開程式碼裡）；本機用 data/state/notify.json。"""
+    if os.environ.get("NTFY_TOPIC"):
+        return os.environ.get("NTFY_SERVER", "https://ntfy.sh"), os.environ["NTFY_TOPIC"]
+    f = Path(__file__).resolve().parent.parent / "data" / "state" / "notify.json"
+    if f.exists():
+        cfg = json.loads(f.read_text())
+        return cfg.get("ntfy_server", "https://ntfy.sh"), cfg["ntfy_topic"]
+    return None
+
+
+def _clean(x, n: int) -> str:
+    return re.sub(r"[\x00-\x1f]", " ", str(x or "")).strip()[:n]
+
+
+@app.post("/api/feedback")
+async def api_feedback(request: Request):
+    try:
+        body = await request.json()
+    except ValueError:
+        raise HTTPException(400, "格式錯誤") from None
+    addr = _clean(body.get("address"), 100)
+    try:
+        above = int(body.get("floors_above"))
+        below = int(body["floors_below"]) if str(body.get("floors_below") or "").strip() else None
+    except (TypeError, ValueError):
+        raise HTTPException(400, "樓層要填整數") from None
+    if not addr or not 1 <= above <= 110 or (below is not None and not 0 <= below <= 20):
+        raise HTTPException(400, "地址必填；地上樓層 1–110、地下樓層 0–20")
+    basis, contact, shown = _clean(body.get("basis"), 200), _clean(body.get("contact"), 100), _clean(body.get("shown"), 20)
+    target = _ntfy_topic()
+    if not target:
+        raise HTTPException(503, "回報功能尚未設定")
+    msg = "\n".join(x for x in [
+        f"地址：{addr}", f"網站顯示：{shown or '—'} 層", f"回報：地上 {above} 層" + (f"、地下 {below} 層" if below is not None else ""),
+        f"依據：{basis or '未填'}", f"聯絡：{contact}" if contact else ""] if x)
+    print("[feedback]", msg.replace("\n", " | "))  # 也留在部署紀錄
+    server, topic = target
+    data = json.dumps({"topic": topic, "title": "地址樓層查詢：樓層回報", "message": msg, "tags": ["memo"]},
+                      ensure_ascii=False).encode()
+    try:
+        req = urllib.request.Request(server, data=data, method="POST", headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=15).read()
+    except OSError:
+        raise HTTPException(502, "暫時無法送出，請稍後再試") from None
+    return {"ok": True}
+
+
 @app.get("/about")
 def about():
     return FileResponse(STATIC / "about.html")
@@ -142,9 +194,9 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     has_osm = _has_table("osm_buildings")
     if has_osm:
         rows = _cur().execute(f"""
-            SELECT uid, coalesce(trade_floors, levels), height, name, wkb FROM osm_buildings
+            SELECT uid, coalesce(curated_floors, trade_floors, levels), height, name, wkb FROM osm_buildings
             WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
-            ORDER BY coalesce(trade_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
+            ORDER BY coalesce(curated_floors, trade_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
         osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w in rows]
@@ -156,14 +208,16 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     truncated = len(rows) > MAX_BUILDINGS
     city = []
     drop_osm: set[int] = set()
-    tree = shapely.STRtree([o[4] for o in osm]) if osm else None
+    # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框
+    known = [i for i, o in enumerate(osm) if o[1] is not None]
+    tree = shapely.STRtree([osm[i][4] for i in known]) if known else None
     for u, f, src, w in rows[:MAX_BUILDINGS]:
         g = shapely.from_wkb(w)
         if g is None or g.is_empty:
             continue
         if tree is not None and g.area:
-            hit = tree.query(g, predicate="intersects")
-            inter = {int(k): shapely.intersection(g, osm[k][4]).area for k in hit}
+            hit = [known[int(j)] for j in tree.query(g, predicate="intersects")]
+            inter = {k: shapely.intersection(g, osm[k][4]).area for k in hit}
             if sum(inter.values()) / g.area >= CITY_COVERED_MAX:
                 top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
                 if not str(src).startswith(TP_PERMIT_SOURCE) or top == f:
@@ -171,6 +225,15 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                 # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起
                 drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5}
         city.append((u, f, g))
+    # 樓層未知的 OSM 建物若大半落在要畫的市府外框裡，不畫（市府外框有樓層）
+    unknown = [i for i, o in enumerate(osm) if o[1] is None]
+    if unknown and city:
+        ctree = shapely.STRtree([c[2] for c in city])
+        for i in unknown:
+            g = osm[i][4]
+            if g.area and any(shapely.intersection(g, city[int(j)][2]).area / g.area >= 0.5
+                              for j in ctree.query(g, predicate="intersects")):
+                drop_osm.add(i)
     feats: list[dict] = []
     for i, (u, f, h, name, g) in enumerate(osm):
         if i not in drop_osm:
@@ -180,7 +243,10 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
                               h=f * FLOOR_M if f else None, src="city"))
     # 沒有任何外框的門牌：有實價總樓層就畫成小方柱
-    in_osm = "AND NOT EXISTS (SELECT 1 FROM door_osm o WHERE o.county = a.county AND o.town = a.town AND o.base = a.base)"
+    # 門牌所在的 OSM 建物已經有樓層（會畫出來）才不畫方柱；樓層未知的 OSM 外框裡仍畫方柱
+    in_osm = """AND NOT EXISTS (SELECT 1 FROM door_osm o JOIN osm_buildings ob ON ob.uid = o.osm_uid
+        WHERE o.county = a.county AND o.town = a.town AND o.base = a.base
+          AND coalesce(ob.curated_floors, ob.trade_floors, ob.levels) IS NOT NULL)"""
     pts = _cur().execute(f"""
         SELECT a.county || a.town || a.base, avg(a.lon), avg(a.lat), any_value(t.floors)
         FROM addresses a JOIN door_trade t USING (county, town, base)
@@ -200,21 +266,23 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
 def _osm_building(uid: str) -> dict:
     cur = _cur()
     r = cur.execute("""SELECT uid, name, building, levels, trade_floors, height,
-                       (minlon + maxlon) / 2, (minlat + maxlat) / 2 FROM osm_buildings WHERE uid = ?""", [uid]).fetchone()
+                       (minlon + maxlon) / 2, (minlat + maxlat) / 2, curated_floors
+                       FROM osm_buildings WHERE uid = ?""", [uid]).fetchone()
     if not r:
         raise HTTPException(404)
-    u, name, _btype, levels, tf, h, lon, lat = r
+    u, name, _btype, levels, tf, h, lon, lat, cf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
     n = cur.execute("SELECT count(*) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()[0]
-    src = "實價登錄（棟內門牌）" if tf is not None else "OpenStreetMap"
-    note = [] if (tf is not None or levels is not None) else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
+    src = "人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None else "OpenStreetMap"
+    known_floors = next((x for x in (cf, tf, levels) if x is not None), None)
+    note = [] if known_floors is not None else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
     if name:
         note.append(name)
     if levels is not None and tf is not None and levels != tf:
         note.append(f"OSM 標 {levels} 層、實價登錄 {tf} 層，採實價登錄")
     if h is not None:
         note.append(f"OSM 標高 {h:g} m（地圖高度統一用 樓層×3.2m）")
-    return {"uid": u, "source": src, "floors_above": tf if tf is not None else levels, "floors_below": None,
+    return {"uid": u, "source": src, "floors_above": known_floors, "floors_below": None,
             "structure": None, "btype": None, "year": None,
             "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
             "note": "；".join(note), "osm": True}

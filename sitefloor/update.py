@@ -88,10 +88,11 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["trades", "derive", "osm", "permits", "coverage", "gaps", "export", "smoke"]
+PIPELINE = ["trades", "derive", "curated", "osm", "permits", "coverage", "gaps", "export", "smoke"]
 NEEDS = {
-    "trades": {"trades", "derive", "osm", "permits", "coverage", "gaps", "export", "smoke"},
-    "osm": {"osm", "coverage", "gaps", "export", "smoke"},
+    "trades": {"trades", "derive", "curated", "osm", "permits", "coverage", "gaps", "export", "smoke"},
+    "curated": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
+    "osm": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
     "permits": {"permits", "coverage", "export", "smoke"},
 }
 
@@ -177,6 +178,12 @@ def check_sources(state: dict, force: bool) -> tuple[dict, set, list[str], list[
         notes.append(f"臺北市實價週報有新資料（{tok}）")
         steps.add("trades")
         new["tp_weekly"] = tok
+    corr = ROOT / "curated" / "floor_corrections.csv"
+    tok = str(corr.stat().st_mtime_ns) + ":" + str(corr.stat().st_size) if corr.exists() else None
+    if changed("curated", tok):
+        notes.append("人工校正樓層表有更新")
+        steps.add("curated")
+        new["curated"] = tok
     tok = head_token(OSM_PBF)
     if changed("osm", tok):
         notes.append("OpenStreetMap 有新版")

@@ -50,6 +50,7 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 
 ```bash
 uv run python -m sitefloor.build taichung taipei   # 建物圖、門牌點位 → data/db/sitefloor.duckdb
+uv run python -m sitefloor.build osm_addr road_towns  # 沒有門牌點位的縣市改用 OSM 地址；嘉義市用道路判斷行政區
 uv run python -m sitefloor.trades plvr             # 實價登錄 → trades
 uv run python -m sitefloor.derive                  # 推估用的衍生表（同棟、同巷）
 uv run python -m sitefloor.permits                 # 使用執照（data/raw/permits/，來源見 sitefloor/permits.py）
@@ -105,6 +106,12 @@ app/server.py          FastAPI；app/static/index.html 地圖介面
 docs/                  盤點報告
 data/raw/              原始資料（不進版控）
 ```
+
+## 人工校正與使用者回報
+
+- `curated/floor_corrections.csv`（進版控）：已查證的樓層，查詢時優先序最高、地圖也套用。可用門牌（county, town, base）或 OSM 建物（osm_uid，適合百貨、球場等地標）指定；`source` 記依據（網址、使照字號、使用者回報）。改完跑 `uv run python -m sitefloor.curated`（每週更新偵測到檔案有改也會自動重跑）。
+- 網頁結果卡片「樓層有誤？回報正確樓層」→ `POST /api/feedback`（每 IP 每小時 5 次）→ 推播到維護者的 ntfy 頻道（Vercel 環境變數 `NTFY_TOPIC`；本機用 `data/state/notify.json`）。查證後把正確樓層加進上面的 CSV。
+- 缺口盤點：`uv run python -m sitefloor.gaps` → `data/reports/gaps.md`（各類型樓層有無）、`missing_landmarks.csv`（有名稱、樓層未知的地標清單），每週更新也會跑。
 
 ## 定期更新
 

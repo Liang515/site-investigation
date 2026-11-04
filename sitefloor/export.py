@@ -31,6 +31,7 @@ TABLES = {
     "permits": (None, "base, county, town"),
     "osm_buildings": (None, "minlon, minlat"),
     "door_osm": (None, "base, county, town"),
+    "corrections": (None, "base, county, town"),
     "same_osm": (None, "base, county, town"),
 }
 

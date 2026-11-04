@@ -17,6 +17,7 @@ import pandas as pd
 
 from sitefloor.address import cn2int, parse
 from sitefloor.db import connect
+from sitefloor.derive import SUGGEST_DOOR, SUGGEST_LANE
 
 TP_WEEKLY_URL = ("https://data.taipei/api/dataset/a9a97996-3a55-46c8-9076-e5ebdefad6dc"
                  "/resource/2979c431-7a32-4067-9af2-e716cd825c4b/download")
@@ -81,6 +82,21 @@ def total_of(text) -> int | None:
     return n if n and n > 0 else None
 
 
+# 建物型態與總樓層明顯矛盾時，總樓層當作填錯（例：竹北市自強六街13號「華廈(10層含以下)」卻記 100 層）。
+# 只排除差距大的；10 層的「住宅大樓(11層含以上)」這種邊界多半是型態選錯，樓層照用。
+_BTYPE_RANGE = {"公寓": (1, 10), "華廈": (2, 20), "透天": (1, 10), "住宅大樓": (6, 110)}
+MAX_FLOORS = 110  # 臺灣最高 101 層
+
+
+def sane_total(total: int | None, btype: str | None) -> int | None:
+    if total is None or total > MAX_FLOORS:
+        return None
+    for key, (lo, hi) in _BTYPE_RANGE.items():
+        if btype and btype.startswith(key) and not lo <= total <= hi:
+            return None
+    return total
+
+
 def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
               floor: str, total: str, btype: str, structure: str, built: str, date: str,
               kind: str | None, source: str) -> pd.DataFrame:
@@ -94,7 +110,7 @@ def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
         a = parse(raw, county=county, town=(r.get(town) or "") if town else "")
         if not a.town:
             a = parse(raw, county=county)
-        tf = total_of(r.get(total))
+        tf = sane_total(total_of(r.get(total)), r.get(btype))
         b = roc_date(r.get(built))
         rows.append({
             "county": county, "town": a.town or None, "base": a.base, "full": a.full,
@@ -170,6 +186,14 @@ def fill_missing_town(con):
               GROUP BY 1, 2 HAVING count(DISTINCT town) = 1) u
         WHERE t.town IS NULL AND t.county = u.county AND t.base = u.base
     """).fetchall()[0][0]
+    # 再用道路判斷（build road_towns；嘉義市實價登錄不寫東區／西區、也沒有門牌點位）
+    has_roads = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'road_towns'").fetchone()[0]
+    if has_roads:
+        n += con.execute(f"""
+            UPDATE trades t SET town = r.town FROM road_towns r
+            WHERE t.town IS NULL AND t.county = r.county
+              AND regexp_extract(regexp_extract(t.base, '{SUGGEST_DOOR}', 1), '{SUGGEST_LANE}', 1) = r.road
+        """).fetchall()[0][0]
     left = con.execute("SELECT count(*) FROM trades WHERE town IS NULL AND base LIKE '%號'").fetchall()[0][0]
     print(f"  補上鄉鎮 {n:,} 筆；仍缺鄉鎮（有門牌號）{left:,} 筆")
 
