@@ -1,4 +1,4 @@
-# 上傳到 Vercel 時排除；data/db/sitefloor.duckdb 要保留（函式會讀它）
+# 上傳到 Vercel 時排除；函式讀 data/serve/ 的 Parquet（sitefloor.export 產生），資料庫檔不上傳
 .venv/
 .git/
 .pytest_cache/
@@ -8,3 +8,4 @@ data/raw/
 tests/
 scripts/
 docs/
+data/db/

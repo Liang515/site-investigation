@@ -1,10 +1,12 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["hnd1"],
+  "regions": [
+    "hnd1"
+  ],
   "functions": {
     "app/server.py": {
-      "includeFiles": "{data/db/sitefloor.duckdb,app/static/**,sitefloor/towns.json}",
-      "excludeFiles": "{tests/**,scripts/**,docs/**,data/raw/**,.venv/**}",
+      "includeFiles": "{data/serve/**,app/static/**,sitefloor/towns.json}",
+      "excludeFiles": "{tests/**,scripts/**,docs/**,data/raw/**,data/db/**,.venv/**}",
       "maxDuration": 120,
       "memory": 2048
     }

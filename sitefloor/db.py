@@ -4,6 +4,8 @@ from pathlib import Path
 import duckdb
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "db" / "sitefloor.duckdb"
+# 部署用 Parquet（export.py 產生）；Vercel 上或設 SITEFLOOR_PARQUET=1 時讀這裡
+SERVE_DIR = Path(__file__).resolve().parent.parent / "data" / "serve"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS buildings (
@@ -27,11 +29,26 @@ CREATE TABLE IF NOT EXISTS trades (
 """
 
 
+def use_parquet() -> bool:
+    return bool(os.environ.get("SITEFLOOR_PARQUET") or os.environ.get("VERCEL"))
+
+
 def connect(write: bool = False) -> duckdb.DuckDBPyConnection:
+    if not write and use_parquet():
+        return _connect_parquet()
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    # Vercel 等唯讀環境：暫存與擴充套件目錄改到 /tmp
-    config = {"temp_directory": "/tmp/duckdb", "home_directory": "/tmp"} if os.environ.get("VERCEL") else {}
-    con = duckdb.connect(str(DB_PATH), read_only=not write, config=config)
+    con = duckdb.connect(str(DB_PATH), read_only=not write)
     if write:
         con.execute(SCHEMA)
+    return con
+
+
+def _connect_parquet() -> duckdb.DuckDBPyConnection:
+    """記憶體 DuckDB，每張表是指向 data/serve/<表>/*.parquet 的 view（唯讀環境：暫存目錄改到 /tmp）。"""
+    con = duckdb.connect(config={"temp_directory": "/tmp/duckdb", "home_directory": "/tmp"})
+    tables = sorted(p for p in SERVE_DIR.iterdir() if p.is_dir()) if SERVE_DIR.exists() else []
+    if not tables:
+        raise FileNotFoundError(f"找不到部署用 Parquet：{SERVE_DIR}（先跑 python -m sitefloor.export）")
+    for d in tables:
+        con.execute(f"CREATE VIEW {d.name} AS SELECT * FROM read_parquet('{d}/*.parquet')")
     return con

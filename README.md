@@ -53,6 +53,7 @@ uv run python -m sitefloor.derive                  # 推估用的衍生表（同
 uv run python -m sitefloor.permits                 # 使用執照（data/raw/permits/，來源見 sitefloor/permits.py）
 uv run python -m sitefloor.osm                     # OpenStreetMap 建物（data/raw/osm/taiwan-latest.osm.pbf，Geofabrik 下載）
 uv run python -m sitefloor.coverage                # 各縣市涵蓋率（網頁統計表）
+uv run python -m sitefloor.export                  # 部署用 Parquet（data/serve/，每檔 80 MB 左右）
 uv run pytest -q
 ```
 
@@ -111,5 +112,5 @@ data/raw/              原始資料（不進版控）
 ## 公開部署注意
 
 - 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 4 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
-- 資料庫約 1.1 GB，打包進 Vercel 函式（大型函式 beta，上限 5 GB）：`vercel.json` 的 `includeFiles`；`.vercelignore` 排除原始資料。
-- 部署：`npm i -g vercel` → `vercel login` → 在專案根目錄 `vercel deploy --prod`（從本機上傳，資料庫不在 git 裡）。
+- Vercel 上傳單一檔案上限 100 MB，所以不上傳 1.1 GB 的資料庫，改上傳 `sitefloor.export` 產生的 Parquet（約 340 MB，每檔 80 MB 左右）。部署環境（`VERCEL` 環境變數，或本機設 `SITEFLOOR_PARQUET=1` 測試）由 `db.connect()` 直接讀 Parquet，查詢速度與資料庫檔相近。
+- 部署：更新資料後先跑 `sitefloor.export`，再在專案根目錄 `vercel deploy --prod --yes`（從本機上傳，資料不在 git 裡）。
