@@ -131,7 +131,21 @@ const LABELS = ["1–2", "3–5", "6–12", "13–20", "21–30", "31+"];
 document.getElementById("legend").innerHTML =
   RAMP.map((r, i) => `<span style="--c:${r[1]}">${LABELS[i]}</span>`).join("");
 
-const map = new maplibregl.Map({
+// 瀏覽器不支援 WebGL（硬體加速關閉、部分公司電腦／遠端桌面）時地圖畫不出來：
+// 在地圖區顯示原因，並用不做事的替身物件，讓查詢等其他功能照常運作
+function webglOK() {
+  try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
+  catch { return false; }
+}
+const MAP_OK = typeof maplibregl !== "undefined" && webglOK();
+const NOOP = new Proxy(function () {}, { get: (t, k) => k === Symbol.toPrimitive ? () => "" : NOOP, apply: () => NOOP });
+if (!MAP_OK) {
+  document.getElementById("map").innerHTML = `<div style="padding:24px;max-width:460px;color:var(--muted);font-size:14px;line-height:1.7">
+    <b style="color:var(--ink)">這個瀏覽器無法顯示 3D 地圖</b><br>
+    地圖需要 WebGL。請確認瀏覽器設定裡的「硬體加速」已開啟，或改用最新版 Chrome、Edge、Safari。<br>
+    查詢功能不受影響，可以照常使用。</div>`;
+}
+const map = !MAP_OK ? NOOP : new maplibregl.Map({
   container: "map",
   style: {
     version: 8,
@@ -163,6 +177,7 @@ map.addControl(new maplibregl.NavigationControl());
 
 let timer;
 async function loadBuildings() {
+  if (!MAP_OK) return;
   if (map.getZoom() < 15.5) { map.getSource("bldg").setData({ type: "FeatureCollection", features: [] }); return; }
   const b = map.getBounds();
   const r = await fetch(`/api/buildings?bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`);
@@ -229,11 +244,14 @@ async function doLookup(q) {
     map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
     map.flyTo({ center: [r.lon, r.lat], zoom: 18, pitch: 55 });
   }
+  // 基隆、南投、嘉義市、宜蘭、連江沒有門牌座標：只有實價登錄，地圖無法定位
+  const noCoord = r.lon == null && r.county && r.confidence !== "無" && r.confidence !== "待確認"
+    ? `<div class="note">${esc(r.county)}沒有開放門牌座標資料，地圖無法定位到這個門牌（樓層資料來自實價登錄）。</div>` : "";
   // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
   const uid = r.osm_uid || r.bldg_uid;
   const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
   select(uid);
-  document.getElementById("result").innerHTML = card(r, head, bldg);
+  document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   // 查不到時：列出模糊搜尋的候選
   if (r.confidence === "無" || r.confidence === "待確認") {
     const items = (await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json())
