@@ -7,8 +7,8 @@
 """
 import datetime as dt
 import re
-import unicodedata
 import sys
+import unicodedata
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -49,6 +49,12 @@ def norm_structure(text) -> str | None:
     t = unicodedata.normalize("NFKC", str(text or "")).upper().replace(".", "").replace("．", "")
     if not t or t.startswith("見"):
         return None
+    # 多種構造並列（「鋼骨造、RC造」）：取先寫的主結構
+    parts = [p for p in re.split(r"[、,，及與/]", t) if p.strip()]
+    if len(parts) > 1:
+        first = norm_structure(parts[0])
+        if first not in (None, "其他"):
+            return first
     if "鋼骨鋼筋混凝土" in t or "SRC" in t or "鋼骨RC" in t:
         return "SRC 鋼骨鋼筋混凝土"
     if "鋼筋混凝土" in t or "RC" in t:

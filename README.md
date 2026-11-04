@@ -27,7 +27,9 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 |---|---|---|
 | **高** | 這個門牌自己的實價登錄 | — |
 | **高** | 同一棟（建物圖）或同一點位的其他門牌有實價，而且樓層一致 | 94–98% |
+| **高** | 使用執照：臺北市使照、臺南市公寓大廈清冊 | 95–96% |
 | **中** | 之號門牌沒有實價，用主號的實價 | — |
+| **中** | 使用執照：新北市建築執照存查、新竹市使照 | 92% |
 | **中** | 臺北市建照套繪圖，門牌點在外框內（同一建照的低矮附屬建物可能被高估，所以不給高） | 96% |
 | **中** | 同一條路巷、同一側、前後 6 號內至少 2 個門牌有實價，彼此最多差一層 | 93% |
 | **低** | 門牌落在 OpenStreetMap 建物內，取 OSM 標註的樓層（building:levels） | 72% |
@@ -38,6 +40,8 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 
 - 工廠／倉庫用同一棟或同一條巷子推估時，信心各降一級：同一棟 高→中（82%），同一條巷子 中→低（工廠 80%、倉庫 58%）。「廠辦」是分層出售的工業大樓，準確率和一般建物相當，不降。
 - 實價登錄和建物圖樓層不同時，採實價登錄，並在「說明」欄註明。
+- 年份與構造：實價登錄 > 使用執照（竣工年；對實價差一年內 95–98%，構造相符 96–98%）> 建物圖。地下樓層：使照 > 臺中建物圖。
+- 使照只收有門牌的：臺南市使照、新竹縣使照只有地號，對不到地址。臺北、新北使照只有民國 90 年後。
 
 ## 建庫
 
@@ -45,6 +49,7 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 uv run python -m sitefloor.build taichung taipei   # 建物圖、門牌點位 → data/db/sitefloor.duckdb
 uv run python -m sitefloor.trades plvr             # 實價登錄 → trades
 uv run python -m sitefloor.derive                  # 推估用的衍生表（同棟、同巷）
+uv run python -m sitefloor.permits                 # 使用執照（data/raw/permits/，來源見 sitefloor/permits.py）
 uv run python -m sitefloor.osm                     # OpenStreetMap 建物（data/raw/osm/taiwan-latest.osm.pbf，Geofabrik 下載）
 uv run python -m sitefloor.coverage                # 各縣市涵蓋率（網頁統計表）
 uv run pytest -q
@@ -85,6 +90,7 @@ sitefloor/address.py   地址正規化（全形、台/臺、段號、樓層、�
 sitefloor/build.py     各來源 → DuckDB（buildings, addresses）
 sitefloor/trades.py    實價資料 → trades 表（全國實價登錄季檔／本期、臺北市週報）
 sitefloor/derive.py    推估用的衍生表：door_trade、trade_doors（同巷）、same_bldg（同棟）
+sitefloor/permits.py   使用執照（臺北、新北、新竹市、臺南公寓大廈）→ permits
 sitefloor/osm.py       OpenStreetMap 建物 → osm_buildings、door_osm
 sitefloor/suggest.py   模糊搜尋（路名比對用 derive 產生的 roads 表）
 sitefloor/coverage.py  各縣市涵蓋率 → coverage 表

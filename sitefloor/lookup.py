@@ -114,6 +114,17 @@ QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY (o.base = q.base) DESC, (
 """
 
 
+# 使用執照：門牌直接比對；之號沒有使照時退回主號
+_PERMIT_SQL = f"""
+SELECT q.idx, p.floors_above AS p_floors, p.floors_below AS p_below, p.structure AS p_structure, p.year AS p_year,
+       p.permit_no AS p_no, p.source AS p_source, (p.base = q.base) AS p_exact
+FROM q JOIN permits p ON p.base IN (q.base, q.base_main) AND {_MATCH.format(t="p")}
+QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY (p.base = q.base) DESC, p.year DESC) = 1
+"""
+# 使照樓層對實價完全相符（2026-11-04）：臺北 95.8%、臺南公寓大廈 94.6% → 高；新北、新竹市 91.6% → 中
+PERMIT_HIGH = ("臺北市使用執照", "臺南市公寓大廈清冊")
+
+
 def _optional(con: duckdb.DuckDBPyConnection, sql: str, cols: list[str]) -> pd.DataFrame:
     """選配的資料表（例如還沒跑 osm.py）不存在時回空表，不讓查詢失敗。"""
     try:
@@ -171,11 +182,12 @@ def _resolve(r, covered: set[str]) -> dict:
 
     out = dict(
         county=r.county if has_addr else r.t_county, town=r.town if has_addr else r.t_town,
-        floors_below=r.floors_below,
-        structure=r.t_structure if not _na(r.t_structure) else r.b_structure,
+        floors_below=r.p_below if not _na(r.p_below) else r.floors_below,
+        structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure) if not _na(x)), None),
         btype=r.t_btype if not _na(r.t_btype) else r.b_btype,
-        year=r.t_year if not _na(r.t_year) else r.b_year,
-        year_kind="建築完成年" if not _na(r.t_year) else (None if _na(r.b_year) else r.b_year_kind),
+        year=next((x for x in (r.t_year, r.p_year, r.b_year) if not _na(x)), None),
+        year_kind="建築完成年" if not _na(r.t_year) else "竣工年（使照）" if not _na(r.p_year) else (
+            None if _na(r.b_year) else r.b_year_kind),
         level=LEVEL_NAME.get(min(x for x in (r.lvl, r.tlvl) if not _na(x))),
     )
     b, t = r.b_floors, r.t_floors
@@ -184,7 +196,7 @@ def _resolve(r, covered: set[str]) -> dict:
         notes.append("實價登錄紀錄的總樓層不一致，取眾數")
     same_ok = not _na(r.s_floors) and r.s_spread == 0
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
-    #   自己的實價 > 同棟／同點位一致（94–98%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
+    #   自己的實價 > 同棟／同點位一致（94–98%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
     #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
     tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
     if not _na(t):
@@ -200,6 +212,12 @@ def _resolve(r, covered: set[str]) -> dict:
         if _is_factory(r.b_btype, r.s_btype):
             conf = "中"
             notes.append("工廠／倉庫的同棟推估準確率約 8 成，信心降一級")
+    elif not _na(r.p_floors):
+        floors, src = r.p_floors, r.p_source
+        conf = "高" if r.p_source in PERMIT_HIGH and r.p_exact else "中"
+        notes.append(f"本門牌無實價，取使用執照 {r.p_no}" + ("" if r.p_exact else "（主號）"))
+        if not _na(b) and int(b) != int(r.p_floors):
+            notes.append(f"建物圖 {int(b)} 層、使照 {int(r.p_floors)} 層，採使照")
     elif tp_ok:
         # 臺北建照套繪圖對實價完全相符 95.8%（2026-11-04，6,676 門牌）；但一張建照一個外框，
         # 同建照裡較低的附屬建物（例：富邦 A25 美術館）會拿到最高樓層，所以給「中」不給「高」
@@ -243,12 +261,14 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     same = con.execute(_SAME_SQL).df()
     nb = con.execute(_NB_SQL).df()
     osm = _optional(con, _OSM_SQL, ["idx", "osm_uid", "o_floors", "o_name"])
+    permit = _optional(con, _PERMIT_SQL, ["idx", "p_floors", "p_below", "p_structure", "p_year", "p_no", "p_source",
+                                          "p_exact"])
     con.unregister("q")
     covered = {c for (c,) in con.execute(
         "SELECT county FROM addresses UNION SELECT county FROM trades").fetchall()}
     df = (q.merge(hit, on="idx", how="left", suffixes=("_q", ""))
           .merge(trade, on="idx", how="left").merge(same, on="idx", how="left").merge(nb, on="idx", how="left")
-          .merge(osm, on="idx", how="left"))
+          .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left"))
     df["unit_floor"] = df.floor
     resolved = pd.DataFrame([_resolve(r, covered) for r in df.itertuples()], index=df.index)
     for c in ("county", "town"):
