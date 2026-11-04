@@ -73,6 +73,20 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+# 圖示（LOGO 縮圖，app/static/*.png）
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(STATIC / "favicon.png", media_type="image/png")
+
+
+@app.get("/{name}.png", include_in_schema=False)
+def static_png(name: str):
+    if name not in ("logo", "favicon", "apple-touch-icon"):
+        raise HTTPException(404)
+    return FileResponse(STATIC / f"{name}.png", media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.get("/about")
 def about():
     return FileResponse(STATIC / "about.html")
