@@ -6,8 +6,7 @@
 <link rel="icon" type="image/png" href="/favicon.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>地址樓層查詢</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.css">
 <style>
   :root {
     --bg: #f7f7f5; --panel: #ffffff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc;
@@ -128,7 +127,13 @@
   <div id="map"></div>
 </div>
 
-<script>
+<script type="module">
+// MapLibre 6（ES module）：4.x 在 Safari 27 會不斷 WebGL context lost，6.12+ 修了 GPU 程序掛掉的處理
+// 動態載入：CDN 失敗時只有地圖顯示說明，查詢照常
+let maplibregl;
+try { maplibregl = await import("https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.mjs"); }
+catch (e) { console.error("MapLibre 載入失敗", e); }
+
 const RAMP = [[1, "#d9e6f2"], [3, "#a9c6e3"], [6, "#6f9fd0"], [13, "#3a6fb3"], [21, "#7a3fa0"], [31, "#c2185b"]];
 const LABELS = ["1–2", "3–5", "6–12", "13–20", "21–30", "31+"];
 document.getElementById("legend").innerHTML =
@@ -178,6 +183,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
   attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl());
+window.map = map;  // 方便在主控台除錯
 
 // ── 地圖診斷：網址加 ?debug=1，或地圖 10 秒還沒載入完成時，在地圖上顯示狀態，方便回報問題 ──
 const mapErrors = [];
