@@ -1,6 +1,6 @@
 """各縣市涵蓋率（預先算好存成 coverage 表，網頁統計直接讀）。
 
-單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致 → 同巷 → OSM 樓層 → 同棟不一致 → 建物圖。
+單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖。
 工廠／倉庫的推估信心各降一級（同 lookup.py）。
 用法：uv run python -m sitefloor.coverage   （建庫、匯入實價、derive 之後跑）
 """
@@ -11,7 +11,7 @@ from sitefloor.lookup import FACTORY_PAT, NB_MIN, NB_SPREAD, NB_WINDOW
 SQL = f"""
 CREATE OR REPLACE TABLE coverage AS
 WITH a AS (
-    SELECT county, town, base, any_value(bldg_uid) AS bldg_uid,
+    SELECT county, town, base, any_value(bldg_uid) AS bldg_uid, bool_or(match = 'within') AS within,
            regexp_extract(base, '{DOOR_RE}', 1) AS prefix,
            TRY_CAST(regexp_extract(base, '{DOOR_RE}', 2) AS INTEGER) AS num
     FROM addresses GROUP BY 1, 2, 3
@@ -33,6 +33,7 @@ flags AS (
            (nb.base IS NOT NULL) AS near_any,
            (s.base IS NOT NULL) AS same_any,
            (b.floors_above IS NOT NULL) AS map,
+           (b.floors_above IS NOT NULL AND a.within AND starts_with(b.source, '臺北市建照')) AS tp_map,
            (ob.levels IS NOT NULL) AS osm
     FROM a
     LEFT JOIN door_trade t USING (county, town, base)
@@ -45,7 +46,7 @@ flags AS (
 SELECT county, count(*) AS doors,
        avg(own::int) AS by_trade,
        avg((own OR coalesce(same_high, false))::int) AS high,
-       avg((own OR coalesce(same_ok, false) OR near)::int) AS high_mid,
+       avg((own OR coalesce(same_ok, false) OR tp_map OR near)::int) AS high_mid,
        avg((own OR coalesce(same_ok, false) OR near_any OR osm OR same_any OR map)::int) AS any_floor,
        avg(map::int) AS by_map
 FROM flags GROUP BY 1

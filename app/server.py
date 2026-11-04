@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
 from sitefloor.db import connect
-from sitefloor.lookup import COLUMNS, lookup, lookup_many
+from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, lookup, lookup_many
 from sitefloor.suggest import Suggester, split_base
 
 STATIC = Path(__file__).parent / "static"
@@ -73,40 +73,52 @@ def _feature(i: int, geom: dict, **props) -> dict:
 
 @app.get("/api/buildings")
 def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxlat")):
-    """地圖立體建物。優先序：OSM 建物（每棟分開）> 市府建物圖 > 實價門牌方柱。
+    """地圖立體建物，OSM 建物（每棟分開）、市府建物圖、實價門牌方柱三種。
+    OSM 與建物圖重疊時（建物圖外框有 30% 以上被 OSM 蓋住）：
+    - 臺中建物圖（對實價 53%）不如 OSM（70%）→ 畫 OSM。
+    - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM
+      （例：富邦 A25 塔樓 54 層一致，OSM 把同建照的美術館分開畫）；不一致時（例：遼寧街 177 號建照 20 層、
+      OSM 標 19 層）保留建照外框，並拿掉大半落在框內的 OSM 建物。
     高度：OSM 有標 height 就用它（公尺），否則 樓層×3.2m；樓層（上色）實價優先，其次 OSM building:levels／建物圖。"""
     x0, y0, x1, y1 = map(float, bbox.split(","))
     box = [x0, x1, y0, y1]
-    feats: list[dict] = []
-    osm_geoms = []
+    osm: list[tuple] = []  # (uid, floors, height, name, geom)
     has_osm = _has_table("osm_buildings")
     if has_osm:
         rows = _cur().execute(f"""
             SELECT uid, coalesce(trade_floors, levels), height, name, wkb FROM osm_buildings
-            WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? LIMIT {MAX_BUILDINGS}
+            WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
+            LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
-        for u, f, h, name, w in rows:
-            g = shapely.from_wkb(w)
-            osm_geoms.append(g)
-            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
-                                  h=h or (f * FLOOR_M if f else None), name=name, src="osm"))
+        osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w in rows]
     rows = _cur().execute(f"""
-        SELECT uid, floors_above, wkb FROM buildings
-        WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ?
+        SELECT uid, floors_above, source, wkb FROM buildings
+        WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
         LIMIT {MAX_BUILDINGS + 1}
     """, box).fetchall()
     truncated = len(rows) > MAX_BUILDINGS
-    city = [(u, f, shapely.from_wkb(w)) for u, f, w in rows[:MAX_BUILDINGS]]
-    if osm_geoms and city:
-        # 市府外框有 30% 以上被 OSM 建物蓋住就不畫（例：臺北建照套繪圖把整個園區畫成一框）
-        tree = shapely.STRtree(osm_geoms)
-        keep = []
-        for u, f, g in city:
+    city = []
+    drop_osm: set[int] = set()
+    tree = shapely.STRtree([o[4] for o in osm]) if osm else None
+    for u, f, src, w in rows[:MAX_BUILDINGS]:
+        g = shapely.from_wkb(w)
+        if g is None or g.is_empty:
+            continue
+        if tree is not None and g.area:
             hit = tree.query(g, predicate="intersects")
-            covered = sum(shapely.intersection(g, osm_geoms[k]).area for k in hit)
-            if not g.area or covered / g.area < CITY_COVERED_MAX:
-                keep.append((u, f, g))
-        city = keep
+            inter = {int(k): shapely.intersection(g, osm[k][4]).area for k in hit}
+            if sum(inter.values()) / g.area >= CITY_COVERED_MAX:
+                top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
+                if not str(src).startswith(TP_PERMIT_SOURCE) or top == f:
+                    continue  # 改畫 OSM
+                # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起
+                drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5}
+        city.append((u, f, g))
+    feats: list[dict] = []
+    for i, (u, f, h, name, g) in enumerate(osm):
+        if i not in drop_osm:
+            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
+                                  h=h or (f * FLOOR_M if f else None), name=name, src="osm"))
     for u, f, g in city:
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
                               h=f * FLOOR_M if f else None, src="city"))

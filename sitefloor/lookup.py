@@ -103,6 +103,8 @@ def _is_factory(*btypes) -> bool:
     return any(not _na(b) and re.search(FACTORY_PAT, str(b)) for b in btypes)
 
 
+TP_PERMIT_SOURCE = "臺北市建照"
+
 # OSM：門牌落在哪棟 OSM 建物（osm.py 預先算好）；之號沒有點位時退回主號
 _OSM_SQL = f"""
 SELECT q.idx, b.uid AS osm_uid, b.levels AS o_floors, b.name AS o_name
@@ -182,7 +184,9 @@ def _resolve(r, covered: set[str]) -> dict:
         notes.append("實價登錄紀錄的總樓層不一致，取眾數")
     same_ok = not _na(r.s_floors) and r.s_spread == 0
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
-    #   自己的實價 > 同棟／同點位一致（94–98%）> 同巷（93%）> OSM 樓層（72%）> 同棟不一致（62%）> 只有建物圖（52%）
+    #   自己的實價 > 同棟／同點位一致（94–98%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
+    #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
+    tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
     if not _na(t):
         floors, src = t, r.t_source
         if not _na(b) and int(b) != int(t):
@@ -196,6 +200,11 @@ def _resolve(r, covered: set[str]) -> dict:
         if _is_factory(r.b_btype, r.s_btype):
             conf = "中"
             notes.append("工廠／倉庫的同棟推估準確率約 8 成，信心降一級")
+    elif tp_ok:
+        # 臺北建照套繪圖對實價完全相符 95.8%（2026-11-04，6,676 門牌）；但一張建照一個外框，
+        # 同建照裡較低的附屬建物（例：富邦 A25 美術館）會拿到最高樓層，所以給「中」不給「高」
+        floors, src, conf = b, r.b_source, "中"
+        notes.append("本門牌無實價，取臺北市建照套繪圖（對實價驗證完全相符約 96%；同一建照的低矮附屬建物可能被高估）")
     elif not _na(r.nb_floors):
         floors, src, conf = r.nb_floors, "推估：同巷鄰近門牌", "中"
         notes.append(f"本門牌無實價，取同側 ±{NB_WINDOW} 號內 {int(r.nb_n)} 個門牌的實價")
@@ -215,7 +224,8 @@ def _resolve(r, covered: set[str]) -> dict:
             notes.append("用主號推估（之號門牌不在點位資料中）")
         elif r.mrank == 1:
             notes.append(f"門牌點不在建物內，取 {r.dist_m:.0f}m 內最近建物")
-        notes.append("僅建物圖資：臺中驗證完全相符約 5 成、差一層內約 9 成，高樓常被低估")
+        notes.append("僅建物圖資：臺中建物圖對實價完全相符約 5 成、差一層內約 9 成，高樓常被低估"
+                     if not str(r.b_source).startswith(TP_PERMIT_SOURCE) else "門牌點不在臺北建照外框內，準確度較低")
     else:
         floors, src = None, None
         conf = "無"
