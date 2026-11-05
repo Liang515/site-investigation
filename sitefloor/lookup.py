@@ -380,3 +380,37 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
             out[k] = int(out[k])
     # 其餘 numpy 數值轉成 Python 型別（FastAPI 不會序列化 numpy.int32）
     return {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}
+
+
+# 同一棟建物有多個門牌時，災害潛勢取最嚴重的（在範圍內優先；淹水取最深、液化取最高）
+_SEVERITY = {"flood500": ["0.3-0.5", "0.5-1.0", "1.0-2.0", "2.0-3.0", ">3.0"],
+             "flood650": ["0.3-0.5", "0.5-1.0", "1.0-2.0", "2.0-3.0", ">3.0"],
+             "liquefaction": ["低潛勢", "中潛勢", "高潛勢"]}
+RISK_FIELDS = [*RISK_HAZARDS, "usage", "zoning", "fire_station", "fire_station_m", "hydrant_m", "hydrants_100m"]
+
+
+def building_risk(con: duckdb.DuckDBPyConnection, doors: pd.DataFrame) -> dict:
+    """一棟建物的建物風險資訊（doors：棟內門牌 county, town, base, lon）。沒有門牌就回空 dict。"""
+    if doors.empty:
+        return {}
+    df = doors.assign(base_main=doors.base).reset_index(drop=True)
+    df = _add_risk(con, df)
+    out: dict = {}
+    for k in RISK_HAZARDS:
+        vals = [v for v in df.get(k, pd.Series(dtype=object)).dropna() if v not in (NOT_IN_ZONE, NO_MAP)]
+        if vals:
+            order = _SEVERITY.get(k)
+            out[k] = max(vals, key=lambda v: order.index(v) if order and v in order else 0)
+        elif k in df and df[k].notna().any():
+            out[k] = NOT_IN_ZONE if (df[k] == NOT_IN_ZONE).any() else NO_MAP
+        else:
+            out[k] = None
+    for k in ("usage", "zoning"):
+        m = df[k].dropna().mode() if k in df else pd.Series(dtype=object)
+        out[k] = m.iloc[0] if len(m) else None
+    if "fire_station_m" in df and df.fire_station_m.notna().any():
+        i = df.fire_station_m.astype(float).idxmin()
+        out["fire_station"], out["fire_station_m"] = df.fire_station[i], int(df.fire_station_m[i])
+    for k, f in (("hydrant_m", "min"), ("hydrants_100m", "max")):
+        out[k] = int(getattr(df[k].dropna().astype(int), f)()) if k in df and df[k].notna().any() else None
+    return {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}

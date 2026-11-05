@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from sitefloor import feedback
 from sitefloor.db import connect
-from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, lookup, lookup_many
+from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many
 from sitefloor.models import MODELS
 from sitefloor.render import FLOOR_M, extrude_height, part_extent
 from sitefloor.suggest import Suggester, split_base
@@ -338,6 +338,39 @@ def api_hazards(kind: str = Query(...), bbox: str = Query(..., description="minl
     return {"type": "FeatureCollection", "features": feats, "truncated": len(rows) > MAX_ZONES}
 
 
+NEAR_DOOR_M = 100  # 建物沒有門牌時，用這個距離內最近的門牌判斷建物風險資訊
+
+
+def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
+    """棟內門牌（含座標），供建物風險資訊用；沒有就找 NEAR_DOOR_M 內最近的門牌。回傳 (門牌, 說明)。"""
+    cur = _cur()
+    if uid.startswith("osm:"):
+        sql = """SELECT o.county, o.town, o.base, avg(a.lon) AS lon FROM door_osm o
+                 LEFT JOIN addresses a USING (county, town, base) WHERE o.osm_uid = ? GROUP BY ALL LIMIT 200"""
+    else:
+        sql = "SELECT county, town, base, avg(lon) AS lon FROM addresses WHERE bldg_uid = ? GROUP BY ALL LIMIT 200"
+    doors = cur.execute(sql, [uid]).df()
+    if not doors.empty or lon is None or lat is None:
+        return doors, None
+    d = NEAR_DOOR_M / 111_000
+    near = cur.execute("""
+        SELECT county, town, base, lon, (lon - ?) * (lon - ?) * 0.82 + (lat - ?) * (lat - ?) AS d2 FROM addresses
+        WHERE lon BETWEEN ? AND ? AND lat BETWEEN ? AND ? AND town IS NOT NULL ORDER BY d2 LIMIT 1""",
+        [lon, lon, lat, lat, lon - d, lon + d, lat - d, lat + d]).df()
+    if near.empty:
+        return near, None
+    n = near.iloc[0]
+    return near[["county", "town", "base", "lon"]], f"這棟建物沒有門牌，建物風險資訊依最近的門牌（{n.town}{n.base}）判斷"
+
+
+def _with_risk(out: dict) -> dict:
+    doors, note = _building_doors(out["uid"], out.get("lon"), out.get("lat"))
+    out.update(building_risk(_cur(), doors))
+    if note:
+        out["risk_note"] = note
+    return out
+
+
 _CONF_RANK = {"高": 0, "中": 1, "低": 2}
 
 
@@ -394,7 +427,7 @@ def _osm_building(uid: str) -> dict:
         if d := _floors_from_doors(full):
             out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
             out["note"] = "；".join(x for x in [d["note"], name] if x)
-    return out
+    return _with_risk(out)
 
 
 @app.get("/api/building/{uid}")
@@ -419,7 +452,7 @@ def api_building(uid: str):
         if d := _floors_from_doors(full):
             out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
             out["note"] = d["note"]
-    return out
+    return _with_risk(out)
 
 
 # ── 用選的查地址：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號 ──

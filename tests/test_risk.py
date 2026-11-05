@@ -39,3 +39,17 @@ def test_add_risk_labels():
 def test_add_risk_without_tables():
     df = _df([("臺北市", "信義區", "松仁路28號", "松仁路28號", 121.5)])
     assert _add_risk(duckdb.connect(), df).equals(df)
+
+
+def test_building_risk_takes_worst():
+    from sitefloor.lookup import building_risk
+    con = _con()
+    con.execute("""INSERT INTO door_risk VALUES
+        ('臺北市', '信義區', '松仁路30號', '1.0-2.0', NULL, NULL, NULL, NULL, NULL, '住家用', '商業區')""")
+    doors = pd.DataFrame({"county": ["臺北市"] * 3, "town": ["信義區"] * 3,
+                          "base": ["松仁路28號", "松仁路30號", "松仁路32號"], "lon": [121.5] * 3})
+    r = building_risk(con, doors)
+    assert r["flood500"] == "1.0-2.0"  # 棟內最深的
+    assert r["fault"] == NOT_IN_ZONE and r["liquefaction"] == NO_MAP
+    assert r["zoning"] == "商業區"
+    assert building_risk(con, doors.iloc[0:0]) == {}

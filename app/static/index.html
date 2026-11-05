@@ -361,6 +361,7 @@ async function showBuilding(uid) {
   const first = (b.addresses || [])[0];
   const addr = first ? `${b.county || ""}${first}` : (b.name || `地圖建物 ${uid}`);
   const cardEl = document.getElementById("result").querySelector(".card");
+  cardEl.insertAdjacentHTML("beforeend", riskHtml(b));
   cardEl.insertAdjacentHTML("beforeend", feedbackHtml({ normalized: addr, floors_above: b.floors_above }, uid));
   cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
 }
@@ -502,6 +503,7 @@ function riskHtml(r) {
   const age = r.year ? `${new Date().getFullYear() - r.year} 年（${esc(r.year_kind || "年份")} ${esc(r.year)}）` : "—";
   const flood = d => d && d !== NOT_IN_ZONE && d !== NO_MAP ? `${d} 公尺` : d;
   return `<div class="risk"><h3>建物風險資訊</h3>
+    ${r.risk_note ? `<div class="note">${esc(r.risk_note)}</div>` : ""}
     <h4>建築結構</h4><dl>
       <dt>構造</dt><dd>${v(r.structure)}</dd>
       <dt>樓層</dt><dd>${r.floors_above != null ? `地上 ${esc(r.floors_above)} 層` : "—"}${r.floors_below != null ? `、地下 ${esc(r.floors_below)} 層` : ""}</dd>
