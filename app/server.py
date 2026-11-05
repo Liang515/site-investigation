@@ -80,9 +80,17 @@ def index():
 
 
 # 圖示（LOGO 縮圖，app/static/*.png）
+# 分頁小圖示另做簡化版（favicon.svg：藍底白色定位針＋建物），16px 也認得出來；favicon.ico／favicon.png 由它轉出
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
-    return FileResponse(STATIC / "favicon.png", media_type="image/png")
+    return FileResponse(STATIC / "favicon.ico", media_type="image/x-icon",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+def favicon_svg():
+    return FileResponse(STATIC / "favicon.svg", media_type="image/svg+xml",
+                        headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.get("/{name}.png", include_in_schema=False)
