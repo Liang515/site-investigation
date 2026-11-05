@@ -99,7 +99,7 @@ def sane_total(total: int | None, btype: str | None) -> int | None:
 
 def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
               floor: str, total: str, btype: str, structure: str, built: str, date: str,
-              kind: str | None, source: str) -> pd.DataFrame:
+              kind: str | None, source: str, usage: str | None = None, zoning: str | None = None) -> pd.DataFrame:
     """把任一實價來源（欄位名不同）轉成 trades 表的欄位。"""
     rows = []
     for r in df.to_dict("records"):
@@ -119,6 +119,7 @@ def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
             "structure": norm_structure(r.get(structure)), "btype": r.get(btype) or None,
             "built_year": b.year if b else None, "trade_date": roc_date(r.get(date)),
             "kind": r.get(kind) if kind else None, "source": source, "raw_address": raw,
+            "usage": (r.get(usage) or None) if usage else None, "zoning": (r.get(zoning) or None) if zoning else None,
         })
     out = pd.DataFrame(rows)
     return out.astype({"floor": "Int16", "total_floors": "Int16", "built_year": "Int16"})
@@ -140,7 +141,7 @@ def load_taipei_weekly(con):
     df = df.where(df.notna(), None)
     t = to_trades(df, county="臺北市", address="LOCATION", town="DISTRICT", floor="SBUILD",
                   total="TBUILD", btype="BUITYPE", structure="MBUILD", built="FDATE",
-                  date="SDATE", kind="CASE_T", source="臺北市實價週報")
+                  date="SDATE", kind="CASE_T", source="臺北市實價週報", usage="PBUILD", zoning="LANDA_Z")
     con.execute("DELETE FROM trades WHERE source = '臺北市實價週報'")
     con.execute("INSERT INTO trades SELECT * FROM t")
     print(f"  快照 {len(snaps)} 份（本次 {p.name}）、{len(df):,} 列 → 有門牌 {len(t):,} 筆、"
@@ -205,7 +206,7 @@ def load_plvr(con):
         df = df.where(df.notna(), None)
         t = to_trades(df, county=county, address="土地位置建物門牌", town="鄉鎮市區", floor="移轉層次",
                       total="總樓層數", btype="建物型態", structure="主要建材", built="建築完成年月",
-                      date="交易年月日", kind=None, source="實價登錄")
+                      date="交易年月日", kind=None, source="實價登錄", usage="主要用途", zoning="都市土地使用分區")
         t["kind"] = kind
         t["_id"] = df.loc[df["土地位置建物門牌"].fillna("").str.contains("號"), "編號"].values \
             if "編號" in df else None

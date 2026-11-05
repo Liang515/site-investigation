@@ -40,6 +40,11 @@
   .badge { display: inline-block; font-size: 12px; padding: 2px 8px; border-radius: 99px; color: #fff; font-weight: 600; }
   .b-高 { background: var(--hi); } .b-中 { background: var(--mid); } .b-低, .b-無, .b-待確認 { background: var(--lo); }
   .note { font-size: 12px; color: var(--muted); margin-top: 8px; overflow-wrap: anywhere; }
+  .risk { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .risk h3 { font-size: 14px; margin: 0; }
+  .risk h4 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 0 0; }
+  .risk dl { margin-top: 4px; }
+  .rz { color: var(--lo); font-weight: 600; } .rn { color: var(--muted); } .rx { color: var(--muted); opacity: .7; }
   .addrs { font-size: 12px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
   .legend { display: flex; gap: 0; font-size: 12px; color: var(--muted); }
   .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
@@ -351,6 +356,7 @@ async function doLookup(q) {
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   const cardEl = document.getElementById("result").querySelector(".card");
+  if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", riskHtml(r));
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", feedbackHtml(r));
   // 手機：結果在地圖下方、選單更下面，給一顆回到選單的按鈕
   cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
@@ -412,6 +418,37 @@ document.getElementById("result").addEventListener("click", e => {
 suggEl.addEventListener("mousedown", e => {
   const b = e.target.closest(".sg"); if (b) { e.preventDefault(); chooseSugg(b.dataset.text, b.dataset.kind); }
 });
+
+// ── 建物風險資訊：C 建築結構、O 使用性質、E 災害潛勢（sitefloor/risk.py） ──
+const NOT_IN_ZONE = "未在範圍內", NO_MAP = "此區無圖資";
+function hz(x) {
+  if (x == null) return `<span class="rx">—（沒有門牌座標）</span>`;
+  if (x === NOT_IN_ZONE) return `<span class="rn">${x}</span>`;
+  if (x === NO_MAP) return `<span class="rx">${x}</span>`;
+  return `<span class="rz">${esc(x)}</span>`;
+}
+function riskHtml(r) {
+  const age = r.year ? `${new Date().getFullYear() - r.year} 年（${esc(r.year_kind || "年份")} ${esc(r.year)}）` : "—";
+  const flood = d => d && d !== NOT_IN_ZONE && d !== NO_MAP ? `${d} 公尺` : d;
+  return `<div class="risk"><h3>建物風險資訊</h3>
+    <h4>建築結構</h4><dl>
+      <dt>構造</dt><dd>${v(r.structure)}</dd>
+      <dt>樓層</dt><dd>${r.floors_above != null ? `地上 ${esc(r.floors_above)} 層` : "—"}${r.floors_below != null ? `、地下 ${esc(r.floors_below)} 層` : ""}</dd>
+      <dt>屋齡</dt><dd>${age}</dd></dl>
+    <h4>使用性質</h4><dl>
+      <dt>主要用途</dt><dd>${v(r.usage)}</dd>
+      <dt>使用分區</dt><dd>${v(r.zoning)}</dd>
+      <dt>建物型態</dt><dd>${v(r.btype)}</dd></dl>
+    <h4>災害潛勢</h4><dl>
+      <dt>淹水 500mm</dt><dd>${hz(flood(r.flood500))}</dd>
+      <dt>淹水 650mm</dt><dd>${hz(flood(r.flood650))}</dd>
+      <dt>土壤液化</dt><dd>${hz(r.liquefaction)}</dd>
+      <dt>活動斷層</dt><dd>${hz(r.fault)}</dd>
+      <dt>山崩地滑</dt><dd>${hz(r.landslide)}</dd>
+      <dt>土石流</dt><dd>${hz(r.debris)}</dd></dl>
+    <div class="note">淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化目前只有臺南市圖資。</div>
+  </div>`;
+}
 
 // ── 樓層回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
 function feedbackHtml(r, building = "") {

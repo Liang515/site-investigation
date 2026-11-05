@@ -165,7 +165,13 @@ COLUMNS = {
     "structure": "構造", "btype": "建物型態", "year": "年份", "year_kind": "年份類型",
     "source": "資料來源", "level": "比對方式", "confidence": "信心", "note": "說明",
     "t_n": "實價筆數", "lon": "經度", "lat": "緯度",
+    # 建物風險資訊（sitefloor/risk.py）
+    "usage": "主要用途", "zoning": "使用分區",
+    "flood500": "淹水潛勢（24小時500mm）", "flood650": "淹水潛勢（24小時650mm）", "liquefaction": "土壤液化潛勢",
+    "fault": "活動斷層地質敏感區", "landslide": "山崩與地滑地質敏感區", "debris": "土石流潛勢溪流影響範圍",
 }
+RISK_HAZARDS = ["flood500", "flood650", "liquefaction", "fault", "landslide", "debris"]
+NOT_IN_ZONE, NO_MAP = "未在範圍內", "此區無圖資"
 _CLEAR_ON_AMBIGUOUS = ["town", "bldg_uid", "floors_above", "floors_below", "structure", "btype",
                        "year", "year_kind", "source", "lon", "lat", "t_n", "osm_uid"]
 
@@ -328,10 +334,38 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     # 多個行政區都有此門牌時，不給任何一棟的結果，避免被誤用
     if "ambiguous" in df:
         df.loc[df.ambiguous.fillna(False).astype(bool), [c for c in _CLEAR_ON_AMBIGUOUS if c in df]] = None
+    df = _add_risk(con, df)
     for c in COLUMNS:
         if c not in df:
             df[c] = None
     return df.sort_values("idx").reset_index(drop=True)
+
+
+def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
+    """建物風險資訊：門牌（找不到用主號）的災害潛勢與使用性質。
+    災害欄位：在範圍內＝等級／名稱；不在範圍內＝「未在範圍內」；該縣市沒有圖資＝「此區無圖資」；沒有座標＝空白。"""
+    try:
+        cov = con.execute("SELECT kind, county FROM risk_coverage").fetchall()
+    except duckdb.CatalogException:
+        return df
+    keys = pd.DataFrame({"i": df.index, "county": df.county, "town": df.town,
+                         "base": df.base_q if "base_q" in df else df.base, "base_main": df.base_main})
+    con.register("rk", keys)
+    hit = con.execute("""
+        SELECT k.i, r.* EXCLUDE (county, town, base) FROM rk k
+        JOIN door_risk r ON r.county = k.county AND r.town = k.town
+             AND r.base IN (k.base, k.base_main)
+        QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY (r.base = k.base) DESC) = 1""").df()
+    con.unregister("rk")
+    df = df.drop(columns=[c for c in hit.columns if c in df and c != "i"]).join(hit.set_index("i"))
+    covered = {k: {c for kk, c in cov if kk == k} for k in RISK_HAZARDS}
+    has_xy = df["lon"].notna() if "lon" in df else pd.Series(False, index=df.index)
+    for k in RISK_HAZARDS:
+        if k not in df:
+            df[k] = None
+        empty = df[k].isna() & has_xy
+        df.loc[empty, k] = [NOT_IN_ZONE if c in covered[k] else NO_MAP for c in df.county[empty]]
+    return df
 
 
 def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:

@@ -34,6 +34,8 @@ TABLES = {
     "door_osm": (None, "base, county, town"),
     "corrections": (None, "base, county, town"),
     "same_osm": (None, "base, county, town"),
+    "door_risk": (None, "base, county, town"),
+    "risk_coverage": (None, "kind, county"),
 }
 
 

@@ -115,6 +115,24 @@ data/raw/              原始資料（不進版控）
 - 審核：在 Issue 查證後加標籤「採用」（要修正就留言，例：「改成 18 層」「地下 3 層」「地址：…」；只採用 repo 擁有者與協作者的留言，後面的蓋前面的），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `vercel deploy --prod --yes`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
 - 缺口盤點：`uv run python -m sitefloor.gaps` → `data/reports/gaps.md`（各類型樓層有無）、`missing_landmarks.csv`（有名稱、樓層未知的地標清單），每週更新也會跑。
 
+## 建物風險資訊（第一期）
+
+查詢結果卡片與整批查詢多了三組資訊（`sitefloor/risk.py` → `door_risk`、`risk_coverage` 表）：
+
+- **建築結構**：構造、樓層、屋齡（沿用樓層查詢）。
+- **使用性質**：門牌所有實價紀錄的「主要用途」「都市土地使用分區」眾數（`trades.usage`／`zoning`；「見其他登記事項」等沒有資訊的值不算）。
+- **災害潛勢**：門牌座標落在哪個範圍內。在範圍內＝深度／等級／名稱；不在範圍內＝「未在範圍內」；該縣市沒有圖資＝「此區無圖資」；門牌沒有座標＝空白。
+
+| 項目 | 來源（政府資料開放授權第 1 版） | 放在 |
+|---|---|---|
+| 淹水潛勢（24 小時 500mm、650mm） | 水利署 [淹水潛勢圖](https://data.gov.tw/dataset/25766) 全國版（`定量降雨24小時500mm.zip` 等；副檔名寫 .7z 其實是 zip） | `data/raw/hazards/flood/` |
+| 活動斷層、山崩與地滑地質敏感區 | 地調所 [地質敏感區範圍數值檔](https://data.gov.tw/dataset/27744)（清單 CSV＋各區 rar／zip，用 `bsdtar` 解壓） | `data/raw/hazards/geosens/<編號>/`、`list.csv` |
+| 土石流潛勢溪流影響範圍 | 農業部 [115年度1753條](https://data.gov.tw/dataset/176526) | `data/raw/hazards/debris/` |
+| 土壤液化潛勢 | 只有 [臺南市](https://data.gov.tw/dataset/100221)（地調所全國 API 2026-11 已 404；檔案座標是 Web Mercator、沒附 .prj） | `data/raw/hazards/liquefaction/tainan/` |
+
+建庫：`uv run python -m sitefloor.risk`（約 20 秒；trades、addresses 之後，每週更新會自動跑）。災害圖資不常更新，目前不在每週自動下載，換新版時手動放到上面的資料夾再重跑。
+水利署說明淹水潛勢圖僅供防救災參考，不適用於土地使用管制或土地利用之依據；網頁上有註明。
+
 ## 定期更新
 
 `uv run python -m sitefloor.update` 檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `vercel deploy --prod --yes`。

@@ -22,6 +22,9 @@ def main() -> int:
         got = lookup(con, q)["floors_above"]
         if got != want:
             bad.append(f"{q}：預期 {want} 層，得到 {got}")
+    r = lookup(con, "台北101")  # 建物風險資訊：有座標的門牌一定會判斷（在範圍內、未在範圍內或此區無圖資）
+    if not r.get("flood500") or not r.get("zoning"):
+        bad.append(f"建物風險資訊缺漏：淹水 {r.get('flood500')}、使用分區 {r.get('zoning')}")
     if len(lookup_many(con, list(CASES) * 3)) != len(CASES) * 3:
         bad.append("整批查詢筆數不符")
     if not Suggester(con).suggest(con, "市正路386"):

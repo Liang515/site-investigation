@@ -88,9 +88,10 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["trades", "derive", "curated", "permits", "osm", "coverage", "gaps", "export", "smoke"]  # osm 用到 permits
+PIPELINE = ["trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "export",
+            "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）
 NEEDS = {
-    "trades": {"trades", "derive", "curated", "osm", "permits", "coverage", "gaps", "export", "smoke"},
+    "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "export", "smoke"},
     "curated": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
     "osm": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
     "permits": {"permits", "osm", "coverage", "gaps", "export", "smoke"},
