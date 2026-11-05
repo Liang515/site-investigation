@@ -314,6 +314,11 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     for c in ("county", "town"):
         resolved[c] = resolved.get(c, pd.Series(index=df.index, dtype=object)).fillna(df[f"{c}_q"])
     df = df.drop(columns=[c for c in resolved.columns if c in df.columns]).join(resolved)
+    # 輸入沒寫縣市（或只寫了多縣市同名的區）時，標準化地址補上查到的縣市、區
+    fill = df.county.notna() & df.county_q.fillna("").eq("") & df.normalized.notna()
+    df.loc[fill, "normalized"] = [
+        c + t + (n[len(t):] if t and n.startswith(t) else n)
+        for c, t, n in zip(df.county[fill], df.town[fill].fillna(""), df.normalized[fill])]
     # 地標名稱查詢：說明欄註明換成了哪個門牌
     lm = df.landmark.notna()
     df.loc[lm, "note"] = [

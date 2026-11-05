@@ -47,3 +47,11 @@ def test_taiwan_boulevard_kept():
     # 「臺灣大道」不可被當成國名去掉（曾讓臺中整條臺灣大道的門牌對不到）
     assert parse("臺灣大道三段99號", county="臺中市", town="西屯區").base == "臺灣大道三段99號"
     assert parse("台中市西屯區台灣大道三段99號").base == "臺灣大道三段99號"
+
+
+def test_ambiguous_town_does_not_guess_county():
+    # 信義區在臺北市、基隆市都有：只寫區名時不要猜縣市（之前會變成基隆市，查不到）
+    a = parse("信義區忠孝東路四段521號")
+    assert a.county == "" and a.town == "信義區" and a.base == "忠孝東路四段521號"
+    assert parse("基隆市信義區信二路1號").county == "基隆市"
+    assert parse("板橋區中山路一段152號").county == "新北市"  # 只有一個縣市有的區照補

@@ -75,6 +75,10 @@ class Addr:
 _FLOOR = re.compile(r"^(?:(地下|B)([0-9一二三四五六七八九十]+)(?:樓|F|層)?|()([0-9一二三四五六七八九十百]+)(?:樓|F|層))(之\d+)?", re.I)
 
 
+_AMBIGUOUS_TOWNS = {t for t in {t for ts in TOWNS.values() for t in ts}
+                    if sum(t in ts for ts in TOWNS.values()) > 1}
+
+
 def parse(text: str, county: str = "", town: str = "") -> Addr:
     raw = text
     county = county if isinstance(county, str) else ""
@@ -106,7 +110,9 @@ def parse(text: str, county: str = "", town: str = "") -> Addr:
             names = [t] + ([t[:-1] + x for x in "市鎮鄉"] if t.endswith("區") else [])
             hit = next((n for n in names if s.startswith(n)), None)
             if hit:
-                county, town, s = c, t, s[len(hit):]
+                # 多個縣市都有的區名（信義區、中正區、東區…）沒寫縣市時不猜，留給查詢依路名判斷
+                county = county or ("" if t in _AMBIGUOUS_TOWNS else c)
+                town, s = t, s[len(hit):]
                 break
     else:
         # 來源已給鄉鎮：地址裡若還寫著鄉鎮（含改制前舊名，如「平鎮市」之於「平鎮區」）就去掉
