@@ -211,11 +211,11 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     has_osm = _has_table("osm_buildings")
     if has_osm:
         rows = _cur().execute(f"""
-            SELECT uid, coalesce(curated_floors, trade_floors, levels), height, name, wkb, curated_height,
+            SELECT uid, coalesce(curated_floors, trade_floors, permit_floors, levels), height, name, wkb, curated_height,
                    curated_floors IS NOT NULL
             FROM osm_buildings
             WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
-            ORDER BY coalesce(curated_floors, trade_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
+            ORDER BY coalesce(curated_floors, trade_floors, permit_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
         osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w, _, _ in rows]
@@ -294,7 +294,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     # 門牌所在的 OSM 建物已經有樓層（會畫出來）才不畫方柱；樓層未知的 OSM 外框裡仍畫方柱
     in_osm = """AND NOT EXISTS (SELECT 1 FROM door_osm o JOIN osm_buildings ob ON ob.uid = o.osm_uid
         WHERE o.county = a.county AND o.town = a.town AND o.base = a.base
-          AND coalesce(ob.curated_floors, ob.trade_floors, ob.levels) IS NOT NULL)"""
+          AND coalesce(ob.curated_floors, ob.trade_floors, ob.permit_floors, ob.levels) IS NOT NULL)"""
     pts = _cur().execute(f"""
         SELECT a.county || a.town || a.base, avg(a.lon), avg(a.lat), any_value(t.floors)
         FROM addresses a JOIN door_trade t USING (county, town, base)
@@ -336,19 +336,20 @@ def _floors_from_doors(full_addrs: list[str]) -> dict | None:
 def _osm_building(uid: str) -> dict:
     cur = _cur()
     r = cur.execute("""SELECT uid, name, building, levels, trade_floors, height,
-                       (minlon + maxlon) / 2, (minlat + maxlat) / 2, curated_floors
+                       (minlon + maxlon) / 2, (minlat + maxlat) / 2, curated_floors, permit_floors
                        FROM osm_buildings WHERE uid = ?""", [uid]).fetchone()
     if not r:
         raise HTTPException(404)
-    u, name, _btype, levels, tf, h, lon, lat, cf = r
+    u, name, _btype, levels, tf, h, lon, lat, cf, pf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
     n, county = cur.execute("SELECT count(*), any_value(county) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()
     below = None
     if cf is not None:
         row = cur.execute("SELECT max(floors_below) FROM corrections WHERE osm_uid = ?", [uid]).fetchone()
         below = row[0] if row else None
-    src = "人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None else "OpenStreetMap"
-    known_floors = next((x for x in (cf, tf, levels) if x is not None), None)
+    src = ("人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None
+           else "使用執照（棟內門牌）" if pf is not None else "OpenStreetMap")
+    known_floors = next((x for x in (cf, tf, pf, levels) if x is not None), None)
     note = [] if known_floors is not None else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
     if name:
         note.append(name)

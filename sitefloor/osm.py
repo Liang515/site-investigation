@@ -1,7 +1,7 @@
 """OpenStreetMap 建物 → DuckDB（osm_buildings、door_osm）。
 
 - osm_buildings：OSM 建物外框（全部，含樓層不明的；地下構造除外）。levels＝OSM 標註的地上樓層（building:levels）；
-  height＝OSM 標註高度（公尺）；trade_floors＝落在這棟裡的門牌的實價總樓層眾數。
+  height＝OSM 標註高度（公尺）；trade_floors＝落在這棟裡的門牌的實價總樓層眾數；permit_floors＝這些門牌的使用執照樓層眾數。
   height 換算樓層只有 30% 相符（樓高差異大），所以只拿來畫地圖，不當樓層。
 - osm_parts：OSM 分棟（building:part，例：台北101 的購物中心 6 層）。parent_uid＝所在的建物外框；
   地圖把分棟用各自的高度畫，外框只畫扣掉分棟的部分（見 render.split_parts）。
@@ -125,6 +125,24 @@ def main():
         QUALIFY row_number() OVER (PARTITION BY uid ORDER BY k DESC, floors DESC) = 1""").df()
     b = b.merge(tf, on="uid", how="left")
     b.loc[b.building.isin(NO_TRADE_FLOORS), "trade_floors"] = None
+    # 棟內門牌的使用執照樓層眾數（permits.py 要先跑；地圖上色和建物卡片用，和地址查詢的使照樓層一致）
+    has_permits = con.execute(
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'permits'").fetchone()[0]
+    pf = con.execute("""
+        SELECT uid, floors AS permit_floors FROM (
+            SELECT uid, floors, count(*) AS k FROM (
+                -- 門牌本身沒有使照時用主號（201之19號 → 201號），和地址查詢的規則一樣
+                SELECT o.osm_uid AS uid, o.base, p.floors_above AS floors
+                FROM door_osm o JOIN permits p ON p.county = o.county AND p.town = o.town
+                     AND p.base IN (o.base, regexp_replace(o.base, '之\\d+號$', '號'))
+                WHERE p.floors_above BETWEEN 1 AND 110
+                QUALIFY row_number() OVER (PARTITION BY o.county, o.town, o.base
+                                           ORDER BY (p.base = o.base) DESC, p.year DESC) = 1)
+            GROUP BY ALL)
+        QUALIFY row_number() OVER (PARTITION BY uid ORDER BY k DESC, floors DESC) = 1""").df() if has_permits \
+        else pd.DataFrame(columns=["uid", "permit_floors"])
+    b = b.merge(pf, on="uid", how="left")
+    b.loc[b.building.isin(NO_TRADE_FLOORS), "permit_floors"] = None
     # 人工校正（curated.py）：指定 OSM 建物的樓層
     has_corr = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'corrections'").fetchone()[0]
     cur = (con.execute("SELECT osm_uid AS uid, any_value(floors_above) AS curated_floors, any_value(height_m) AS curated_height "
@@ -141,6 +159,7 @@ def main():
             "levels": b.levels,
             "height": b.height,
             "trade_floors": b.trade_floors.astype("Int16"),
+            "permit_floors": b.permit_floors.astype("Int16"),
             "curated_floors": b.curated_floors.astype("Int16"),
             "curated_height": pd.to_numeric(b.curated_height, errors="coerce"),
             "minlon": bounds.minx,
@@ -153,7 +172,7 @@ def main():
     con.execute("CREATE OR REPLACE TABLE osm_buildings AS SELECT * FROM odf")
     print(
         f"  寫入 osm_buildings {len(odf):,}（OSM 樓層 {odf.levels.notna().sum():,}、"
-        f"有實價樓層 {odf.trade_floors.notna().sum():,}）（{time.time() - t:.0f}s）"
+        f"有實價樓層 {odf.trade_floors.notna().sum():,}、有使照樓層 {odf.permit_floors.notna().sum():,}）（{time.time() - t:.0f}s）"
     )
 
     parts = read_parts(b)

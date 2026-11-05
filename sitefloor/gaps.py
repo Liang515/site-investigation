@@ -69,7 +69,7 @@ def main():
     d["uid"] = "osm:" + d.osm_way_id.fillna("r" + d.osm_id.astype(str)).astype(str)
     tags = d.other_tags.fillna("")
     d["aeroway"], d["railway"], d["wikidata"] = _tag(tags, "aeroway"), _tag(tags, "railway"), _tag(tags, "wikidata")
-    ob = connect().execute("SELECT uid, coalesce(curated_floors, trade_floors, levels) AS floors FROM osm_buildings").df()
+    ob = connect().execute("SELECT uid, coalesce(curated_floors, trade_floors, permit_floors, levels) AS floors FROM osm_buildings").df()
     d = d.merge(ob, on="uid", how="inner")  # osm.py 收的建物（已排除地下構造）
     d["cat"] = [category(*x) for x in zip(d.name, d.building, d.shop, d.amenity, d.leisure, d.aeroway, d.railway)]
     d["known"] = d.floors.notna()
