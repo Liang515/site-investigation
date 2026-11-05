@@ -198,19 +198,27 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
       （例：富邦 A25 塔樓 54 層一致，OSM 把同建照的美術館分開畫）；不一致時（例：遼寧街 177 號建照 20 層、
       OSM 標 19 層）保留建照外框，並拿掉大半落在框內的 OSM 建物。
     高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。
-    例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py，例：101）用真實高度。"""
+    例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py，例：101）
+    與人工校正有填 height_m 的（例：巨蛋，一層很高）用真實高度。"""
     x0, y0, x1, y1 = map(float, bbox.split(","))
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
+    real_h: dict[str, float] = {}
+    trusted: set[str] = set()
     has_osm = _has_table("osm_buildings")
     if has_osm:
         rows = _cur().execute(f"""
-            SELECT uid, coalesce(curated_floors, trade_floors, levels), height, name, wkb FROM osm_buildings
+            SELECT uid, coalesce(curated_floors, trade_floors, levels), height, name, wkb, curated_height,
+                   curated_floors IS NOT NULL
+            FROM osm_buildings
             WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
             ORDER BY coalesce(curated_floors, trade_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
-        osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w in rows]
+        osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w, _, _ in rows]
+        real_h = {r[0]: r[5] for r in rows if r[5] is not None}  # 人工校正的實際高度（例：巨蛋）
+        # 人工校正或有手工模型的 OSM 建物一定畫，不被臺北建照外框蓋掉（例：大巨蛋建照外框 5 層、校正 6 層）
+        trusted = {r[0] for r in rows if r[6] or r[0] in MODELS}
     rows = _cur().execute(f"""
         SELECT uid, floors_above, source, wkb FROM buildings
         WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
@@ -231,7 +239,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
             inter = {k: shapely.intersection(g, osm[k][4]).area for k in hit}
             if sum(inter.values()) / g.area >= CITY_COVERED_MAX:
                 top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
-                if not str(src).startswith(TP_PERMIT_SOURCE) or top == f:
+                if not str(src).startswith(TP_PERMIT_SOURCE) or top == f or any(osm[k][0] in trusted for k in inter):
                     continue  # 改畫 OSM
                 # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起
                 drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5}
@@ -272,7 +280,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
             if g.is_empty or g.area == 0:
                 continue
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
-                              h=extrude_height(f, h), name=name, src="osm"))
+                              h=real_h.get(u) or extrude_height(f, h), name=name, src="osm"))
     for u, f, g in city:
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
                               h=f * FLOOR_M if f else None, src="city"))

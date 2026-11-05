@@ -17,7 +17,7 @@ from sitefloor.address import parse
 from sitefloor.db import connect
 
 CSV = Path(__file__).resolve().parent.parent / "curated" / "floor_corrections.csv"
-COLUMNS = ["county", "town", "base", "osm_uid", "floors_above", "floors_below", "source", "note", "checked"]
+COLUMNS = ["county", "town", "base", "osm_uid", "floors_above", "floors_below", "height_m", "source", "note", "checked"]
 
 
 def load() -> pd.DataFrame:
@@ -40,10 +40,17 @@ def load() -> pd.DataFrame:
                 raise ValueError
         except (TypeError, ValueError):
             bad.append(f"第 {i + 2} 列：floors_above 要是 1–110 的整數")
+        if has(r["height_m"]):  # 實際高度（公尺），選填：地圖改用這個高度畫（例：巨蛋一層很高）
+            try:
+                if not 2 <= float(r["height_m"]) <= 600:
+                    raise ValueError
+            except ValueError:
+                bad.append(f"第 {i + 2} 列：height_m 要是 2–600 的數字（公尺）")
     if bad:
         raise ValueError("floor_corrections.csv 有誤：\n" + "\n".join(bad))
     df["floors_above"] = df.floors_above.astype(int).astype("Int16")
     df["floors_below"] = pd.to_numeric(df.floors_below, errors="coerce").astype("Int16")
+    df["height_m"] = pd.to_numeric(df.height_m, errors="coerce")
     return df
 
 

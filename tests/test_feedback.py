@@ -36,7 +36,7 @@ def test_reviewer_edits_json():
 
 def test_merge_replaces_same_door(tmp_path, monkeypatch):
     f = tmp_path / "c.csv"
-    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:1,9,3,src,,\n新北市,五股區,凌雲路一段83巷1之5號,,8,,舊,,\n")
+    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:1,9,3,,src,,\n新北市,五股區,凌雲路一段83巷1之5號,,8,,,舊,,\n")
     monkeypatch.setattr(curated, "CSV", f)
     added, replaced = review.merge([review.to_row(_fb(basis="住戶"), 12)])
     assert (added, replaced) == (0, 1)
