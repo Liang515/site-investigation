@@ -311,6 +311,28 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     return {"type": "FeatureCollection", "features": feats, "truncated": truncated}
 
 
+_CONF_RANK = {"高": 0, "中": 1, "低": 2}
+
+
+def _floors_from_doors(full_addrs: list[str]) -> dict | None:
+    """建物本身沒有樓層時，改查它的門牌（和地址查詢同一套：使用執照、同棟、同巷推估…），
+    取信心最高、其次最多門牌一致的結果。讓「點地圖建物」和「查該地址」看到的樓層一致。"""
+    if not full_addrs:
+        return None
+    res = lookup_many(_cur(), full_addrs)
+    res = res[res.floors_above.notna() & res.confidence.isin(list(_CONF_RANK))]
+    if res.empty:
+        return None
+    res = res.assign(rank=res.confidence.map(_CONF_RANK))
+    best = res[res["rank"] == res["rank"].min()]
+    floors = best.floors_above.mode().max()
+    r = best[best.floors_above == floors].iloc[0]
+    n = int((best.floors_above == floors).sum())
+    return {"floors_above": int(floors), "floors_below": None if pd.isna(r.floors_below) else int(r.floors_below),
+            "source": f"依門牌查詢：{r.source}", "confidence": r.confidence,
+            "note": f"這棟建物本身沒有樓層資料，改用棟內門牌查詢（{n}/{len(full_addrs)} 個門牌）"}
+
+
 def _osm_building(uid: str) -> dict:
     cur = _cur()
     r = cur.execute("""SELECT uid, name, building, levels, trade_floors, height,
@@ -334,10 +356,17 @@ def _osm_building(uid: str) -> dict:
         note.append(f"OSM 標 {levels} 層、實價登錄 {tf} 層，採實價登錄")
     if h is not None:
         note.append(f"OSM 標高 {h:g} m（地圖高度統一用 樓層×3.2m）")
-    return {"uid": u, "source": src, "floors_above": known_floors, "floors_below": below,
-            "structure": None, "btype": None, "year": None,
-            "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
-            "note": "；".join(note), "osm": True, "county": county, "name": name}
+    out = {"uid": u, "source": src, "floors_above": known_floors, "floors_below": below,
+           "structure": None, "btype": None, "year": None,
+           "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
+           "note": "；".join(note), "osm": True, "county": county, "name": name}
+    if known_floors is None:
+        full = [c + t + b for c, t, b in cur.execute(
+            "SELECT county, town, base FROM door_osm WHERE osm_uid = ? ORDER BY town, base LIMIT 30", [uid]).fetchall()]
+        if d := _floors_from_doors(full):
+            out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
+            out["note"] = "；".join(x for x in [d["note"], name] if x)
+    return out
 
 
 @app.get("/api/building/{uid}")
@@ -356,6 +385,12 @@ def api_building(uid: str):
     out = b.iloc[0].to_dict()
     out = {k: (None if pd.isna(v) else v) for k, v in out.items()}
     out.update(addresses=[a for (a,) in addrs], n_units=n)
+    if out.get("floors_above") is None:
+        full = [c + t + b for c, t, b in cur.execute(
+            "SELECT DISTINCT county, town, base FROM addresses WHERE bldg_uid = ? ORDER BY 2, 3 LIMIT 30", [uid]).fetchall()]
+        if d := _floors_from_doors(full):
+            out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
+            out["note"] = d["note"]
     return out
 
 

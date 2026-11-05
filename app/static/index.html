@@ -310,7 +310,7 @@ function card(r, head, bldg) {
         ${r.t_n != null ? `<dt>實價筆數</dt><dd>${v(r.t_n)}</dd>` : ""}
         ${bldg ? `<dt>同棟門牌</dt><dd>${v(bldg.n_units)}</dd>` : ""}
       </dl>
-      ${bldg && bldg.osm && bldg.note ? `<div class="note">OSM 建物：${esc(bldg.note)}</div>` : ""}
+      ${bldg && bldg.note ? `<div class="note">${bldg.osm ? "OSM 建物：" : ""}${esc(bldg.note)}</div>` : ""}
       ${bldg && String(bldg.source || "").includes("建照套繪") ? `<div class="note">臺北市建照套繪圖是一張建照一個外框，只記最高樓層；同一張建照裡較低的部分（裙樓、附屬建物等）也會被畫成同樣高度。</div>` : ""}
       ${bldg ? `<div class="addrs">${bldg.addresses.map(esc).join("<br>")}</div>` : ""}
     </div>`;
