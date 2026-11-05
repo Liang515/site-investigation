@@ -10,20 +10,32 @@
 
 使用性質：門牌所有實價紀錄的「主要用途」「都市土地使用分區」眾數（trades.usage／zoning）。
 
+安全防護（第二期）：
+- 最近的消防分隊（名稱、直線距離）：內政部消防署 救援與應變單位點位（data.gov.tw/dataset/5969），只取「分隊」。
+- 最近的消防栓距離、100 公尺內消防栓數：台灣自來水公司（data.gov.tw/dataset/44642，臺北自來水事業處轄區以外）
+  ＋臺北自來水事業處 大臺北地區消防栓（data.gov.tw/dataset/128639）。金門、連江沒有資料。
+距離都是直線距離，不是道路距離。
+
 輸出：
-- door_risk：county, town, base, flood500, flood650, liquefaction, fault, landslide, debris, usage, zoning
+- door_risk：county, town, base, flood500, flood650, liquefaction, fault, landslide, debris, usage, zoning,
+  fire_station, fire_station_m, hydrant_m, hydrants_100m
   （災害欄位：落在範圍內才有值；沒有值＝不在範圍內或該區沒有圖資，見 risk_coverage）
+- hazard_zones：kind, value, rank, 外接矩形, wkb — 地圖圖層用（外框簡化 5 公尺、經緯度）
 - risk_coverage：kind, county — 各圖資涵蓋的縣市（查詢時區分「不在範圍內」與「此區無圖資」）
 用法：uv run python -m sitefloor.risk   （trades、addresses 之後；資料放在 data/raw/hazards/，見 README）
 """
 
 import csv
+import io
 import time
+import zipfile
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pyogrio
+import shapely
 
 from sitefloor.db import connect
 
@@ -91,6 +103,59 @@ def liquefaction_layer() -> gpd.GeoDataFrame:
     return g.assign(rank=g.value.map({v: i for i, v in enumerate(LIQ_LEVELS)}))[["value", "rank", "geometry"]]
 
 
+HYDRANT_RADIUS = 100  # 公尺
+_NO_HYDRANT_DATA = ("金門縣", "連江縣")
+
+
+def _csv(raw: bytes) -> pd.DataFrame:
+    for enc in ("utf-8-sig", "cp950"):
+        try:
+            return pd.read_csv(io.BytesIO(raw), dtype=str, encoding=enc)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("無法判斷編碼")
+
+
+def fire_stations() -> gpd.GeoDataFrame:
+    """消防分隊（座標欄名寫 TWD97，實際是經緯度）。"""
+    u = _csv((RAW / "fire" / "units.csv").read_bytes()).iloc[:, :5]
+    u.columns = ["name", "addr", "tel", "x", "y"]
+    u = u[u.name.str.contains("分隊", na=False)].dropna(subset=["x", "y"])
+    g = gpd.GeoDataFrame(u[["name"]], geometry=gpd.points_from_xy(u.x.astype(float), u.y.astype(float)), crs=4326)
+    return g.to_crs(CRS).reset_index(drop=True)
+
+
+def hydrants() -> gpd.GeoSeries:
+    pts = []
+    with zipfile.ZipFile(RAW / "fire" / "hydrant_twc.zip") as z:
+        for n in z.namelist():
+            if n.endswith("消防栓.csv") and not n.startswith("schema"):
+                d = _csv(z.read(n))
+                pts.append(gpd.points_from_xy(d["栓位X坐標(TWD97)"].astype(float), d["栓位Y坐標(TWD97)"].astype(float)))
+    tp = _csv((RAW / "fire" / "hydrant_taipei.csv").read_bytes())
+    pts.append(gpd.points_from_xy(tp["97X座標"].astype(float), tp["97Y座標"].astype(float)))
+    return gpd.GeoSeries(np.concatenate([np.asarray(p) for p in pts]), crs=CRS)
+
+
+def protection(pts: gpd.GeoDataFrame) -> pd.DataFrame:
+    """每個門牌：最近消防分隊與距離、最近消防栓距離、100 公尺內消防栓數（直線距離，公尺）。"""
+    geoms = pts.geometry.values
+    st = fire_stations()
+    i, d = shapely.STRtree(st.geometry.values).query_nearest(geoms, return_distance=True, all_matches=False)
+    out = pd.DataFrame(index=pts.index)
+    out.loc[pts.index[i[0]], "fire_station"] = st.name.values[i[1]]
+    out.loc[pts.index[i[0]], "fire_station_m"] = np.round(d).astype(int)
+    hy = hydrants()
+    tree = shapely.STRtree(hy.values)
+    i, d = tree.query_nearest(geoms, return_distance=True, all_matches=False, max_distance=2000)
+    out.loc[pts.index[i[0]], "hydrant_m"] = np.round(d).astype(int)
+    near = tree.query(geoms, predicate="dwithin", distance=HYDRANT_RADIUS)
+    out["hydrants_100m"] = np.bincount(near[0], minlength=len(pts))
+    no_data = pts.county.isin(_NO_HYDRANT_DATA).values
+    out.loc[no_data, ["hydrant_m", "hydrants_100m"]] = None
+    return out.astype({"fire_station_m": "Int32", "hydrant_m": "Int32", "hydrants_100m": "Int32"})
+
+
 def coverage() -> pd.DataFrame:
     """各圖資涵蓋的縣市。"""
     ls = []
@@ -101,7 +166,32 @@ def coverage() -> pd.DataFrame:
     cov = {k: ALL_COUNTIES for k in (*FLOOD, "fault", "debris")}
     cov["landslide"] = sorted(set(ls))
     cov["liquefaction"] = ["臺南市"]
+    cov["hydrant"] = [c for c in ALL_COUNTIES if c not in _NO_HYDRANT_DATA]
     return pd.DataFrame([(k, c) for k, cs in cov.items() for c in cs], columns=["kind", "county"])
+
+
+ZONE_LAYERS = ["flood500", "liquefaction", "fault", "landslide", "debris"]  # 地圖圖層（淹水只畫 500mm 情境）
+SIMPLIFY_M = 5  # 地圖用外框簡化的容許誤差（公尺）
+
+
+def zones(layers: dict) -> pd.DataFrame:
+    """地圖圖層用的範圍：簡化外框、轉經緯度，附外接矩形供依畫面範圍查詢。"""
+    parts = []
+    for k in ZONE_LAYERS:
+        g = layers[k]()
+        g["geometry"] = g.geometry.simplify(SIMPLIFY_M, preserve_topology=True)
+        g = g[~g.geometry.is_empty].to_crs(4326)
+        b = g.geometry.bounds
+        parts.append(pd.DataFrame({"kind": k, "value": g.value.values, "rank": g["rank"].astype(int).values,
+                                   "minlon": b.minx.values, "minlat": b.miny.values,
+                                   "maxlon": b.maxx.values, "maxlat": b.maxy.values,
+                                   "wkb": shapely.to_wkb(g.geometry.values)}))
+    st = fire_stations().to_crs(4326)  # 消防分隊（點）
+    parts.append(pd.DataFrame({"kind": "fire_station", "value": st.name.values, "rank": 0,
+                               "minlon": st.geometry.x.values, "minlat": st.geometry.y.values,
+                               "maxlon": st.geometry.x.values, "maxlat": st.geometry.y.values,
+                               "wkb": shapely.to_wkb(st.geometry.values)}))
+    return pd.concat(parts, ignore_index=True)
 
 
 def _match(pts: gpd.GeoDataFrame, layer: gpd.GeoDataFrame) -> pd.Series:
@@ -128,6 +218,12 @@ def main():
         out[k] = _match(pts, layer)
         print(f"  {k:12s} 範圍 {len(layer):,} 塊 → 門牌 {out[k].notna().sum():,}（{time.time() - t:.0f}s）")
 
+    prot = protection(pts)
+    for c in prot.columns:
+        out[c] = prot[c]
+    print(f"  安全防護：最近分隊中位數 {prot.fire_station_m.median():.0f} m、"
+          f"100m 內有消防栓 {(prot.hydrants_100m > 0).mean():.0%}（{time.time() - t:.0f}s）")
+
     # 使用性質：門牌所有實價紀錄的主要用途、使用分區眾數（平手取筆數多、再取字典序，結果固定）
     # 「見其他登記事項」「其他」沒有資訊；使用分區縮寫（住、商…）與「都市：其他:住宅區」統一成「住宅區」
     use = con.execute(f"""
@@ -147,8 +243,12 @@ def main():
         SELECT county, town, base, u.usage, z.zoning FROM u FULL JOIN z USING (county, town, base)""").df()
     out = out.merge(use, on=["county", "town", "base"], how="outer")
     hazard = [*layers]
-    out = out[out[hazard + ["usage", "zoning"]].notna().any(axis=1)]  # 全部空白的門牌不存
+    # 有座標的門牌都有安全防護資料，所以全部都存
     con.execute("CREATE OR REPLACE TABLE door_risk AS SELECT * FROM out")
+    z = zones(layers)
+    con.register("zones_df", z)
+    con.execute("CREATE OR REPLACE TABLE hazard_zones AS SELECT * FROM zones_df")
+    print(f"  hazard_zones {len(z):,} 塊（地圖圖層，{z.wkb.map(len).sum() / 1e6:.0f} MB）")
     con.register("cov_df", coverage())
     con.execute("CREATE OR REPLACE TABLE risk_coverage AS SELECT * FROM cov_df")
     print(f"  door_risk {len(out):,} 筆（有災害潛勢 {out[hazard].notna().any(axis=1).sum():,}、"

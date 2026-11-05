@@ -4,6 +4,7 @@
 用法：uv run python -m sitefloor.smoke   （失敗時 exit 1）
 """
 
+import json
 import os
 import sys
 
@@ -23,6 +24,10 @@ def main() -> int:
         if got != want:
             bad.append(f"{q}：預期 {want} 層，得到 {got}")
     r = lookup(con, "台北101")  # 建物風險資訊：有座標的門牌一定會判斷（在範圍內、未在範圍內或此區無圖資）
+    try:  # 網站回傳 JSON：numpy 型別會讓所有查詢 500（曾發生過）
+        json.dumps(r)
+    except TypeError as e:
+        bad.append(f"查詢結果無法轉成 JSON：{e}")
     if not r.get("flood500") or not r.get("zoning"):
         bad.append(f"建物風險資訊缺漏：淹水 {r.get('flood500')}、使用分區 {r.get('zoning')}")
     if len(lookup_many(con, list(CASES) * 3)) != len(CASES) * 3:

@@ -45,6 +45,9 @@
   .risk h4 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 0 0; }
   .risk dl { margin-top: 4px; }
   .rz { color: var(--lo); font-weight: 600; } .rn { color: var(--muted); } .rx { color: var(--muted); opacity: .7; }
+  .hzl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 14px; }
+  .hzl label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .hzl i { width: 14px; height: 14px; border-radius: 3px; background: var(--c); flex: none; }
   .addrs { font-size: 12px; color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 8px; }
   .legend { display: flex; gap: 0; font-size: 12px; color: var(--muted); }
   .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
@@ -154,6 +157,12 @@
     </section>
 
     <section>
+      <h2>災害潛勢圖層</h2>
+      <div class="hzl" id="hzl"></div>
+      <div class="hint" id="hzhint" style="margin-top:8px">勾選後疊在地圖上；放大到鄉鎮範圍才會顯示。潛勢圖僅供防災參考。</div>
+    </section>
+
+    <section>
       <details><summary>各縣市涵蓋率</summary><table id="stats"></table></details>
     </section>
   </aside>
@@ -187,6 +196,25 @@ if (!MAP_OK) {
     地圖需要 WebGL。請確認瀏覽器設定裡的「硬體加速」已開啟，或改用最新版 Chrome、Edge、Safari。<br>
     查詢功能不受影響，可以照常使用。</div>`;
 }
+// ── 災害潛勢圖層（/api/hazards）：顏色依等級（rank）由淺到深 ──
+const HAZARDS = [
+  { kind: "flood500", name: "淹水（24h 500mm）", colors: ["#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c"] },
+  { kind: "liquefaction", name: "土壤液化（臺南）", colors: ["#fee391", "#fe9929", "#cc4c02"] },
+  { kind: "fault", name: "活動斷層", colors: ["#d7301f"] },
+  { kind: "landslide", name: "山崩地滑", colors: ["#8c510a"] },
+  { kind: "debris", name: "土石流", colors: ["#bcbddc", "#807dba", "#54278f"] },
+  { kind: "fire_station", name: "消防分隊", colors: ["#e31a1c"], point: true },
+];
+const HZ_MIN_ZOOM = 12;
+const rankColor = cs => cs.length === 1 ? cs[0] : ["match", ["get", "rank"], ...cs.flatMap((c, i) => [i, c]), cs[0]];
+const HAZARD_LAYERS = HAZARDS.flatMap(h => h.point
+  ? [{ id: `hz-${h.kind}`, type: "circle", source: `hz-${h.kind}`, layout: { visibility: "none" },
+       paint: { "circle-radius": 6, "circle-color": h.colors[0], "circle-stroke-color": "#fff", "circle-stroke-width": 2 } }]
+  : [{ id: `hz-${h.kind}`, type: "fill", source: `hz-${h.kind}`, layout: { visibility: "none" },
+       paint: { "fill-color": rankColor(h.colors), "fill-opacity": 0.4 } },
+     { id: `hz-${h.kind}-line`, type: "line", source: `hz-${h.kind}`, layout: { visibility: "none" },
+       paint: { "line-color": rankColor(h.colors), "line-width": 1, "line-opacity": 0.7 } }]);
+
 const map = !MAP_OK ? NOOP : new maplibregl.Map({
   container: "map",
   style: {
@@ -198,9 +226,12 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
       bldg: { type: "geojson", data: { type: "FeatureCollection", features: [] },
         attribution: "建物外框：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OpenStreetMap 貢獻者</a>、臺中市政府、臺北市政府｜樓層與門牌：內政部實價登錄、各縣市政府門牌與使用執照資料（<a href=\"/about\">完整來源</a>）" },
       pin: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+      ...Object.fromEntries(HAZARDS.map(h => [`hz-${h.kind}`, { type: "geojson", data: { type: "FeatureCollection", features: [] },
+        attribution: "災害潛勢：經濟部水利署、地質調查及礦業管理中心、農業部、臺南市政府、內政部消防署" }])),
     },
     layers: [
       { id: "emap", type: "raster", source: "emap" },
+      ...HAZARD_LAYERS,
       { id: "bldg", type: "fill-extrusion", source: "bldg", paint: {
           // 沒有樓層、只有 OSM 高度的建物：以 高度÷3.2m 上色
           "fill-extrusion-color": ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
@@ -266,6 +297,40 @@ async function loadBuildings() {
 }
 map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
 map.on("load", loadBuildings);
+
+// 災害潛勢圖層：勾選的才載入；記住勾選狀態（只存在這台瀏覽器）
+let hzOn = new Set();
+try { hzOn = new Set(JSON.parse(localStorage.getItem("hazards") || "[]")); } catch {}
+const hzEl = document.getElementById("hzl"), hzHint = document.getElementById("hzhint");
+hzEl.innerHTML = HAZARDS.map(h => `<label><input type="checkbox" value="${h.kind}" ${hzOn.has(h.kind) ? "checked" : ""}>
+  <i style="--c:${h.colors[h.colors.length - 1]}"></i>${h.name}</label>`).join("");
+hzEl.addEventListener("change", e => {
+  e.target.checked ? hzOn.add(e.target.value) : hzOn.delete(e.target.value);
+  try { localStorage.setItem("hazards", JSON.stringify([...hzOn])); } catch {}
+  loadHazards();
+});
+let hzTimer, hzSeq = 0;
+async function loadHazards() {
+  if (!MAP_OK || !map.isStyleLoaded()) return;
+  const seq = ++hzSeq, z = map.getZoom(), b = map.getBounds();
+  const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+  let tooFar = false;
+  for (const h of HAZARDS) {
+    const on = hzOn.has(h.kind);
+    for (const id of [`hz-${h.kind}`, `hz-${h.kind}-line`]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
+    if (!on) continue;
+    if (z < HZ_MIN_ZOOM) { tooFar = true; map.getSource(`hz-${h.kind}`).setData({ type: "FeatureCollection", features: [] }); continue; }
+    const r = await fetch(`/api/hazards?kind=${h.kind}&bbox=${bbox}`);
+    if (seq !== hzSeq || !r.ok) return;  // 已經移到別處
+    const data = await r.json();
+    tooFar ||= !!data.too_large;
+    map.getSource(`hz-${h.kind}`).setData(data);
+  }
+  hzHint.textContent = tooFar ? "目前地圖範圍太大，放大到鄉鎮範圍才會顯示圖層。"
+    : "勾選後疊在地圖上；放大到鄉鎮範圍才會顯示。潛勢圖僅供防災參考。";
+}
+map.on("moveend", () => { clearTimeout(hzTimer); hzTimer = setTimeout(loadHazards, 250); });
+map.on("load", loadHazards);
 // 資料來源標示一開始就收成 ⓘ（點開才顯示），不擋地圖
 map.on("load", () => document.querySelectorAll(".maplibregl-ctrl-attrib.maplibregl-compact-show")
   .forEach(e => e.classList.remove("maplibregl-compact-show")));
@@ -427,6 +492,12 @@ function hz(x) {
   if (x === NO_MAP) return `<span class="rx">${x}</span>`;
   return `<span class="rz">${esc(x)}</span>`;
 }
+const dist = m => m >= 1000 ? `${(m / 1000).toFixed(1)} 公里` : `${m} 公尺`;
+function hydrant(r) {
+  if (r.lon == null) return hz(null);
+  if (r.hydrants_100m == null) return hz(NO_MAP);  // 金門、連江沒有消防栓資料
+  return r.hydrant_m != null ? `直線 ${dist(r.hydrant_m)}` : "2 公里內沒有";
+}
 function riskHtml(r) {
   const age = r.year ? `${new Date().getFullYear() - r.year} 年（${esc(r.year_kind || "年份")} ${esc(r.year)}）` : "—";
   const flood = d => d && d !== NOT_IN_ZONE && d !== NO_MAP ? `${d} 公尺` : d;
@@ -439,6 +510,10 @@ function riskHtml(r) {
       <dt>主要用途</dt><dd>${v(r.usage)}</dd>
       <dt>使用分區</dt><dd>${v(r.zoning)}</dd>
       <dt>建物型態</dt><dd>${v(r.btype)}</dd></dl>
+    <h4>安全防護</h4><dl>
+      <dt>最近消防分隊</dt><dd>${r.fire_station ? `${esc(r.fire_station.replace(/^.*?消防局/, ""))}（直線 ${dist(r.fire_station_m)}）` : hz(r.lon == null ? null : NO_MAP)}</dd>
+      <dt>最近消防栓</dt><dd>${hydrant(r)}</dd>
+      <dt>100m 內消防栓</dt><dd>${r.hydrants_100m != null ? `${esc(r.hydrants_100m)} 支` : hz(r.lon == null ? null : NO_MAP)}</dd></dl>
     <h4>災害潛勢</h4><dl>
       <dt>淹水 500mm</dt><dd>${hz(flood(r.flood500))}</dd>
       <dt>淹水 650mm</dt><dd>${hz(flood(r.flood650))}</dd>
@@ -446,7 +521,7 @@ function riskHtml(r) {
       <dt>活動斷層</dt><dd>${hz(r.fault)}</dd>
       <dt>山崩地滑</dt><dd>${hz(r.landslide)}</dd>
       <dt>土石流</dt><dd>${hz(r.debris)}</dd></dl>
-    <div class="note">淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化目前只有臺南市圖資。</div>
+    <div class="note">消防分隊、消防栓為直線距離，不是道路距離。淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化目前只有臺南市圖資。</div>
   </div>`;
 }
 

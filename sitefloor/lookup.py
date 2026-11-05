@@ -169,6 +169,8 @@ COLUMNS = {
     "usage": "主要用途", "zoning": "使用分區",
     "flood500": "淹水潛勢（24小時500mm）", "flood650": "淹水潛勢（24小時650mm）", "liquefaction": "土壤液化潛勢",
     "fault": "活動斷層地質敏感區", "landslide": "山崩與地滑地質敏感區", "debris": "土石流潛勢溪流影響範圍",
+    "fire_station": "最近消防分隊", "fire_station_m": "消防分隊直線距離（公尺）",
+    "hydrant_m": "最近消防栓直線距離（公尺）", "hydrants_100m": "100公尺內消防栓數",
 }
 RISK_HAZARDS = ["flood500", "flood650", "liquefaction", "fault", "landslide", "debris"]
 NOT_IN_ZONE, NO_MAP = "未在範圍內", "此區無圖資"
@@ -373,7 +375,8 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
     out = {k: (None if _na(r[k]) else r[k]) for k in COLUMNS}
     out["bldg_uid"] = None if _na(r.bldg_uid) else r.bldg_uid
     out["osm_uid"] = None if _na(r.osm_uid) else r.osm_uid
-    for k in ("floors_above", "floors_below", "unit_floor", "year", "t_n"):
+    for k in ("floors_above", "floors_below", "unit_floor", "year", "t_n", "fire_station_m", "hydrant_m", "hydrants_100m"):
         if out[k] is not None:
             out[k] = int(out[k])
-    return out
+    # 其餘 numpy 數值轉成 Python 型別（FastAPI 不會序列化 numpy.int32）
+    return {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}

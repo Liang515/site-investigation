@@ -36,6 +36,7 @@ TABLES = {
     "same_osm": (None, "base, county, town"),
     "door_risk": (None, "base, county, town"),
     "risk_coverage": (None, "kind, county"),
+    "hazard_zones": (None, "kind, minlon, minlat"),
 }
 
 

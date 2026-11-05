@@ -311,6 +311,33 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     return {"type": "FeatureCollection", "features": feats, "truncated": truncated}
 
 
+# ── 災害潛勢圖層（sitefloor/risk.py 的 hazard_zones）：地圖上可開關，依畫面範圍回傳 ──
+HAZARD_KINDS = ("flood500", "liquefaction", "fault", "landslide", "debris", "fire_station")
+MAX_ZONES = 4000
+MAX_ZONE_SPAN = 0.25  # 畫面範圍上限（度）；太大時前端請使用者放大
+
+
+@app.get("/api/hazards")
+def api_hazards(kind: str = Query(...), bbox: str = Query(..., description="minlon,minlat,maxlon,maxlat")):
+    if kind not in HAZARD_KINDS:
+        raise HTTPException(400, "未知的圖層")
+    try:
+        x0, y0, x1, y1 = map(float, bbox.split(","))
+    except ValueError:
+        raise HTTPException(400, "bbox 格式錯誤") from None
+    if not (x0 < x1 and y0 < y1) or x1 - x0 > MAX_ZONE_SPAN or y1 - y0 > MAX_ZONE_SPAN:
+        return {"type": "FeatureCollection", "features": [], "too_large": True}
+    if not _has_table("hazard_zones"):
+        return {"type": "FeatureCollection", "features": []}
+    rows = _cur().execute(f"""
+        SELECT value, rank, wkb FROM hazard_zones
+        WHERE kind = ? AND maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ?
+        ORDER BY rank DESC LIMIT {MAX_ZONES + 1}""", [kind, x0, x1, y0, y1]).fetchall()
+    feats = [_feature(i, json.loads(shapely.to_geojson(shapely.from_wkb(w))), value=v, rank=r)
+             for i, (v, r, w) in enumerate(rows[:MAX_ZONES])]
+    return {"type": "FeatureCollection", "features": feats, "truncated": len(rows) > MAX_ZONES}
+
+
 _CONF_RANK = {"高": 0, "中": 1, "低": 2}
 
 
