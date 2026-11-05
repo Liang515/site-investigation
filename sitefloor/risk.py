@@ -6,7 +6,8 @@
 - 活動斷層地質敏感區、山崩與地滑地質敏感區：經濟部地質調查及礦業管理中心 地質敏感區範圍數值檔
   （data.gov.tw/dataset/27744）。實際範圍以公告圖資為準。
 - 土石流潛勢溪流影響範圍：農業部農村發展及水土保持署（data.gov.tw/dataset/176526，115 年度 1,753 條）。
-- 土壤液化潛勢：地調所全國 API 已失效（2026-11 確認 404），目前只有臺南市政府的圖資（data.gov.tw/dataset/100221）。
+- 土壤液化潛勢：地調所全國 API 已失效（2026-11 確認 404），臺北市的 soil.taipei 也連不上；目前用
+  臺南市政府（data.gov.tw/dataset/100221）與臺中市政府（data.gov.tw/dataset/138707，Google 雲端硬碟 GeoJSON）的圖資。
 
 使用性質：門牌所有實價紀錄的「主要用途」「都市土地使用分區」眾數（trades.usage／zoning）。
 
@@ -96,11 +97,22 @@ def debris_layer() -> gpd.GeoDataFrame:
     return g.assign(rank=g.Risk.map({"低": 0, "中": 1, "高": 2}).fillna(0))[["value", "rank", "geometry"]]
 
 
+# 臺中市圖資的 class 沒有官方說明：class 1 分布在沿海（清水、梧棲、龍井、臺中港）、class 3 面積最大且最內陸，
+# 與「沿海海埔地為高潛勢」的公開說明一致，判斷為 1＝高、2＝中、3＝低（2026-11-05）
+TAICHUNG_LIQ = {"1": "高潛勢", "2": "中潛勢", "3": "低潛勢"}
+LIQ_COUNTIES = ["臺南市", "臺中市"]
+
+
 def liquefaction_layer() -> gpd.GeoDataFrame:
+    rank = {v: i for i, v in enumerate(LIQ_LEVELS)}
     # 臺南市政府的檔沒附 .prj，座標是 Web Mercator（x 約 1,336 萬）
-    g = _read(RAW / "liquefaction" / "tainan" / "tainan.shp", crs=3857, columns=["分級"], encoding="utf-8")
-    g["value"] = g["分級"].str.strip()
-    return g.assign(rank=g.value.map({v: i for i, v in enumerate(LIQ_LEVELS)}))[["value", "rank", "geometry"]]
+    tn = _read(RAW / "liquefaction" / "tainan" / "tainan.shp", crs=3857, columns=["分級"], encoding="utf-8")
+    tn["value"] = tn["分級"].str.strip()
+    tc = _read(RAW / "liquefaction" / "taichung" / "taichung.json", columns=["class"])
+    tc["value"] = tc["class"].astype(str).map(TAICHUNG_LIQ)
+    g = pd.concat([tn[["value", "geometry"]], tc[["value", "geometry"]]], ignore_index=True)
+    g = gpd.GeoDataFrame(g, crs=CRS).dropna(subset=["value"])
+    return g.assign(rank=g.value.map(rank))[["value", "rank", "geometry"]]
 
 
 HYDRANT_RADIUS = 100  # 公尺
@@ -165,7 +177,7 @@ def coverage() -> pd.DataFrame:
             ls += _LANDSLIDE_AREA.get(area, [area])
     cov = {k: ALL_COUNTIES for k in (*FLOOD, "fault", "debris")}
     cov["landslide"] = sorted(set(ls))
-    cov["liquefaction"] = ["臺南市"]
+    cov["liquefaction"] = LIQ_COUNTIES
     cov["hydrant"] = [c for c in ALL_COUNTIES if c not in _NO_HYDRANT_DATA]
     return pd.DataFrame([(k, c) for k, cs in cov.items() for c in cs], columns=["kind", "county"])
 
