@@ -128,7 +128,7 @@ data/raw/              原始資料（不進版控）
 | 淹水潛勢（24 小時 500mm、650mm） | 水利署 [淹水潛勢圖](https://data.gov.tw/dataset/25766) 全國版（`定量降雨24小時500mm.zip` 等；副檔名寫 .7z 其實是 zip） | `data/raw/hazards/flood/` |
 | 活動斷層、山崩與地滑地質敏感區 | 地調所 [地質敏感區範圍數值檔](https://data.gov.tw/dataset/27744)（清單 CSV＋各區 rar／zip，用 `bsdtar` 解壓） | `data/raw/hazards/geosens/<編號>/`、`list.csv` |
 | 土石流潛勢溪流影響範圍 | 農業部 [115年度1753條](https://data.gov.tw/dataset/176526) | `data/raw/hazards/debris/` |
-| 土壤液化潛勢 | [臺南市](https://data.gov.tw/dataset/100221)（座標是 Web Mercator、沒附 .prj）、[臺中市](https://data.gov.tw/dataset/138707)（GeoJSON 放在 Google 雲端硬碟；class 1／2／3 沒有官方說明，依分布判斷為高／中／低）。地調所全國 API、臺北市 soil.taipei 2026-11 都已失效 | `data/raw/hazards/liquefaction/{tainan,taichung}/` |
+| 土壤液化潛勢 | 地調所 [土壤液化潛勢圖](https://data.gov.tw/dataset/28708) 全國版。資料集列的下載頁已失效，改從[土壤液化潛勢查詢系統](https://liquefaction.gsmma.gov.tw/)的 ArcGIS 查詢服務下載：`uv run python -m sitefloor.risk --download-liquefaction`。HIGH／MED／LOW＝高／中／低，NOT＝非液化區；澎湖、金門、連江沒有圖資 | `data/raw/hazards/liquefaction/cgs/` |
 
 建庫：`uv run python -m sitefloor.risk`（約 20 秒；trades、addresses 之後，每週更新會自動跑）。災害圖資不常更新，目前不在每週自動下載，換新版時手動放到上面的資料夾再重跑。
 水利署說明淹水潛勢圖僅供防救災參考，不適用於土地使用管制或土地利用之依據；網頁上有註明。

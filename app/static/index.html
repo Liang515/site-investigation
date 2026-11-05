@@ -199,7 +199,7 @@ if (!MAP_OK) {
 // ── 災害潛勢圖層（/api/hazards）：顏色依等級（rank）由淺到深 ──
 const HAZARDS = [
   { kind: "flood500", name: "淹水（24h 500mm）", colors: ["#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c"] },
-  { kind: "liquefaction", name: "土壤液化（臺南、臺中）", colors: ["#fee391", "#fe9929", "#cc4c02"] },
+  { kind: "liquefaction", name: "土壤液化", colors: ["#fee391", "#fe9929", "#cc4c02"] },
   { kind: "fault", name: "活動斷層", colors: ["#d7301f"] },
   { kind: "landslide", name: "山崩地滑", colors: ["#8c510a"] },
   { kind: "debris", name: "土石流", colors: ["#bcbddc", "#807dba", "#54278f"] },
@@ -523,7 +523,7 @@ function riskHtml(r) {
       <dt>活動斷層</dt><dd>${hz(r.fault)}</dd>
       <dt>山崩地滑</dt><dd>${hz(r.landslide)}</dd>
       <dt>土石流</dt><dd>${hz(r.debris)}</dd></dl>
-    <div class="note">消防分隊、消防栓為直線距離，不是道路距離。淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化目前只有臺南市、臺中市圖資。</div>
+    <div class="note">消防分隊、消防栓為直線距離，不是道路距離。淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化為地調所全國圖資（澎湖、金門、連江沒有）。</div>
   </div>`;
 }
 

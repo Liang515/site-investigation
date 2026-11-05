@@ -53,3 +53,11 @@ def test_building_risk_takes_worst():
     assert r["fault"] == NOT_IN_ZONE and r["liquefaction"] == NO_MAP
     assert r["zoning"] == "商業區"
     assert building_risk(con, doors.iloc[0:0]) == {}
+
+
+def test_add_risk_keeps_no_map_inside_covered_county():
+    con = _con()  # 臺南市有液化圖資，但這個門牌沒被任何區塊蓋到（例：山區）
+    con.execute(f"""INSERT INTO door_risk VALUES
+        ('臺南市', '東區', '大學路3號', NULL, NULL, '{NO_MAP}', NULL, NULL, NULL, NULL, NULL)""")
+    df = _add_risk(con, _df([("臺南市", "東區", "大學路3號", "大學路3號", 120.2)]))
+    assert df.iloc[0].liquefaction == NO_MAP and df.iloc[0].fault == NOT_IN_ZONE

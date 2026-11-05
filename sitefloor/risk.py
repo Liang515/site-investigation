@@ -6,8 +6,8 @@
 - 活動斷層地質敏感區、山崩與地滑地質敏感區：經濟部地質調查及礦業管理中心 地質敏感區範圍數值檔
   （data.gov.tw/dataset/27744）。實際範圍以公告圖資為準。
 - 土石流潛勢溪流影響範圍：農業部農村發展及水土保持署（data.gov.tw/dataset/176526，115 年度 1,753 條）。
-- 土壤液化潛勢：地調所全國 API 已失效（2026-11 確認 404），臺北市的 soil.taipei 也連不上；目前用
-  臺南市政府（data.gov.tw/dataset/100221）與臺中市政府（data.gov.tw/dataset/138707，Google 雲端硬碟 GeoJSON）的圖資。
+- 土壤液化潛勢：地調所 土壤液化潛勢查詢系統（liquefaction.gsmma.gov.tw）的全國圖層，data.gov.tw/dataset/28708
+  列的下載頁已失效，改用其 ArcGIS 查詢服務下載（download_liquefaction）。澎湖、金門、連江沒有圖資。
 
 使用性質：門牌所有實價紀錄的「主要用途」「都市土地使用分區」眾數（trades.usage／zoning）。
 
@@ -23,7 +23,7 @@
   （災害欄位：落在範圍內才有值；沒有值＝不在範圍內或該區沒有圖資，見 risk_coverage）
 - hazard_zones：kind, value, rank, 外接矩形, wkb — 地圖圖層用（外框簡化 5 公尺、經緯度）
 - risk_coverage：kind, county — 各圖資涵蓋的縣市（查詢時區分「不在範圍內」與「此區無圖資」）
-用法：uv run python -m sitefloor.risk   （trades、addresses 之後；資料放在 data/raw/hazards/，見 README）
+用法：uv run python -m sitefloor.risk   （土壤液化圖資先跑 uv run python -m sitefloor.risk --download-liquefaction；trades、addresses 之後；資料放在 data/raw/hazards/，見 README）
 """
 
 import csv
@@ -39,6 +39,7 @@ import pyogrio
 import shapely
 
 from sitefloor.db import connect
+from sitefloor.lookup import NO_MAP
 
 RAW = Path("data/raw/hazards")
 CRS = 3826  # TWD97 TM2（121°）
@@ -97,21 +98,49 @@ def debris_layer() -> gpd.GeoDataFrame:
     return g.assign(rank=g.Risk.map({"低": 0, "中": 1, "高": 2}).fillna(0))[["value", "rank", "geometry"]]
 
 
-# 臺中市圖資的 class 沒有官方說明：class 1 分布在沿海（清水、梧棲、龍井、臺中港）、class 3 面積最大且最內陸，
-# 與「沿海海埔地為高潛勢」的公開說明一致，判斷為 1＝高、2＝中、3＝低（2026-11-05）
-TAICHUNG_LIQ = {"1": "高潛勢", "2": "中潛勢", "3": "低潛勢"}
-LIQ_COUNTIES = ["臺南市", "臺中市"]
+# 地調所全國土壤液化潛勢圖（土壤液化潛勢查詢系統的 ArcGIS 圖層，2026-09-21 版，含 2021 與 2026 年產製範圍）
+# TYPE：HIGH／MED／LOW＝高／中／低潛勢，NOT＝已調查、非液化區；沒被任何區塊蓋到＝沒有圖資
+LIQ_URL = "https://gis.liquid.net.tw/arcgis/rest/services/P04032/Soil_cgs_2026/MapServer/0/query"
+LIQ_FILE = RAW / "liquefaction" / "cgs" / "cgs_2026.geojson"
+LIQ_TYPES = {"LOW": "低潛勢", "MED": "中潛勢", "HIGH": "高潛勢"}
+LIQ_COUNTIES = [c for c in ALL_COUNTIES if c not in ("澎湖縣", "金門縣", "連江縣")]  # 離島沒有圖資
+
+
+def download_liquefaction(page: int = 25):
+    """下載地調所全國土壤液化潛勢圖（約 490 塊、7 MB，經緯度 GeoJSON）。"""
+    import json
+    import urllib.parse
+    import urllib.request
+
+    from sitefloor.update import CTX
+
+    feats: list = []
+    while True:
+        q = urllib.parse.urlencode({"where": "1=1", "outFields": "TYPE,Yr", "outSR": 4326, "f": "geojson",
+                                    "orderByFields": "OBJECTID", "resultOffset": len(feats),
+                                    "resultRecordCount": page})
+        req = urllib.request.Request(f"{LIQ_URL}?{q}", headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, context=CTX, timeout=300) as r:
+            got = json.load(r)["features"]
+        feats += got
+        if len(got) < page:
+            break
+    LIQ_FILE.parent.mkdir(parents=True, exist_ok=True)
+    LIQ_FILE.write_text(json.dumps({"type": "FeatureCollection", "features": feats}))
+    print(f"  土壤液化 {len(feats)} 塊 → {LIQ_FILE}")
+
+
+def _liq_all() -> gpd.GeoDataFrame:
+    g = _read(LIQ_FILE, columns=["TYPE"])
+    g["geometry"] = g.make_valid()  # 有 26 塊自我交錯
+    return g
 
 
 def liquefaction_layer() -> gpd.GeoDataFrame:
     rank = {v: i for i, v in enumerate(LIQ_LEVELS)}
-    # 臺南市政府的檔沒附 .prj，座標是 Web Mercator（x 約 1,336 萬）
-    tn = _read(RAW / "liquefaction" / "tainan" / "tainan.shp", crs=3857, columns=["分級"], encoding="utf-8")
-    tn["value"] = tn["分級"].str.strip()
-    tc = _read(RAW / "liquefaction" / "taichung" / "taichung.json", columns=["class"])
-    tc["value"] = tc["class"].astype(str).map(TAICHUNG_LIQ)
-    g = pd.concat([tn[["value", "geometry"]], tc[["value", "geometry"]]], ignore_index=True)
-    g = gpd.GeoDataFrame(g, crs=CRS).dropna(subset=["value"])
+    g = _liq_all()
+    g["value"] = g.TYPE.map(LIQ_TYPES)
+    g = g.dropna(subset=["value"])
     return g.assign(rank=g.value.map(rank))[["value", "rank", "geometry"]]
 
 
@@ -228,6 +257,9 @@ def main():
     for k, load in layers.items():
         layer = load()
         out[k] = _match(pts, layer)
+        if k == "liquefaction":  # 有圖資的縣市裡，沒被任何區塊（含非液化區）蓋到的門牌＝此區無圖資
+            mapped = pts.index.isin(gpd.sjoin(pts[["geometry"]], _liq_all()[["geometry"]], predicate="within").index)
+            out.loc[~mapped & pts.county.isin(LIQ_COUNTIES).values, k] = NO_MAP
         print(f"  {k:12s} 範圍 {len(layer):,} 塊 → 門牌 {out[k].notna().sum():,}（{time.time() - t:.0f}s）")
 
     prot = protection(pts)
@@ -268,4 +300,9 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+
+    if "--download-liquefaction" in sys.argv:
+        download_liquefaction()
+        sys.exit()
     main()
