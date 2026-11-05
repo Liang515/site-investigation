@@ -57,7 +57,7 @@ zsh scripts/install_schedule.sh
 2. 要看完整報告：Mac mini 上的 `data/reports/<日期>.md`。
 3. 沒問題就部署（Mac mini 上，或從筆電遠端）：
    ```bash
-   ssh <Mac mini 使用者名稱>@<Mac mini 名稱>.local "zsh -lc 'cd ~/Documents/site-investigation && vercel deploy --prod --yes'"
+   ssh <Mac mini 使用者名稱>@<Mac mini 名稱>.local "zsh -lc 'cd ~/Documents/site-investigation && scripts/deploy.sh'"
    ```
    （`zsh -lc` 讓 ssh 載入 Homebrew 的路徑，否則找不到 `vercel`）
 

@@ -112,7 +112,7 @@ data/raw/              原始資料（不進版控）
 - `curated/floor_corrections.csv`（進版控）：已查證的樓層，查詢時優先序最高、地圖也套用。可用門牌（county, town, base）或 OSM 建物（osm_uid，適合百貨、球場等地標）指定；`source` 記依據（網址、使照字號、使用者回報）。改完跑 `uv run python -m sitefloor.curated`（每週更新偵測到檔案有改也會自動重跑）。
 - 校正表的 `height_m`（選填，公尺）：地圖改用實際高度畫，用在一層很高的建物（例：大巨蛋 64 m、高雄巨蛋 42 m）。有人工校正的 OSM 建物一定會畫，不會被臺北建照外框蓋掉。
 - 網頁結果卡片「樓層有誤？回報正確樓層」→ `POST /api/feedback`（每 IP 每小時 5 次）→ 在私人 repo 開一張 GitHub Issue（GitHub 會寄信通知），並推播到 ntfy 頻道。設定放在 Vercel 環境變數 `FEEDBACK_GITHUB_REPO`、`FEEDBACK_GITHUB_TOKEN`（只開該 repo 的 Issues 讀寫權限的 fine-grained token）、`NTFY_TOPIC`；本機用 `data/state/notify.json` 的 `github_repo`、`github_token`、`ntfy_topic`。
-- 審核：在 Issue 查證後加標籤「採用」（要修正就留言，例：「改成 18 層」「地下 3 層」「地址：…」；只採用 repo 擁有者與協作者的留言，後面的蓋前面的），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `vercel deploy --prod --yes`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
+- 審核：在 Issue 查證後加標籤「採用」（要修正就留言，例：「改成 18 層」「地下 3 層」「地址：…」；只採用 repo 擁有者與協作者的留言，後面的蓋前面的），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `scripts/deploy.sh`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
 - 缺口盤點：`uv run python -m sitefloor.gaps` → `data/reports/gaps.md`（各類型樓層有無）、`missing_landmarks.csv`（有名稱、樓層未知的地標清單），每週更新也會跑。
 
 ## 建物風險資訊（第一期）
@@ -135,7 +135,7 @@ data/raw/              原始資料（不進版控）
 
 ## 定期更新
 
-`uv run python -m sitefloor.update` 檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `vercel deploy --prod --yes`。
+`uv run python -m sitefloor.update` 檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `scripts/deploy.sh`。
 
 | 來源 | 偵測方式 | 有新版時 |
 |---|---|---|
@@ -159,5 +159,5 @@ data/raw/              原始資料（不進版控）
 
 - 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 4 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
 - Vercel 上傳單一檔案上限 100 MB，所以不上傳 1.1 GB 的資料庫，改上傳 `sitefloor.export` 產生的 Parquet（約 340 MB，每檔 80 MB 左右）。部署環境（`VERCEL` 環境變數，或本機設 `SITEFLOOR_PARQUET=1` 測試）由 `db.connect()` 直接讀 Parquet，查詢速度與資料庫檔相近。
-- 部署：更新資料後先跑 `sitefloor.export`，再在專案根目錄 `vercel deploy --prod --yes`（從本機上傳，資料不在 git 裡）。
+- 部署：更新資料後先跑 `sitefloor.export`，再在專案根目錄執行 `scripts/deploy.sh`（從本機上傳，資料不在 git 裡）：先跑部署前檢查，部署後只保留最新 2 個部署版本——Vercel 免費方案 Function Storage 上限 10 GB，每個版本約 400–500 MB，舊版本不刪會超量。
 - GitHub 推送**不會**自動部署（`vercel.json` 的 `git.deploymentEnabled: false`）：GitHub 上沒有資料檔，從 git 建出來的版本會壞掉並蓋掉正式網站。
