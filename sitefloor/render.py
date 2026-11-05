@@ -10,3 +10,14 @@ def extrude_height(floors, height):
     if floors:
         return floors * FLOOR_M
     return height
+
+
+def part_extent(levels, min_level, height, min_height, parent_floors=None):
+    """OSM 分棟的 (底部, 頂部) 高度（公尺），規則和整棟一樣：知道樓層就用 樓層×3.2m。
+    building:levels 是從地面算起的樓層數，building:min_level 是底下空著的樓層數（例：空橋）。"""
+    top = extrude_height(levels, height) or extrude_height(parent_floors, None)
+    if min_level:
+        base = min_level * FLOOR_M
+    else:
+        base = min_height or 0
+    return base, top

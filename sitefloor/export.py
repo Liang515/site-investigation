@@ -30,6 +30,7 @@ TABLES = {
     "coverage": (None, "county"),
     "permits": (None, "base, county, town"),
     "osm_buildings": (None, "minlon, minlat"),
+    "osm_parts": (None, "parent_uid"),
     "door_osm": (None, "base, county, town"),
     "corrections": (None, "base, county, town"),
     "same_osm": (None, "base, county, town"),

@@ -19,7 +19,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sitefloor import feedback
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, lookup, lookup_many
-from sitefloor.render import FLOOR_M, extrude_height
+from sitefloor.models import MODELS
+from sitefloor.render import FLOOR_M, extrude_height, part_extent
 from sitefloor.suggest import Suggester, split_base
 
 STATIC = Path(__file__).parent / "static"
@@ -196,7 +197,8 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM
       （例：富邦 A25 塔樓 54 層一致，OSM 把同建照的美術館分開畫）；不一致時（例：遼寧街 177 號建照 20 層、
       OSM 標 19 層）保留建照外框，並拿掉大半落在框內的 OSM 建物。
-    高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。"""
+    高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。
+    例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py，例：101）用真實高度。"""
     x0, y0, x1, y1 = map(float, bbox.split(","))
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
@@ -244,10 +246,33 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                               for j in ctree.query(g, predicate="intersects")):
                 drop_osm.add(i)
     feats: list[dict] = []
+    # OSM 分棟（building:part）：分棟各用自己的高度畫，外框只畫扣掉分棟的部分；有手工模型的地標（例：101）
+    # 塔樓改畫模型、外框剩下的部分不畫
+    parts: dict[str, list] = defaultdict(list)
+    if osm and _has_table("osm_parts"):
+        uids = [o[0] for i, o in enumerate(osm) if i not in drop_osm]
+        for pu, lv, mlv, ph, mh, w in _cur().execute(
+                "SELECT parent_uid, levels, min_level, height, min_height, wkb FROM osm_parts "
+                "WHERE list_contains(?, parent_uid)", [uids]).fetchall():
+            parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w)))
     for i, (u, f, h, name, g) in enumerate(osm):
-        if i not in drop_osm:
-            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
-                                  h=extrude_height(f, h), name=name, src="osm"))
+        if i in drop_osm:
+            continue
+        for lv, mlv, ph, mh, pg in parts.get(u, []):
+            base, top = part_extent(lv, mlv, ph, mh, f)
+            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(pg)), uid=u, floors=lv or f,
+                                  h=top, base=base, name=name, src="osm_part"))
+        if u in MODELS:
+            for ring, z0, z1 in MODELS[u]():
+                feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": [ring]}, uid=u, floors=f,
+                                      h=z1, base=z0, name=name, src="model"))
+            continue
+        if parts.get(u):
+            g = shapely.difference(g, shapely.union_all([p[4] for p in parts[u]]))
+            if g.is_empty or g.area == 0:
+                continue
+        feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
+                              h=extrude_height(f, h), name=name, src="osm"))
     for u, f, g in city:
         feats.append(_feature(len(feats), json.loads(shapely.to_geojson(g)), uid=u, floors=f,
                               h=f * FLOOR_M if f else None, src="city"))

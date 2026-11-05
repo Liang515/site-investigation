@@ -200,6 +200,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
           "fill-extrusion-color": ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
             ["step", ["coalesce", ["get", "floors"], ["/", ["get", "h"], 3.2]], RAMP[0][1], ...RAMP.slice(1).flat()]],
           "fill-extrusion-height": ["coalesce", ["get", "h"], 3.2],
+          "fill-extrusion-base": ["coalesce", ["get", "base"], 0],
           "fill-extrusion-opacity": 0.85 } },
       { id: "bldg-sel", type: "line", source: "bldg", filter: ["==", ["get", "uid"], ""],
         paint: { "line-color": "#ff6d00", "line-width": 3 } },

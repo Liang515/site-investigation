@@ -3,6 +3,8 @@
 - osm_buildings：OSM 建物外框（全部，含樓層不明的；地下構造除外）。levels＝OSM 標註的地上樓層（building:levels）；
   height＝OSM 標註高度（公尺）；trade_floors＝落在這棟裡的門牌的實價總樓層眾數。
   height 換算樓層只有 30% 相符（樓高差異大），所以只拿來畫地圖，不當樓層。
+- osm_parts：OSM 分棟（building:part，例：台北101 的購物中心 6 層）。parent_uid＝所在的建物外框；
+  地圖把分棟用各自的高度畫，外框只畫扣掉分棟的部分（見 render.split_parts）。
 - door_osm：門牌號（county, town, base）落在哪棟 OSM 建物裡。
 - same_osm：OSM 同棟推估。同一 OSM 外框內有實價的門牌的總樓層眾數（n＝有實價的門牌數、spread＝最大減最小、
   btype＝建物型態眾數）。留一驗證（2026-11-04，17.9 萬門牌）：spread=0 時完全相符 97.0%、差一層內 98.6%；
@@ -17,6 +19,7 @@ OSM building:levels 的準確度（2026-11-04，6.4 萬個有實價的門牌）�
 
 import re
 import time
+import warnings
 from pathlib import Path
 
 import geopandas as gpd
@@ -60,6 +63,38 @@ def read_buildings() -> gpd.GeoDataFrame:
     df["height"] = height.where((height >= 2) & (height <= 600))
     df["uid"] = "osm:" + df.osm_way_id.fillna("r" + df.osm_id.astype(str)).astype(str)
     return df[["uid", "name", "building", "levels", "height", "geometry"]].set_crs(4326, allow_override=True)
+
+
+def read_parts(b: gpd.GeoDataFrame) -> pd.DataFrame:
+    """OSM 分棟（building:part）＋所在的建物外框（代表點落在哪個外框裡；多個時取面積最小的）。
+    只收有高度或樓層的分棟。"""
+    df = pyogrio.read_dataframe(PBF, layer="multipolygons", columns=["osm_id", "osm_way_id", "other_tags"],
+                                where="other_tags LIKE '%\"building:part\"%'")
+    tags = df.other_tags.fillna("")
+    lv = {k: _num(tags.map(lambda s, k=k: _tag(s, k))) for k in
+          ("building:levels", "building:min_level", "height", "min_height")}
+    df["levels"] = lv["building:levels"].where(lambda x: (x >= 1) & (x <= 110)).round().astype("Int16")
+    df["min_level"] = lv["building:min_level"].where(lambda x: (x >= 0) & (x <= 110)).round().astype("Int16")
+    df["height"] = lv["height"].where(lambda x: (x >= 1) & (x <= 600))
+    df["min_height"] = lv["min_height"].where(lambda x: (x >= 0) & (x <= 600))
+    df = df[df.levels.notna() | df.height.notna()].copy()
+    df["uid"] = "osm:" + df.osm_way_id.fillna("r" + df.osm_id.astype(str)).astype(str)
+    df = df.set_crs(4326, allow_override=True)
+    pt = gpd.GeoDataFrame(df[["uid"]], geometry=df.geometry.representative_point(), crs=4326)
+    parents = b[["uid", "geometry"]].rename(columns={"uid": "parent_uid"})
+    with warnings.catch_warnings():  # 經緯度面積只用來比大小
+        warnings.simplefilter("ignore", UserWarning)
+        parents["area"] = parents.geometry.area
+    j = gpd.sjoin(pt, parents, predicate="within").sort_values("area")
+    j = j[j.uid != j.parent_uid]  # 同時標 building 與 building:part 的不算自己的分棟
+    j = j[~j.index.duplicated()]
+    df["parent_uid"] = j.parent_uid
+    df = df[df.parent_uid.notna()]
+    bounds = df.geometry.bounds
+    return pd.DataFrame({"uid": df.uid, "parent_uid": df.parent_uid, "levels": df.levels, "min_level": df.min_level,
+                         "height": df.height, "min_height": df.min_height, "minlon": bounds.minx,
+                         "minlat": bounds.miny, "maxlon": bounds.maxx, "maxlat": bounds.maxy,
+                         "wkb": df.geometry.to_wkb()})
 
 
 # 不接收棟內門牌實價樓層的建物類型：雨遮、停車棚等（外框可能蓋到旁邊大樓的門牌）
@@ -118,6 +153,10 @@ def main():
         f"  寫入 osm_buildings {len(odf):,}（OSM 樓層 {odf.levels.notna().sum():,}、"
         f"有實價樓層 {odf.trade_floors.notna().sum():,}）（{time.time() - t:.0f}s）"
     )
+
+    parts = read_parts(b)
+    con.execute("CREATE OR REPLACE TABLE osm_parts AS SELECT * FROM parts")
+    print(f"  osm_parts {len(parts):,}（分棟，落在 {parts.parent_uid.nunique():,} 棟建物裡）")
 
     con.execute(f"""
         CREATE OR REPLACE TABLE same_osm AS
