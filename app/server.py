@@ -16,6 +16,7 @@ import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
+from sitefloor import feedback
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, lookup, lookup_many
 from sitefloor.render import FLOOR_M, extrude_height
@@ -90,20 +91,23 @@ def static_png(name: str):
                         headers={"Cache-Control": "public, max-age=86400"})
 
 
-# ── 樓層回報：使用者覺得樓層有誤時送出，推播給維護者（ntfy），審核後寫進 curated/floor_corrections.csv ──
-def _ntfy_topic() -> tuple[str, str] | None:
-    """部署環境用 Vercel 環境變數 NTFY_TOPIC（不放在公開程式碼裡）；本機用 data/state/notify.json。"""
-    if os.environ.get("NTFY_TOPIC"):
-        return os.environ.get("NTFY_SERVER", "https://ntfy.sh"), os.environ["NTFY_TOPIC"]
+# ── 樓層回報：使用者覺得樓層有誤時送出 → 私人 repo 開 GitHub Issue（會寄信）＋ ntfy 推播；審核見 sitefloor.review ──
+def _feedback_config() -> dict:
+    """部署環境用 Vercel 環境變數（不放在公開程式碼裡）；本機用 data/state/notify.json。"""
     f = Path(__file__).resolve().parent.parent / "data" / "state" / "notify.json"
-    if f.exists():
-        cfg = json.loads(f.read_text())
-        return cfg.get("ntfy_server", "https://ntfy.sh"), cfg["ntfy_topic"]
-    return None
+    cfg = json.loads(f.read_text()) if f.exists() else {}
+    env = {"ntfy_server": "NTFY_SERVER", "ntfy_topic": "NTFY_TOPIC",
+           "github_repo": "FEEDBACK_GITHUB_REPO", "github_token": "FEEDBACK_GITHUB_TOKEN"}
+    out = {k: os.environ.get(e) or cfg.get(k) for k, e in env.items()}
+    out["ntfy_server"] = out["ntfy_server"] or "https://ntfy.sh"
+    return out
 
 
-def _clean(x, n: int) -> str:
-    return re.sub(r"[\x00-\x1f]", " ", str(x or "")).strip()[:n]
+def _post_json(url: str, payload: dict, headers: dict | None = None) -> None:
+    data = json.dumps(payload, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=data, method="POST",
+                                 headers={"Content-Type": "application/json", **(headers or {})})
+    urllib.request.urlopen(req, timeout=15).read()
 
 
 @app.post("/api/feedback")
@@ -112,30 +116,35 @@ async def api_feedback(request: Request):
         body = await request.json()
     except ValueError:
         raise HTTPException(400, "格式錯誤") from None
-    addr = _clean(body.get("address"), 100)
+    if not isinstance(body, dict):
+        raise HTTPException(400, "格式錯誤")
     try:
-        above = int(body.get("floors_above"))
-        below = int(body["floors_below"]) if str(body.get("floors_below") or "").strip() else None
-    except (TypeError, ValueError):
-        raise HTTPException(400, "樓層要填整數") from None
-    if not addr or not 1 <= above <= 110 or (below is not None and not 0 <= below <= 20):
-        raise HTTPException(400, "地址必填；地上樓層 1–110、地下樓層 0–20")
-    basis, contact, shown = _clean(body.get("basis"), 200), _clean(body.get("contact"), 100), _clean(body.get("shown"), 20)
-    target = _ntfy_topic()
-    if not target:
+        fb = feedback.validate(body)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    cfg = _feedback_config()
+    if not (cfg["github_repo"] and cfg["github_token"]) and not cfg["ntfy_topic"]:
         raise HTTPException(503, "回報功能尚未設定")
-    msg = "\n".join(x for x in [
-        f"地址：{addr}", f"網站顯示：{shown or '—'} 層", f"回報：地上 {above} 層" + (f"、地下 {below} 層" if below is not None else ""),
-        f"依據：{basis or '未填'}", f"聯絡：{contact}" if contact else ""] if x)
+    msg = feedback.summary(fb)
     print("[feedback]", msg.replace("\n", " | "))  # 也留在部署紀錄
-    server, topic = target
-    data = json.dumps({"topic": topic, "title": "地址樓層查詢：樓層回報", "message": msg, "tags": ["memo"]},
-                      ensure_ascii=False).encode()
-    try:
-        req = urllib.request.Request(server, data=data, method="POST", headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=15).read()
-    except OSError:
-        raise HTTPException(502, "暫時無法送出，請稍後再試") from None
+    sent = 0
+    if cfg["github_repo"] and cfg["github_token"]:
+        try:
+            _post_json(f"https://api.github.com/repos/{cfg['github_repo']}/issues", feedback.issue(fb),
+                       {"Authorization": f"Bearer {cfg['github_token']}", "Accept": "application/vnd.github+json",
+                        "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "site-investigation"})
+            sent += 1
+        except OSError as e:
+            print("[feedback] GitHub Issue 建立失敗：", e)
+    if cfg["ntfy_topic"]:
+        try:
+            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "地址樓層查詢：樓層回報",
+                                            "message": msg, "tags": ["memo"]})
+            sent += 1
+        except OSError as e:
+            print("[feedback] ntfy 推播失敗：", e)
+    if not sent:
+        raise HTTPException(502, "暫時無法送出，請稍後再試")
     return {"ok": True}
 
 
