@@ -44,3 +44,27 @@ def test_merge_replaces_same_door(tmp_path, monkeypatch):
     assert [r["floors_above"] for r in rows] == ["9", "10"] and "#12" in rows[1]["source"]
     df = curated.load()  # 寫出來的表要能被校正表讀取
     assert df.base.iloc[1] == "凌雲路一段83巷1之5號"
+
+
+@pytest.mark.parametrize(("text", "want"), [
+    ("改成 18 層", {"floors_above": 18}),
+    ("地上18樓，地下3層", {"floors_above": 18, "floors_below": 3}),
+    ("應為 22F B2", {"floors_above": 22, "floors_below": 2}),
+    ("沒有地下室", {"floors_below": 0}),
+    ("地址：臺北市信義區忠孝東路四段535號，改成20層", {"address": "臺北市信義區忠孝東路四段535號", "floors_above": 20}),
+    ("看起來沒問題", {}),
+])
+def test_corrections(text, want):
+    assert feedback.corrections(text) == want
+
+
+def test_apply_comments_only_trusted_latest_wins():
+    fb = _fb()
+    cs = [{"authorAssociation": "OWNER", "body": "改成 18 層", "createdAt": "2026-11-05T01:00:00Z"},
+          {"authorAssociation": "NONE", "body": "改成 99 層", "createdAt": "2026-11-05T02:00:00Z"},
+          {"authorAssociation": "OWNER", "body": "地下 2 層", "createdAt": "2026-11-05T03:00:00Z"},
+          {"authorAssociation": "OWNER", "body": "改成 19 層", "createdAt": "2026-11-05T04:00:00Z"}]
+    got, used = feedback.apply_comments(fb, cs)
+    assert (got["floors_above"], got["floors_below"], len(used)) == (19, 2, 3)
+    with pytest.raises(ValueError):
+        feedback.apply_comments(fb, [{"authorAssociation": "OWNER", "body": "改成 0 層"}])

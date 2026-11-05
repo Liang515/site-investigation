@@ -19,7 +19,7 @@ import time
 
 from sitefloor import curated
 from sitefloor.address import parse
-from sitefloor.feedback import APPROVE_LABEL, parse_issue
+from sitefloor.feedback import APPROVE_LABEL, apply_comments, parse_issue
 from sitefloor.update import NOTIFY_FILE, ROOT, run_step
 
 REBUILD = ["curated", "osm", "coverage", "gaps", "export", "smoke"]
@@ -40,8 +40,22 @@ def gh(*args: str) -> str:
 
 
 def issues(rp: str, label: str | None) -> list[dict]:
-    args = ["issue", "list", "-R", rp, "--state", "open", "--limit", "200", "--json", "number,title,body,labels,url"]
+    args = ["issue", "list", "-R", rp, "--state", "open", "--limit", "200", "--json", "number,title,body,labels,url,comments"]
     return json.loads(gh(*args, *(["--label", label] if label else [])))
+
+
+def read(issue: dict) -> tuple[dict | None, str]:
+    """讀 Issue 的回報並套用審核留言的修正。讀不到時回傳 (None, 原因)。"""
+    fb = parse_issue(issue["body"] or "")
+    if not fb:
+        return None, "讀不到回報內容（JSON 被改壞了？）"
+    try:
+        fb, used = apply_comments(fb, issue.get("comments") or [])
+    except ValueError as e:
+        return None, f"留言修正後不合理（{e}）"
+    for u in used:
+        print(f"  #{issue['number']} 套用留言修正：{u}")
+    return fb, ""
 
 
 def to_row(fb: dict, number: int) -> dict:
@@ -78,7 +92,7 @@ def main(argv: list[str]):
         if not todo:
             print("沒有待處理的回報")
         for i in todo:
-            fb = parse_issue(i["body"] or "")
+            fb, _ = read(i)
             mark = "✓ 已標採用" if any(lb["name"] == APPROVE_LABEL for lb in i["labels"]) else "待審核"
             line = f"地上 {fb['floors_above']} 層，依據：{fb['basis'] or '未填'}" if fb else "（格式無法讀取）"
             print(f"#{i['number']} [{mark}] {i['title']}｜{line}\n   {i['url']}")
@@ -86,13 +100,13 @@ def main(argv: list[str]):
 
     approved, rows, bad = issues(rp, APPROVE_LABEL), [], []
     for i in approved:
-        fb = parse_issue(i["body"] or "")
+        fb, why = read(i)
         if fb:
             rows.append((i, to_row(fb, i["number"])))
         else:
-            bad.append(i)
-    for i in bad:
-        print(f"#{i['number']} 讀不到回報內容（JSON 被改壞了？），略過：{i['url']}")
+            bad.append((i, why))
+    for i, why in bad:
+        print(f"#{i['number']} {why}，略過：{i['url']}")
     if not rows:
         print(f"沒有標了「{APPROVE_LABEL}」的回報")
         return

@@ -112,7 +112,7 @@ data/raw/              原始資料（不進版控）
 - `curated/floor_corrections.csv`（進版控）：已查證的樓層，查詢時優先序最高、地圖也套用。可用門牌（county, town, base）或 OSM 建物（osm_uid，適合百貨、球場等地標）指定；`source` 記依據（網址、使照字號、使用者回報）。改完跑 `uv run python -m sitefloor.curated`（每週更新偵測到檔案有改也會自動重跑）。
 - 校正表的 `height_m`（選填，公尺）：地圖改用實際高度畫，用在一層很高的建物（例：大巨蛋 64 m、高雄巨蛋 42 m）。有人工校正的 OSM 建物一定會畫，不會被臺北建照外框蓋掉。
 - 網頁結果卡片「樓層有誤？回報正確樓層」→ `POST /api/feedback`（每 IP 每小時 5 次）→ 在私人 repo 開一張 GitHub Issue（GitHub 會寄信通知），並推播到 ntfy 頻道。設定放在 Vercel 環境變數 `FEEDBACK_GITHUB_REPO`、`FEEDBACK_GITHUB_TOKEN`（只開該 repo 的 Issues 讀寫權限的 fine-grained token）、`NTFY_TOPIC`；本機用 `data/state/notify.json` 的 `github_repo`、`github_token`、`ntfy_topic`。
-- 審核：在 Issue 查證後加標籤「採用」（樓層要修正可直接改 Issue 裡的 JSON），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `vercel deploy --prod --yes`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
+- 審核：在 Issue 查證後加標籤「採用」（要修正就留言，例：「改成 18 層」「地下 3 層」「地址：…」；只採用 repo 擁有者與協作者的留言，後面的蓋前面的），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `vercel deploy --prod --yes`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
 - 缺口盤點：`uv run python -m sitefloor.gaps` → `data/reports/gaps.md`（各類型樓層有無）、`missing_landmarks.csv`（有名稱、樓層未知的地標清單），每週更新也會跑。
 
 ## 定期更新

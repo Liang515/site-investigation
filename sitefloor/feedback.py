@@ -48,7 +48,7 @@ def issue(fb: dict) -> dict:
     body = "\n".join([
         "```text", text, "```", "",
         f"審核：查證無誤就加上標籤「{APPROVE_LABEL}」，不採用直接關閉。",
-        "樓層和回報不同時，可以直接改下面 JSON 的 floors_above／floors_below 再加標籤。",
+        "要修正就在下面留言再加標籤，例：「改成 18 層」「地下 3 層」「地址：臺北市信義區忠孝東路四段535號」。",
         "之後在本機執行 `uv run python -m sitefloor.review` 寫進校正表。", "",
         f"<!-- {MARKER} -->", "```json", data, "```",
     ])
@@ -66,3 +66,39 @@ def parse_issue(body: str) -> dict | None:
         return validate(json.loads(m.group(1)))
     except (ValueError, json.JSONDecodeError):
         return None
+
+
+TRUSTED = {"OWNER", "MEMBER", "COLLABORATOR"}  # 只採用這些人的留言修正
+_NUM = r"(\d{1,3})"
+
+
+def corrections(text: str) -> dict:
+    """從審核留言讀出修正：地上樓層、地下樓層、地址（沒寫到的不改）。
+    「改成 18 層」「地上 18 層」「18F」→ 地上；「地下 3 層」「B3」→ 地下；「沒有地下室」→ 地下 0；「地址：…」→ 地址。"""
+    out: dict = {}
+    t = text.replace("　", " ")
+    if m := re.search(r"地址\s*[:：]\s*([^\s，,。；;]+)", t):
+        out["address"] = clean(m.group(1), 100)
+        t = t.replace(m.group(0), " ")
+    if m := re.search(r"(?:地下|B)\s*" + _NUM, t, re.IGNORECASE):
+        out["floors_below"] = int(m.group(1))
+        t = t.replace(m.group(0), " ")
+    elif re.search(r"(?:沒有|無)地下", t):
+        out["floors_below"] = 0
+    if m := re.search(r"(?:地上|改成|改為|應為|是)?\s*" + _NUM + r"\s*(?:層|樓|F)", t, re.IGNORECASE):
+        out["floors_above"] = int(m.group(1))
+    return out
+
+
+def apply_comments(fb: dict, comments: list[dict]) -> tuple[dict, list[str]]:
+    """依時間順序套用可信任的留言修正（後面的蓋前面的）。回傳 (修正後的回報, 套用了哪些留言)。
+    修正後不合理（例：地上 0 層）就丟 ValueError。"""
+    fb, used = dict(fb), []
+    for c in sorted(comments, key=lambda c: c.get("createdAt") or ""):
+        if c.get("authorAssociation") not in TRUSTED:
+            continue
+        fix = corrections(c.get("body") or "")
+        if fix:
+            fb.update(fix)
+            used.append("、".join(f"{k}={v}" for k, v in fix.items()))
+    return validate(fb), used
