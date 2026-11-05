@@ -61,6 +61,12 @@ def read(issue: dict) -> tuple[dict | None, str]:
 def to_row(fb: dict, number: int) -> dict:
     a = parse(fb["address"])
     basis = fb["basis"] or "未填依據"
+    if fb.get("building", "").startswith("osm:"):  # 在地圖上點 OSM 建物回報的：整棟套用（地標常沒有門牌）
+        return {"county": "", "town": "", "base": "", "osm_uid": fb["building"],
+                "floors_above": str(fb["floors_above"]),
+                "floors_below": "" if fb["floors_below"] is None else str(fb["floors_below"]),
+                "source": f"使用者回報（回報 #{number}）：{basis}", "note": f"使用者回報：{fb['address']}",
+                "checked": time.strftime("%Y-%m-%d")}
     return {"county": a.county or "", "town": a.town or "", "base": a.base or fb["address"], "osm_uid": "",
             "floors_above": str(fb["floors_above"]),
             "floors_below": "" if fb["floors_below"] is None else str(fb["floors_below"]),
@@ -68,15 +74,19 @@ def to_row(fb: dict, number: int) -> dict:
 
 
 def _key(r: dict) -> tuple:
-    return r["county"], r["town"], r["base"]
+    return (r["osm_uid"],) if r.get("osm_uid") else (r["county"], r["town"], r["base"])
 
 
 def merge(rows: list[dict]) -> tuple[int, int]:
-    """寫進校正表；同一門牌已經有校正就換成新的。回傳 (新增, 取代)。"""
+    """寫進校正表；同一門牌（或同一棟 OSM 建物）已經有校正就換成新的。回傳 (新增, 取代)。"""
     with open(curated.CSV, encoding="utf-8", newline="") as f:
         old = list(csv.DictReader(f))
     new_keys = {_key(r) for r in rows}
-    kept = [r for r in old if not r.get("base") or _key(r) not in new_keys]
+    kept = [r for r in old if _key(r) not in new_keys]
+    prev = {_key(r): r for r in old if _key(r) in new_keys}
+    for r in rows:  # 回報只改樓層；舊列有的實際高度（height_m）保留
+        if not r.get("height_m") and prev.get(_key(r), {}).get("height_m"):
+            r["height_m"] = prev[_key(r)]["height_m"]
     with open(curated.CSV, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=curated.COLUMNS)
         w.writeheader()

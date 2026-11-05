@@ -326,7 +326,7 @@ def _osm_building(uid: str) -> dict:
         raise HTTPException(404)
     u, name, _btype, levels, tf, h, lon, lat, cf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
-    n = cur.execute("SELECT count(*) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()[0]
+    n, county = cur.execute("SELECT count(*), any_value(county) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()
     below = None
     if cf is not None:
         row = cur.execute("SELECT max(floors_below) FROM corrections WHERE osm_uid = ?", [uid]).fetchone()
@@ -343,7 +343,7 @@ def _osm_building(uid: str) -> dict:
     return {"uid": u, "source": src, "floors_above": known_floors, "floors_below": below,
             "structure": None, "btype": None, "year": None,
             "year_kind": None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
-            "note": "；".join(note), "osm": True}
+            "note": "；".join(note), "osm": True, "county": county, "name": name}
 
 
 @app.get("/api/building/{uid}")

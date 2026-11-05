@@ -287,6 +287,12 @@ async function showBuilding(uid) {
   const b = await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json();
   select(uid);
   document.getElementById("result").innerHTML = card(b, "", b);
+  // 在地圖上點的建物也能回報：附上建物編號（OSM 建物審核後整棟套用，地標常沒有門牌）
+  const first = (b.addresses || [])[0];
+  const addr = first ? `${b.county || ""}${first}` : (b.name || `地圖建物 ${uid}`);
+  const cardEl = document.getElementById("result").querySelector(".card");
+  cardEl.insertAdjacentHTML("beforeend", feedbackHtml({ normalized: addr, floors_above: b.floors_above }, uid));
+  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
 }
 
 // 查詢結果（圖資＋實價合併後）為主；有對到建物就附上同棟門牌
@@ -408,10 +414,10 @@ suggEl.addEventListener("mousedown", e => {
 });
 
 // ── 樓層回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
-function feedbackHtml(r) {
+function feedbackHtml(r, building = "") {
   const addr = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
   return `<details class="fb"><summary>樓層有誤？回報正確樓層</summary>
-    <form class="fbform" data-addr="${esc(addr)}" data-shown="${esc(r.floors_above ?? "")}">
+    <form class="fbform" data-addr="${esc(addr)}" data-shown="${esc(r.floors_above ?? "")}" data-bldg="${esc(building)}">
       <label>地上樓層<input name="floors_above" type="number" min="1" max="110" required></label>
       <label>地下樓層<input name="floors_below" type="number" min="0" max="20" placeholder="可不填"></label>
       <label class="wide">依據<input name="basis" maxlength="200" placeholder="例：住在這裡、使用執照、建案資料"></label>
@@ -428,7 +434,7 @@ document.getElementById("result").addEventListener("submit", async e => {
   const msg = f.querySelector(".fbmsg"), btn = f.querySelector("button");
   btn.disabled = true; msg.textContent = "送出中…";
   const data = Object.fromEntries(new FormData(f));
-  data.address = f.dataset.addr; data.shown = f.dataset.shown;
+  data.address = f.dataset.addr; data.shown = f.dataset.shown; data.building = f.dataset.bldg;
   const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   const out = await resp.json().catch(() => ({}));
   if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input").forEach(i => i.disabled = true); }

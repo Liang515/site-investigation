@@ -68,3 +68,25 @@ def test_apply_comments_only_trusted_latest_wins():
     assert (got["floors_above"], got["floors_below"], len(used)) == (19, 2, 3)
     with pytest.raises(ValueError):
         feedback.apply_comments(fb, [{"authorAssociation": "OWNER", "body": "改成 0 層"}])
+
+
+def test_building_uid():
+    assert feedback.building_uid("osm:442195153") == "osm:442195153"
+    assert feedback.building_uid("osm:r6821492") == "osm:r6821492"
+    assert feedback.building_uid("tp:2507") == "tp:2507"
+    for bad in ("", "osm:abc", "javascript:alert(1)", "osm:1 OR 1=1", None):
+        assert feedback.building_uid(bad) == ""
+
+
+def test_map_click_report_becomes_osm_row_and_keeps_height(tmp_path, monkeypatch):
+    f = tmp_path / "c.csv"
+    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:442195153,6,2,64,維基,臺北大巨蛋,\n")
+    monkeypatch.setattr(curated, "CSV", f)
+    fb = feedback.validate({"address": "臺北大巨蛋", "floors_above": "7", "building": "osm:442195153"})
+    body = feedback.issue(fb)["body"]
+    assert "建物：osm:442195153" in body and feedback.parse_issue(body)["building"] == "osm:442195153"
+    row = review.to_row(fb, 5)
+    assert row["osm_uid"] == "osm:442195153" and row["base"] == ""
+    assert review.merge([row]) == (0, 1)
+    df = curated.load()
+    assert len(df) == 1 and int(df.floors_above.iloc[0]) == 7 and df.height_m.iloc[0] == 64  # 實際高度保留

@@ -16,6 +16,15 @@ def clean(x, n: int) -> str:
     return re.sub(r"[\x00-\x1f\x7f]", " ", str(x or "")).strip()[:n]
 
 
+_BUILDING_UID = re.compile(r"osm:r?\d{1,12}|tp:\d{1,7}|tc:\d{1,8}")
+
+
+def building_uid(x) -> str:
+    """地圖上點的建物編號（OSM 或市府建物圖）；格式不對就當沒有。"""
+    x = clean(x, 30)
+    return x if _BUILDING_UID.fullmatch(x) else ""
+
+
 def validate(body: dict) -> dict:
     """檢查回報內容；不合格丟 ValueError（訊息給使用者看）。"""
     addr = clean(body.get("address"), 100)
@@ -28,7 +37,7 @@ def validate(body: dict) -> dict:
         raise ValueError("地址必填；地上樓層 1–110、地下樓層 0–20")
     return {"address": addr, "floors_above": above, "floors_below": below,
             "basis": clean(body.get("basis"), 200), "contact": clean(body.get("contact"), 100),
-            "shown": clean(body.get("shown"), 20)}
+            "shown": clean(body.get("shown"), 20), "building": building_uid(body.get("building"))}
 
 
 def summary(fb: dict) -> str:
@@ -36,6 +45,8 @@ def summary(fb: dict) -> str:
     below = f"、地下 {fb['floors_below']} 層" if fb["floors_below"] is not None else ""
     lines = [f"地址：{fb['address']}", f"網站顯示：{fb['shown'] or '—'} 層", f"回報：地上 {fb['floors_above']} 層{below}",
              f"依據：{fb['basis'] or '未填'}"]
+    if fb.get("building"):
+        lines.append(f"建物：{fb['building']}（在地圖上點選的建物）")
     if fb["contact"]:
         lines.append(f"聯絡：{fb['contact']}")
     return "\n".join(lines)
