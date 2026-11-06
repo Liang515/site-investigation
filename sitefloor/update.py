@@ -308,6 +308,11 @@ def diff_report(con) -> tuple[list[str], int]:
 def run_audit(log: list[str]) -> str:
     """每週都跑正確性檢查（範圍依日期與縣市輪流，見 audit.py），回傳推播用的一行摘要。"""
     try:
+        from sitefloor import popularity
+        popularity.fetch_all()  # 查詢熱度給 audit 排序；沒設定 Upstash 時略過
+    except (OSError, ValueError, KeyError) as e:
+        log.append(f"查詢熱度下載失敗：{e}")
+    try:
         run_step("audit", log)
         q = pd.read_csv(REPORT_DIR / "audit_queue.csv", usecols=["tier", "severity"])
     except (RuntimeError, OSError, ValueError) as e:  # 檢查失敗不影響資料更新本身

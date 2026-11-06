@@ -16,7 +16,7 @@ import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from sitefloor import feedback
+from sitefloor import feedback, popularity
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many
 from sitefloor.models import MODELS, REPLACED_PARTS
@@ -157,7 +157,9 @@ def about():
 
 @app.get("/api/lookup")
 def api_lookup(q: str):
-    return lookup(_cur(), q)
+    r = lookup(_cur(), q)
+    popularity.incr(r.get("osm_uid") or r.get("bldg_uid"))  # 只記建物被查次數
+    return r
 
 
 @lru_cache(maxsize=1)
@@ -428,6 +430,7 @@ def _osm_building(uid: str) -> dict:
 
 @app.get("/api/building/{uid}")
 def api_building(uid: str):
+    popularity.incr(uid)
     if uid.startswith("osm:"):
         return _osm_building(uid)
     cur = _cur()
