@@ -11,6 +11,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
+import duckdb
 import pandas as pd
 import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
@@ -315,6 +316,20 @@ def api_hazards(kind: str = Query(...), bbox: str = Query(..., description="minl
 NEAR_DOOR_M = 100  # 建物沒有門牌時，用這個距離內最近的門牌判斷建物風險資訊
 
 
+def _door_uids(uid: str) -> list[str]:
+    """門牌要用哪些外框的：本身沒有門牌的臺北建照外框，用同一張建照其他外框的門牌
+    （同一張建照常拆成好幾個外框，門牌點只會落在其中一個）。"""
+    cur = _cur()
+    if cur.execute("SELECT count(*) FROM addresses WHERE bldg_uid = ?", [uid]).fetchone()[0]:
+        return [uid]
+    try:
+        same = cur.execute("""SELECT uid FROM buildings WHERE permit_no IS NOT NULL AND permit_no =
+                              (SELECT permit_no FROM buildings WHERE uid = ?)""", [uid]).fetchall()
+    except duckdb.BinderException:  # 舊資料沒有 permit_no 欄位
+        return [uid]
+    return [u for (u,) in same] or [uid]
+
+
 def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
     """棟內門牌（含座標），供建物風險資訊用；沒有就找 NEAR_DOOR_M 內最近的門牌。回傳 (門牌, 說明)。"""
     cur = _cur()
@@ -322,8 +337,9 @@ def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
         sql = """SELECT o.county, o.town, o.base, avg(a.lon) AS lon FROM door_osm o
                  LEFT JOIN addresses a USING (county, town, base) WHERE o.osm_uid = ? GROUP BY ALL LIMIT 200"""
     else:
-        sql = "SELECT county, town, base, avg(lon) AS lon FROM addresses WHERE bldg_uid = ? GROUP BY ALL LIMIT 200"
-    doors = cur.execute(sql, [uid]).df()
+        sql = """SELECT county, town, base, avg(lon) AS lon FROM addresses WHERE list_contains(?, bldg_uid)
+                 GROUP BY ALL LIMIT 200"""
+    doors = cur.execute(sql, [uid if uid.startswith("osm:") else _door_uids(uid)]).df()
     if not doors.empty or lon is None or lat is None:
         return doors, None
     d = NEAR_DOOR_M / 111_000
@@ -438,16 +454,18 @@ def api_building(uid: str):
                        year, year_kind, lon, lat FROM buildings WHERE uid = ?""", [uid]).df()
     if b.empty:
         raise HTTPException(404)
+    uids = _door_uids(uid)
     addrs = cur.execute("""
-        SELECT DISTINCT town || base AS addr FROM addresses WHERE bldg_uid = ? ORDER BY 1 LIMIT 30
-    """, [uid]).fetchall()
-    n = cur.execute("SELECT count(*) FROM addresses WHERE bldg_uid = ?", [uid]).fetchone()[0]
+        SELECT DISTINCT town || base AS addr FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 1 LIMIT 30
+    """, [uids]).fetchall()
+    n = cur.execute("SELECT count(*) FROM addresses WHERE list_contains(?, bldg_uid)", [uids]).fetchone()[0]
     out = b.iloc[0].to_dict()
     out = {k: (None if pd.isna(v) else v) for k, v in out.items()}
     out.update(addresses=[a for (a,) in addrs], n_units=n)
     if out.get("floors_above") is None:
         full = [c + t + b for c, t, b in cur.execute(
-            "SELECT DISTINCT county, town, base FROM addresses WHERE bldg_uid = ? ORDER BY 2, 3 LIMIT 30", [uid]).fetchall()]
+            "SELECT DISTINCT county, town, base FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 2, 3 LIMIT 30",
+            [uids]).fetchall()]
         if d := _floors_from_doors(full):
             out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
             out["note"] = d["note"]

@@ -13,7 +13,8 @@ CREATE TABLE IF NOT EXISTS buildings (
     floors_above SMALLINT, floors_below SMALLINT,
     structure VARCHAR, btype VARCHAR, year SMALLINT, year_kind VARCHAR,
     lon DOUBLE, lat DOUBLE, minlon DOUBLE, minlat DOUBLE, maxlon DOUBLE, maxlat DOUBLE,
-    wkb BLOB
+    wkb BLOB,
+    permit_no VARCHAR  -- 臺北建照套繪圖的建照號（同一張建照常拆成好幾個外框）
 );
 CREATE TABLE IF NOT EXISTS addresses (
     county VARCHAR, town VARCHAR, base VARCHAR, "full" VARCHAR, floor SMALLINT,
@@ -32,6 +33,7 @@ CREATE TABLE IF NOT EXISTS trades (
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS usage VARCHAR;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS zoning VARCHAR;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS unit_price DOUBLE;
+ALTER TABLE buildings ADD COLUMN IF NOT EXISTS permit_no VARCHAR;
 """
 
 

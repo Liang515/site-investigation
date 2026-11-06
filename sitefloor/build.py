@@ -78,6 +78,7 @@ def _write(con: duckdb.DuckDBPyConnection, county: str, bldg: gpd.GeoDataFrame, 
         "lon": cen.x, "lat": cen.y,
         "minlon": bounds.minx, "minlat": bounds.miny, "maxlon": bounds.maxx, "maxlat": bounds.maxy,
         "wkb": bw.geometry.to_wkb(),
+        "permit_no": bw.get("permit_no"),
     })
     aw = addr.to_crs(4326)
     adf = pd.DataFrame({
@@ -108,6 +109,11 @@ def build_taichung(con):
     _write(con, "臺中市", b, _match(a, b))
 
 
+def taipei_permit_no(s: pd.Series) -> pd.Series:
+    """套繪圖執照號 → 建照號（「107.0073.21F」「107.0073」都是 107 年第 0073 號）。"""
+    return s.str.extract(r"^(\d+\.\d+)")[0]
+
+
 def build_taipei(con):
     b = pyogrio.read_dataframe("data/raw/tp_gis/taipei_1151005.shp")
     b = b[b.bud_floor > 0].reset_index(drop=True)
@@ -120,6 +126,7 @@ def build_taipei(con):
     # 執照字號開頭為民國年（"90." 或 "101."）
     b["year"] = (pd.to_numeric(b.budatt_no.str.extract(r"^(\d+)")[0], errors="coerce") + 1911).astype("Int16")
     b["year_kind"] = "建照年"
+    b["permit_no"] = taipei_permit_no(b.budatt_no)
     a = pd.read_csv("data/raw/tp_gis/addr.csv", dtype=str)
     a = _addr_points(a, "橫座標", "縱座標", "臺北市", "街路段")
     _write(con, "臺北市", b, _match(a, b))
