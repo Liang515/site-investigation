@@ -215,14 +215,15 @@ def _resolve(r, covered: set[str]) -> dict:
         n = int(max(r.n_town if has_addr else 0, r.t_ntown if has_trade else 0))
         return dict(confidence="待確認", note=f"{n} 個行政區都有此門牌，請補鄉鎮市區", ambiguous=True)
 
+    b_attr = r.mrank == 0 or _na(r.osm_uid)  # 門牌已落在 OSM 建物內時，不跨巷借用鄰近（nearest）建照外框的年份與構造
     out = dict(
         county=r.county if has_addr else r.t_county, town=r.town if has_addr else r.t_town,
-        floors_below=next((x for x in (r.c_below, r.p_below, r.floors_below) if not _na(x)), None),
-        structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure) if not _na(x)), None),
-        btype=r.t_btype if not _na(r.t_btype) else r.b_btype,
-        year=next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year) if not _na(x)), None),
+        floors_below=next((x for x in (r.c_below, r.p_below, r.floors_below if b_attr else None) if not _na(x)), None),
+        structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure if b_attr else None) if not _na(x)), None),
+        btype=r.t_btype if not _na(r.t_btype) else (r.b_btype if b_attr else None),
+        year=next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year if b_attr else None) if not _na(x)), None),
         year_kind="竣工年（人工校正）" if not _na(r.c_year) else "建築完成年" if not _na(r.t_year) else (
-            "竣工年（使照）" if not _na(r.p_year) else None if _na(r.b_year) else r.b_year_kind),
+            "竣工年（使照）" if not _na(r.p_year) else None if (not b_attr or _na(r.b_year)) else r.b_year_kind),
         level=LEVEL_NAME.get(min(x for x in (r.lvl, r.tlvl) if not _na(x))),
     )
     b, t = r.b_floors, r.t_floors

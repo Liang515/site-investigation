@@ -45,3 +45,14 @@ def test_priority_categories():
     assert category("南港展覽館", "yes", None, None, None, None, None) == "展覽館"
     assert category("國立故宮博物院", "yes", None, None, None, None, None) == "博物館／美術館"
     assert category("台大醫院", "hospital", None, None, None, None, None) == "醫院"
+
+
+def test_curated_buildings_geojson():
+    import geopandas as gpd
+    from sitefloor.osm import CURATED_GEOJSON
+    assert CURATED_GEOJSON.exists()
+    gdf = gpd.read_file(CURATED_GEOJSON)
+    assert len(gdf) >= 50
+    assert gdf.uid.is_unique
+    assert gdf.geometry.is_valid.all()
+    assert (gdf.levels >= 1).all()

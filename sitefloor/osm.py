@@ -29,6 +29,7 @@ import pyogrio
 from sitefloor.db import connect
 
 PBF = Path("data/raw/osm/taiwan-latest.osm.pbf")
+CURATED_GEOJSON = Path("curated/buildings.geojson")
 
 
 def _tag(s: str, k: str) -> str:
@@ -67,7 +68,16 @@ def read_buildings() -> gpd.GeoDataFrame:
     df["levels"] = levels.where((levels >= 1) & (levels <= 110)).round().astype("Int16")
     df["height"] = height.where((height >= 2) & (height <= 600))
     df["uid"] = "osm:" + df.osm_way_id.fillna("r" + df.osm_id.astype(str)).astype(str)
-    return df[["uid", "name", "building", "levels", "height", "geometry"]].set_crs(4326, allow_override=True)
+    out = df[["uid", "name", "building", "levels", "height", "geometry"]].set_crs(4326, allow_override=True)
+    if CURATED_GEOJSON.exists():
+        extra = gpd.read_file(CURATED_GEOJSON).set_crs(4326, allow_override=True)
+        for col in ("name", "building", "levels", "height"):
+            if col not in extra:
+                extra[col] = None
+        extra["levels"] = pd.to_numeric(extra["levels"], errors="coerce").round().astype("Int16")
+        extra["height"] = pd.to_numeric(extra["height"], errors="coerce")
+        out = pd.concat([out, extra[["uid", "name", "building", "levels", "height", "geometry"]]], ignore_index=True)
+    return out
 
 
 def read_parts(b: gpd.GeoDataFrame) -> pd.DataFrame:
@@ -148,8 +158,14 @@ def main():
     # 棟內門牌的實價樓層眾數；平手取較高（mode() 平手每次結果不同）
     tf = con.execute("""
         SELECT uid, floors AS trade_floors FROM (
-            SELECT o.osm_uid AS uid, t.floors, count(*) AS k
-            FROM door_osm o JOIN door_trade t USING (county, town, base) GROUP BY ALL)
+            SELECT uid, floors, count(*) AS k FROM (
+                -- 門牌本身沒有實價時用主號（5之1號 → 5號），和地址查詢與使照的規則一樣
+                SELECT o.osm_uid AS uid, o.base, t.floors
+                FROM door_osm o JOIN door_trade t ON t.county = o.county AND t.town = o.town
+                     AND t.base IN (o.base, regexp_replace(o.base, '之\\d+號$', '號'))
+                QUALIFY row_number() OVER (PARTITION BY o.county, o.town, o.base
+                                           ORDER BY (t.base = o.base) DESC) = 1)
+            GROUP BY ALL)
         QUALIFY row_number() OVER (PARTITION BY uid ORDER BY k DESC, floors DESC) = 1""").df()
     b = b.merge(tf, on="uid", how="left")
     b.loc[b.building.isin(NO_TRADE_FLOORS), "trade_floors"] = None
