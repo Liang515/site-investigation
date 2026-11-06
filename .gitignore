@@ -5,4 +5,4 @@ __pycache__/
 .ruff_cache/
 .DS_Store
 .vercel
-.env*.local
+.env*  # Vercel 拉下來的環境變數（含 Upstash 金鑰）
