@@ -97,9 +97,18 @@ def sane_total(total: int | None, btype: str | None) -> int | None:
     return total
 
 
+def _price(s) -> float | None:
+    try:
+        v = float(str(s).replace(",", ""))
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
 def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
               floor: str, total: str, btype: str, structure: str, built: str, date: str,
-              kind: str | None, source: str, usage: str | None = None, zoning: str | None = None) -> pd.DataFrame:
+              kind: str | None, source: str, usage: str | None = None, zoning: str | None = None,
+              price: str | None = None) -> pd.DataFrame:
     """把任一實價來源（欄位名不同）轉成 trades 表的欄位。"""
     rows = []
     for r in df.to_dict("records"):
@@ -120,9 +129,10 @@ def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
             "built_year": b.year if b else None, "trade_date": roc_date(r.get(date)),
             "kind": r.get(kind) if kind else None, "source": source, "raw_address": raw,
             "usage": (r.get(usage) or None) if usage else None, "zoning": (r.get(zoning) or None) if zoning else None,
+            "unit_price": _price(r.get(price)) if price else None,
         })
     out = pd.DataFrame(rows)
-    return out.astype({"floor": "Int16", "total_floors": "Int16", "built_year": "Int16"})
+    return out.astype({"floor": "Int16", "total_floors": "Int16", "built_year": "Int16", "unit_price": "Float64"})
 
 
 def fetch_taipei_weekly() -> Path:
@@ -141,7 +151,8 @@ def load_taipei_weekly(con):
     df = df.where(df.notna(), None)
     t = to_trades(df, county="臺北市", address="LOCATION", town="DISTRICT", floor="SBUILD",
                   total="TBUILD", btype="BUITYPE", structure="MBUILD", built="FDATE",
-                  date="SDATE", kind="CASE_T", source="臺北市實價週報", usage="PBUILD", zoning="LANDA_Z")
+                  date="SDATE", kind="CASE_T", source="臺北市實價週報", usage="PBUILD", zoning="LANDA_Z",
+                  price="UPRICE")
     con.execute("DELETE FROM trades WHERE source = '臺北市實價週報'")
     con.execute("INSERT INTO trades SELECT * FROM t")
     print(f"  快照 {len(snaps)} 份（本次 {p.name}）、{len(df):,} 列 → 有門牌 {len(t):,} 筆、"
@@ -206,7 +217,8 @@ def load_plvr(con):
         df = df.where(df.notna(), None)
         t = to_trades(df, county=county, address="土地位置建物門牌", town="鄉鎮市區", floor="移轉層次",
                       total="總樓層數", btype="建物型態", structure="主要建材", built="建築完成年月",
-                      date="交易年月日", kind=None, source="實價登錄", usage="主要用途", zoning="都市土地使用分區")
+                      date="交易年月日", kind=None, source="實價登錄", usage="主要用途", zoning="都市土地使用分區",
+                      price="單價元平方公尺")
         t["kind"] = kind
         t["_id"] = df.loc[df["土地位置建物門牌"].fillna("").str.contains("號"), "編號"].values \
             if "編號" in df else None

@@ -25,11 +25,13 @@ CREATE TABLE IF NOT EXISTS trades (
     county VARCHAR, town VARCHAR, base VARCHAR, "full" VARCHAR, floor SMALLINT,
     total_floors SMALLINT, structure VARCHAR, btype VARCHAR, built_year SMALLINT,
     trade_date DATE, kind VARCHAR, source VARCHAR, raw_address VARCHAR,
-    usage VARCHAR, zoning VARCHAR  -- 主要用途（住家用、商業用…）、都市土地使用分區
+    usage VARCHAR, zoning VARCHAR,  -- 主要用途（住家用、商業用…）、都市土地使用分區
+    unit_price DOUBLE  -- 單價（元／m²；租賃為租金單價）
 );
 -- 舊資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會加新欄位）
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS usage VARCHAR;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS zoning VARCHAR;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS unit_price DOUBLE;
 """
 
 
