@@ -145,7 +145,7 @@ SELECT idx, c_floors, c_below, c_year, c_source FROM (
 _PERMIT_SQL = f"""
 SELECT q.idx, p.floors_above AS p_floors, p.floors_below AS p_below, p.structure AS p_structure, p.year AS p_year,
        p.permit_no AS p_no, p.source AS p_source, (p.base = q.base) AS p_exact
-FROM q JOIN permits p ON p.base IN (q.base, q.base_main) AND {_MATCH.format(t="p")}
+FROM q JOIN permits p ON p.base IN (q.base, q.base_main) AND {_MATCH.format(t="p")} AND NOT p.small
 QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY (p.base = q.base) DESC, p.year DESC) = 1
 """
 # 使照樓層對實價完全相符（2026-11-04）：臺北 95.8%、臺南公寓大廈 94.6% → 高；新北、新竹市 91.6% → 中
@@ -167,7 +167,7 @@ COLUMNS = {
     "source": "資料來源", "level": "比對方式", "confidence": "信心", "note": "說明",
     "t_n": "實價筆數", "lon": "經度", "lat": "緯度",
     # 建物風險資訊（sitefloor/risk.py）
-    "usage": "主要用途", "zoning": "使用分區",
+    "usage": "主要用途", "usage_floors": "各樓層用途", "usage_source": "用途來源", "zoning": "使用分區",
     "flood500": "淹水潛勢（24小時500mm）", "flood650": "淹水潛勢（24小時650mm）", "liquefaction": "土壤液化潛勢",
     "fault": "活動斷層地質敏感區", "landslide": "山崩與地滑地質敏感區", "debris": "土石流潛勢溪流影響範圍",
     "fire_station": "最近消防分隊", "fire_station_m": "消防分隊直線距離（公尺）",
@@ -344,23 +344,54 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     return df.sort_values("idx").reset_index(drop=True)
 
 
+_PERMIT_USE_SQL = """
+SELECT k.i, p.usage AS p_usage, p.usage_floors AS p_usage_floors, p.zoning AS p_zoning FROM rk k
+JOIN permits p ON p.county = k.county AND p.town = k.town AND p.base IN (k.base, k.base_main)
+WHERE p.usage IS NOT NULL AND NOT p.small
+QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY (p.base = k.base) DESC, p.year DESC) = 1"""
+
+
+def _add_usage(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
+    """使用性質：使用執照核准用途（臺北逐層、新北、新竹市）優先，其次實價登錄的主要用途眾數。
+    使照是整棟的核准用途（例：遼寧街179號 辦公、金融保險、餐飲、零售商場、健身休閒），實價只看得到成交那幾戶。"""
+    p = _optional(con, _PERMIT_USE_SQL, ["i", "p_usage", "p_usage_floors", "p_zoning"]).set_index("i")
+    for c in ("usage", "zoning"):
+        if c not in df:
+            df[c] = None
+    has = df.index.isin(p.index)
+    df["usage_source"] = None
+    df.loc[df.usage.notna(), "usage_source"] = "實價登錄"
+    df["usage_floors"] = None
+    if has.any():
+        rows = p.loc[df.index[has]]
+        df.loc[has, "usage"] = rows.p_usage.to_numpy()
+        df.loc[has, "usage_floors"] = rows.p_usage_floors.to_numpy()
+        df.loc[has, "usage_source"] = "使用執照"
+        z = has & df.index.isin(p.index[p.p_zoning.notna()])
+        df.loc[z, "zoning"] = p.loc[df.index[z], "p_zoning"].to_numpy()
+    return df
+
+
 def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
     """建物風險資訊：門牌（找不到用主號）的災害潛勢與使用性質。
     災害欄位：在範圍內＝等級／名稱；不在範圍內＝「未在範圍內」；該縣市沒有圖資＝「此區無圖資」；沒有座標＝空白。"""
-    try:
-        cov = con.execute("SELECT kind, county FROM risk_coverage").fetchall()
-    except duckdb.CatalogException:
-        return df
     keys = pd.DataFrame({"i": df.index, "county": df.county, "town": df.town,
                          "base": df.base_q if "base_q" in df else df.base, "base_main": df.base_main})
     con.register("rk", keys)
+    try:
+        cov = con.execute("SELECT kind, county FROM risk_coverage").fetchall()
+    except duckdb.CatalogException:
+        df = _add_usage(con, df)
+        con.unregister("rk")
+        return df
     hit = con.execute("""
         SELECT k.i, r.* EXCLUDE (county, town, base) FROM rk k
         JOIN door_risk r ON r.county = k.county AND r.town = k.town
              AND r.base IN (k.base, k.base_main)
         QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY (r.base = k.base) DESC) = 1""").df()
-    con.unregister("rk")
     df = df.drop(columns=[c for c in hit.columns if c in df and c != "i"]).join(hit.set_index("i"))
+    df = _add_usage(con, df)
+    con.unregister("rk")
     covered = {k: {c for kk, c in cov if kk == k} for k in RISK_HAZARDS}
     has_xy = df["lon"].notna() if "lon" in df else pd.Series(False, index=df.index)
     for k in RISK_HAZARDS:
@@ -387,7 +418,7 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
 _SEVERITY = {"flood500": ["0.3-0.5", "0.5-1.0", "1.0-2.0", "2.0-3.0", ">3.0"],
              "flood650": ["0.3-0.5", "0.5-1.0", "1.0-2.0", "2.0-3.0", ">3.0"],
              "liquefaction": ["低潛勢", "中潛勢", "高潛勢"]}
-RISK_FIELDS = [*RISK_HAZARDS, "usage", "zoning", "fire_station", "fire_station_m", "hydrant_m", "hydrants_100m"]
+RISK_FIELDS = [*RISK_HAZARDS, "usage", "usage_floors", "usage_source", "zoning", "fire_station", "fire_station_m", "hydrant_m", "hydrants_100m"]
 
 
 def building_risk(con: duckdb.DuckDBPyConnection, doors: pd.DataFrame) -> dict:
@@ -406,9 +437,15 @@ def building_risk(con: duckdb.DuckDBPyConnection, doors: pd.DataFrame) -> dict:
             out[k] = NOT_IN_ZONE if (df[k] == NOT_IN_ZONE).any() else NO_MAP
         else:
             out[k] = None
+    # 使用性質：棟內有使照用途的門牌優先（整棟核准用途），其次實價登錄眾數
+    src = df[df.usage_source == "使用執照"] if "usage_source" in df and (df.usage_source == "使用執照").any() else df
     for k in ("usage", "zoning"):
-        m = df[k].dropna().mode() if k in df else pd.Series(dtype=object)
+        m = src[k].dropna().mode() if k in src else pd.Series(dtype=object)
         out[k] = m.iloc[0] if len(m) else None
+    pick = src[src.usage == out["usage"]] if out["usage"] is not None else src.iloc[0:0]
+    out["usage_source"] = pick.usage_source.iloc[0] if len(pick) else None
+    floors = pick.usage_floors.dropna() if len(pick) else pd.Series(dtype=object)
+    out["usage_floors"] = floors.iloc[0] if len(floors) else None
     if "fire_station_m" in df and df.fire_station_m.notna().any():
         i = df.fire_station_m.astype(float).idxmin()
         out["fire_station"], out["fire_station_m"] = df.fire_station[i], int(df.fire_station_m[i])
