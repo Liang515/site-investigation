@@ -209,15 +209,32 @@ def podium_tower(g, podium: float, inset: float, body_top: float, roof: float, c
     return segs
 
 
+def boat_outline(g, width: float, tip: float = 4, n: int = 24):
+    """依外框東西向範圍畫扁船形（中間最寬 width 公尺、兩端收尖到 tip 公尺）的平面，回傳經緯度面。"""
+    m, back = _meters(g)
+    x0, y0, x1, y1 = m.bounds
+    cx, cy, half = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2
+    ts = [-1 + 2 * i / n for i in range(n + 1)]
+    hw = [max(width / 2 * (1 - t * t), tip / 2) for t in ts]
+    pts = [(cx + t * half, cy + w) for t, w in zip(ts, hw)] + [(cx + t * half, cy - w) for t, w in reversed(list(zip(ts, hw)))]
+    return back(shapely.Polygon(pts))
+
+
 def nanshan_plaza(g) -> list[tuple[list, float, float]]:
-    """臺北南山廣場（2017）：地上 48 層、高 272 m（維基百科）；頂部分段收進。裙樓微風南山是另一個外框。"""
-    return tower_crown(g, 238, 272, 8, 4)
+    """臺北南山廣場（2017）：地上 48 層、高 272 m（維基百科）。平面是東西向的扁船形（OSM 用兩個方塊近似），
+    長度取 OSM 外框東西範圍、中間寬 50 m；頂部分段收進。裙樓微風南山是另一個外框。"""
+    return tower_crown(boat_outline(g, 50), 238, 272, 6, 4)
 
 
 def cathay_landmark(g) -> list[tuple[list, float, float]]:
     """國泰置地廣場（2015）：地上 46 層、高 212 m，B1–4F 裙樓（維基百科）。
     OSM 只有整個基地的外框，塔樓位置取基地中央（近似）。"""
     return podium_tower(g, 24, 20, 200, 212, 4)
+
+
+def fubon_a25_podium(g) -> list[tuple[list, float, float]]:
+    """富邦A25 園區塔樓旁的裙樓（宴會廳等），高度近似 20 m；使照 54 層是整個園區的最高樓層。"""
+    return [(_coords(g), 0, 20)]
 
 
 def fubon_a25(g) -> list[tuple[list, float, float]]:
@@ -244,6 +261,7 @@ MODELS = {
     "osm:383731054": nanshan_plaza,
     "osm:378443967": cathay_landmark,
     "osm:1010525370": fubon_a25,
+    "osm:1131522119": fubon_a25_podium,
     "osm:230984631": xinzhuang_gym,
     "osm:r9106110": xinzhuang_baseball_stands,
     "osm:665628025": lambda _g=None: [],  # 球場整座外框（含草皮）不畫，看台另外畫

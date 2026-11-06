@@ -65,3 +65,13 @@ def test_tower_crown_steps_in_to_spire():
     assert segs[0][1:] == (0, 200) and segs[-1][2] == 244.15
     widths = [max(p[0] for p in ring[0]) - min(p[0] for p in ring[0]) for ring, _, _ in segs[:-1]]
     assert widths == sorted(widths, reverse=True)  # 越往上越窄
+
+
+def test_boat_outline_is_one_pointed_shape():
+    import shapely
+
+    from sitefloor.models import boat_outline
+    g = shapely.MultiPolygon([shapely.box(121.0, 25.0, 121.0006, 25.0005), shapely.box(121.0006, 25.0001, 121.0013, 25.0004)])
+    b = boat_outline(g, 50)
+    assert b.geom_type == "Polygon" and b.is_valid  # 兩個方塊近似的外框 → 一個扁船形
+    assert b.bounds[0] == g.bounds[0] and abs(b.bounds[2] - g.bounds[2]) < 1e-9
