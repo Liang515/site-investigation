@@ -56,6 +56,8 @@ uv run python -m sitefloor.derive                  # 推估用的衍生表（同
 uv run python -m sitefloor.permits                 # 使用執照（data/raw/permits/，來源見 sitefloor/permits.py）
 uv run python -m sitefloor.osm                     # OpenStreetMap 建物（data/raw/osm/taiwan-latest.osm.pbf，Geofabrik 下載）
 uv run python -m sitefloor.coverage                # 各縣市涵蓋率（網頁統計表）
+uv run python -m sitefloor.tiers                   # 建物分級（地標／指標、公共與場館…）→ building_tiers
+uv run python -m sitefloor.audit --scope tier1     # 正確性檢查 → data/reports/audit_queue.csv（流程見 docs/audit.md）
 uv run python -m sitefloor.export                  # 部署用 Parquet（data/serve/，每檔 80 MB 左右）
 uv run pytest -q
 ```
@@ -113,6 +115,7 @@ data/raw/              原始資料（不進版控）
 - 校正表的 `height_m`（選填，公尺）：地圖改用實際高度畫，用在一層很高的建物（例：大巨蛋 64 m、高雄巨蛋 42 m）。有人工校正的 OSM 建物一定會畫，不會被臺北建照外框蓋掉。
 - 網頁結果卡片「樓層有誤？回報正確樓層」→ `POST /api/feedback`（每 IP 每小時 5 次）→ 在私人 repo 開一張 GitHub Issue（GitHub 會寄信通知），並推播到 ntfy 頻道。設定放在 Vercel 環境變數 `FEEDBACK_GITHUB_REPO`、`FEEDBACK_GITHUB_TOKEN`（只開該 repo 的 Issues 讀寫權限的 fine-grained token）、`NTFY_TOPIC`；本機用 `data/state/notify.json` 的 `github_repo`、`github_token`、`ntfy_topic`。
 - 審核：在 Issue 查證後加標籤「採用」（要修正就留言，例：「改成 18 層」「地下 3 層」「地址：…」；只採用 repo 擁有者與協作者的留言，後面的蓋前面的），不採用直接關閉。接著在本機執行 `uv run python -m sitefloor.review`：寫進上面的 CSV（同一門牌會取代舊的）、重建資料並跑部署前檢查、留言並關閉 Issue，最後 `scripts/deploy.sh`。`--list` 列出待處理的回報，`--dry-run` 只預覽。
+- 分級與正確性檢查：`sitefloor.tiers` 把建物分四級，`sitefloor.audit` 比對各來源找出疑似有錯的建物；每週更新自動跑（第 1 級每週、第 2 級每月、第 3／4 級依縣市輪流），查證流程見 `docs/audit.md`。
 - 缺口盤點：`uv run python -m sitefloor.gaps` → `data/reports/gaps.md`（各類型樓層有無）、`missing_landmarks.csv`（有名稱、樓層未知的地標清單），每週更新也會跑。
 
 ## 建物風險資訊（第一期）

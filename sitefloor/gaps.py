@@ -60,7 +60,8 @@ def category(name, building, shop, amenity, leisure, aeroway, railway) -> str:
     return "其他／未分類"
 
 
-def main():
+def read_osm_tags() -> pd.DataFrame:
+    """OSM 建物的分類用標籤：uid, name, building, wikidata, wikipedia, cat（建物類型）。tiers.py 也用。"""
     d = pyogrio.read_dataframe(
         PBF, layer="multipolygons", read_geometry=False,
         columns=["osm_id", "osm_way_id", "name", "building", "leisure", "amenity", "shop", "other_tags"],
@@ -68,10 +69,16 @@ def main():
     )
     d["uid"] = "osm:" + d.osm_way_id.fillna("r" + d.osm_id.astype(str)).astype(str)
     tags = d.other_tags.fillna("")
-    d["aeroway"], d["railway"], d["wikidata"] = _tag(tags, "aeroway"), _tag(tags, "railway"), _tag(tags, "wikidata")
+    d["aeroway"], d["railway"] = _tag(tags, "aeroway"), _tag(tags, "railway")
+    d["wikidata"], d["wikipedia"] = _tag(tags, "wikidata"), _tag(tags, "wikipedia")
+    d["cat"] = [category(*x) for x in zip(d.name, d.building, d.shop, d.amenity, d.leisure, d.aeroway, d.railway)]
+    return d[["uid", "name", "building", "wikidata", "wikipedia", "cat"]].drop_duplicates("uid")
+
+
+def main():
+    d = read_osm_tags()
     ob = connect().execute("SELECT uid, coalesce(curated_floors, trade_floors, permit_floors, levels) AS floors FROM osm_buildings").df()
     d = d.merge(ob, on="uid", how="inner")  # osm.py 收的建物（已排除地下構造）
-    d["cat"] = [category(*x) for x in zip(d.name, d.building, d.shop, d.amenity, d.leisure, d.aeroway, d.railway)]
     d["known"] = d.floors.notna()
 
     r = d.groupby("cat").agg(總數=("uid", "size"), 有樓層=("known", "sum"),

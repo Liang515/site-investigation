@@ -3,6 +3,7 @@
 - 有新版就自動下載並重建：實價登錄（本期、新的季檔）、臺北市實價週報、OpenStreetMap、使用執照。
 - 只偵測、不自動重建（要手動處理，報告裡會列出）：各縣市門牌點位、臺中／臺北建物圖。
 - 異動報告：比對更新前後的實價樓層、使照、OSM 建物、涵蓋率 → data/reports/<日期>.md
+- 每週都跑正確性檢查（audit.py：第 1 級、每月第一週加第 2 級、第 3／4 級依縣市輪流）→ data/reports/audit_queue.csv
 - 不會自動部署：看過報告後自己跑 `vercel deploy --prod --yes`。
 
 用法：
@@ -26,6 +27,7 @@ from pathlib import Path
 
 import certifi
 import duckdb
+import pandas as pd
 
 from sitefloor.db import connect
 
@@ -88,13 +90,13 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "export",
-            "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）
+PIPELINE = ["trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "tiers", "export",
+            "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）；tiers 用到 osm、trades、permits
 NEEDS = {
-    "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "export", "smoke"},
-    "curated": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
-    "osm": {"curated", "osm", "coverage", "gaps", "export", "smoke"},
-    "permits": {"permits", "osm", "coverage", "gaps", "export", "smoke"},
+    "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "export", "smoke"},
+    "curated": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
+    "osm": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
+    "permits": {"permits", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
 }
 
 
@@ -303,8 +305,21 @@ def diff_report(con) -> tuple[list[str], int]:
 
 
 # ── 執行 ──
+def run_audit(log: list[str]) -> str:
+    """每週都跑正確性檢查（範圍依日期與縣市輪流，見 audit.py），回傳推播用的一行摘要。"""
+    try:
+        run_step("audit", log)
+        q = pd.read_csv(REPORT_DIR / "audit_queue.csv", usecols=["tier", "severity"])
+    except (RuntimeError, OSError, ValueError) as e:  # 檢查失敗不影響資料更新本身
+        return f"正確性檢查失敗：{e}"
+    n = q.tier.value_counts()
+    return (f"待查：第 1 級 {n.get(1, 0):,} 棟、第 2 級 {n.get(2, 0):,} 棟、輪流縣市 {n.get(3, 0) + n.get(4, 0):,} 棟"
+            "（data/reports/audit_queue.csv）")
+
+
 def run_step(step: str, log: list[str]):
-    args = {"trades": ["sitefloor.trades", "plvr", "taipei_weekly"]}.get(step, [f"sitefloor.{step}"])
+    args = {"trades": ["sitefloor.trades", "plvr", "taipei_weekly"],
+            "audit": ["sitefloor.audit", "--scope", "auto"]}.get(step, [f"sitefloor.{step}"])
     r = subprocess.run([sys.executable, "-m", *args], cwd=ROOT, capture_output=True, text=True, check=False)
     out = "\n".join(line for line in (r.stdout + r.stderr).splitlines() if "%▕" not in line and "Warning" not in line)
     log.append(f"### {step}\n```\n{out.strip()[-3000:]}\n```")
@@ -391,7 +406,9 @@ def main(argv: list[str]):
         print("第一次執行：已記錄各來源目前的版本，之後有新版才會更新")
         return
     if not steps:
-        notify("建物查詢平台", "本週沒有新資料" + (f"；{len(manual)} 項要手動更新" if manual else ""))
+        audit_line = run_audit([])
+        notify("建物查詢平台", "本週沒有新資料" + (f"；{len(manual)} 項要手動更新" if manual else "")
+               + f"\n{audit_line}")
         if manual:
             report.write_text(
                 f"# {today} 資料更新\n\n沒有可自動更新的新資料。\n\n## 要手動更新\n"
@@ -408,6 +425,7 @@ def main(argv: list[str]):
             print(f"[{s}]")
             run_step(s, log)
         lines, n_changed = diff_report(connect())
+        audit_line = run_audit(log)
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         STATE_FILE.write_text(json.dumps(saved, ensure_ascii=False, indent=1))
         body = [
@@ -438,6 +456,7 @@ def main(argv: list[str]):
         summary = [f"{n_changed:,} 個門牌異動", *notes[:4], *cov]
         if manual:
             summary.append(f"另有 {len(manual)} 項要手動更新")
+        summary.append(audit_line)
         summary.append(f"報告：data/reports/{today}.md；確認後執行 vercel deploy --prod --yes")
         notify("建物查詢平台：資料已更新", "\n".join(summary))
     except Exception as e:
