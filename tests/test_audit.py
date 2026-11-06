@@ -81,3 +81,11 @@ def test_resolve_overlaps_invalid_geometry():
     city, _ = resolve_overlaps([("osm:x", 5, None, None, _sq(1.5e-4, 1.5e-4, 30))],
                                [("tc:1", 3, "臺中市建物圖", bowtie)], set(), set(), "臺北市建照")
     assert isinstance(city, list)
+
+
+def test_unknown_osm_covered_by_many_small_outlines():
+    # 樓層未知的 OSM 大外框被四個建物圖小外框蓋滿：不畫 OSM
+    smalls = [("tc:%d" % k, 5, "臺中市建物圖", _sq(x, y, 14)) for k, (x, y) in
+              enumerate([(-7e-5, -7e-5), (7e-5, -7e-5), (-7e-5, 7e-5), (7e-5, 7e-5)])]
+    city, drop = resolve_overlaps([("osm:big", None, None, None, _sq(0, 0, 30))], smalls, set(), set(), "臺北市建照")
+    assert drop == {0} and len(city) == 4
