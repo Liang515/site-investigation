@@ -1,6 +1,6 @@
 # 把每週更新搬到 Mac mini
 
-更新排程要在常開機的電腦上跑。Mac mini 需要：程式（GitHub）、資料（`data/`，約 3.7 GB，不在 GitHub）、Vercel 部署權限、推播設定（在 `data/state/notify.json`，跟著資料一起搬）。
+更新排程要在常開機的電腦上跑。Mac mini 需要：程式（GitHub）、資料（`data/`，約 3.7 GB，不在 GitHub）、Vercel 部署權限、推播設定（在 `data/state/notify.json`，跟著資料一起搬）、查詢熱度的連線設定（`.env.local`，第 4 步用 `vercel env pull` 取得）。
 
 ## 1. 安裝工具（Mac mini 上）
 
@@ -34,6 +34,7 @@ rsync -a --progress ~/Documents/site-investigation/data/ <Mac mini 使用者名�
 cd ~/Documents/site-investigation
 vercel login
 vercel link --yes --project site-investigation
+vercel env pull .env.local   # 查詢熱度（Upstash）的連線設定，每週更新拉回計數用；不進版控
 ```
 
 ## 5. 測試（Mac mini 上）
