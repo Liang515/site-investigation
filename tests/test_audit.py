@@ -16,6 +16,10 @@ def codes(r, overlap=None):
 def test_floors_conflict_and_ratio():
     r = {"uid": "osm:1", "tier": 1, "floors": 25, "f_osm": 25, "f_city": 17, "osm_height": 12}
     assert codes(r) == ["floors_conflict", "height_ratio"]
+    # 顯示的樓層有實價支持，只有 OSM 不同：OSM 標錯
+    assert codes({"uid": "osm:7", "tier": 1, "floors": 18, "f_trade": 18, "f_osm": 1}) == ["osm_mislabel"]
+    # 顯示使照 1 層、OSM 7 層：要查
+    assert codes({"uid": "osm:8", "tier": 1, "floors": 1, "f_permit": 1, "f_osm": 7}) == ["floors_conflict"]
     assert codes({"uid": "osm:2", "tier": 3, "floors": 7, "f_trade": 7, "f_osm": 8}) == []  # 差一層不算
 
 

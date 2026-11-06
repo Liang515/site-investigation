@@ -1,8 +1,10 @@
 """正確性檢查：依 building_tiers 的級別挑建物，比對各資料來源，列出疑似有錯、需要查證的建物。
 
 檢查項目（代碼：嚴重度 3 高 / 2 中 / 1 低）：
-- overlap_drawn（3）：地圖上和另一個樓層不同的立體大面積重疊（同一棟被畫成兩種高度）
-- floors_conflict（2；差 5 層以上為 3）：實價、使照、OSM、市府建物圖的樓層任兩個差 2 層以上
+- overlap_drawn（3）：地圖上和另一個樓層不同的立體大面積重疊（同一棟被畫成兩種高度）；
+  較小的外框比較高的不算（裙樓上的塔樓）
+- floors_conflict（2）：網站顯示的樓層和其他來源差 2 層以上（例：顯示使照 1 層、OSM 7 層）
+- osm_mislabel（1）：顯示的樓層有實價支持，只有 OSM 或建物圖不同（網站沒錯，OSM 標錯）
 - floors_unknown（2）：第 1、2 級卻查不到樓層
 - year_suspect（2）：使照或建照年比棟內實價的建築完成年晚 YEAR_GAP 年以上（後來改建、增建的執照被當成興建年）
 - height_ratio（1）：OSM 高度 ÷ 樓層 不在 RATIO_MIN–RATIO_MAX 公尺（樓層或高度有一個錯）
@@ -30,14 +32,14 @@ import shapely
 from sitefloor.db import connect
 from sitefloor.lookup import TP_PERMIT_SOURCE
 from sitefloor.models import MODELS
-from sitefloor.render import _inter_area, resolve_overlaps
+from sitefloor.render import TOWER_MAX_SHARE, _inter_area, resolve_overlaps
 
 ROOT = Path(__file__).resolve().parent.parent
 REPORT_DIR = ROOT / "data" / "reports"
 ROTATION_FILE = ROOT / "data" / "state" / "audit_rotation.json"
 POPULARITY_FILE = ROOT / "data" / "state" / "popularity.json"
 SEVERITY = {"overlap_drawn": 3, "floors_conflict": 2, "floors_unknown": 2, "year_suspect": 2,
-            "height_ratio": 1, "permit_small": 1, "stale_check": 1}
+            "height_ratio": 1, "permit_small": 1, "stale_check": 1, "osm_mislabel": 1}
 CONFLICT_GAP, CONFLICT_HIGH = 2, 5
 YEAR_GAP = 5
 RATIO_MIN, RATIO_MAX = 2.5, 7.0
@@ -160,6 +162,10 @@ def overlaps(con, targets: set[str]) -> dict[str, str]:
             v, f2, h = drawn[j]
             if f2 == f:  # 樓層一樣，畫出來看起來是同一棟（例：建物圖本身重複的外框），不列
                 continue
+            small, big = ((g, f), (h, f2)) if g.area <= h.area else ((h, f2), (g, f))
+            if (small[0].area < TOWER_MAX_SHARE * big[0].area and small[1] is not None
+                    and (big[1] is None or small[1] > big[1])):
+                continue  # 較小的外框比較高：裙樓上的塔樓，畫出來是對的
             if h.area and _inter_area(g, h) / min(g.area, h.area) >= OVERLAP_SHARE:
                 out[u] = v
                 break
@@ -184,8 +190,14 @@ def check(r: dict, today: dt.date, overlap_with: str | None) -> list[tuple[str, 
     vals = {k: int(v) for k, v in vals.items() if v is not None and not pd.isna(v)}
     if len(vals) >= 2 and max(vals.values()) - min(vals.values()) >= CONFLICT_GAP:
         gap = max(vals.values()) - min(vals.values())
-        issues.append(("floors_conflict", "、".join(f"{k} {v}" for k, v in vals.items())
-                       + ("（差很多）" if gap >= CONFLICT_HIGH else "")))
+        text = "、".join(f"{k} {v}" for k, v in vals.items()) + ("（差很多）" if gap >= CONFLICT_HIGH else "")
+        shown = r.get("floors")
+        # 顯示的樓層有實價支持、只有 OSM 或建物圖不同：網站顯示沒錯，只是 OSM 標錯
+        others = [v for k, v in vals.items() if k not in ("OSM", "建物圖")]
+        if shown is not None and vals.get("實價") == shown and all(v == shown for v in others):
+            issues.append(("osm_mislabel", text))
+        else:
+            issues.append(("floors_conflict", text))
     if tier in (1, 2) and r.get("floors") is None and r.get("uid") not in MODELS:
         issues.append(("floors_unknown", "查不到樓層"))
     py, ty = r.get("permit_year") or r.get("city_year"), r.get("trade_year")

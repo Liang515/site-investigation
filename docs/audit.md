@@ -25,7 +25,8 @@
 | 代碼 | 意思 |
 |---|---|
 | overlap_drawn | 地圖上同一個位置畫了兩個立體 |
-| floors_conflict | 實價、使照、OSM、市府建物圖的樓層差 2 層以上 |
+| floors_conflict | 網站顯示的樓層和其他來源差 2 層以上 |
+| osm_mislabel | 顯示的樓層有實價支持，只有 OSM 標的不同（網站沒錯，優先度低） |
 | floors_unknown | 第 1、2 級查不到樓層 |
 | year_suspect | 執照年比實價的建築完成年晚 5 年以上（可能是改建、增建的執照） |
 | height_ratio | OSM 高度 ÷ 樓層 不合理 |
