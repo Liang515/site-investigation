@@ -21,3 +21,9 @@ def test_tier2_to_4():
     assert assign_tier({"name": "某某大樓", "floors": 5})[0] == 3
     assert assign_tier({"floors": 9})[0] == 3
     assert assign_tier({"floors": 4, "cat": "住宅"}) == (4, [])
+
+
+def test_priority_places():
+    assert assign_tier({"name": "某某大飯店", "cat": "飯店"}) == (1, ["有名稱的飯店"])
+    assert assign_tier({"name": "某某博物館", "cat": "博物館／美術館"})[0] == 1
+    assert assign_tier({"cat": "電影院"}) == (2, ["電影院"])  # 沒名稱的照第 2 級

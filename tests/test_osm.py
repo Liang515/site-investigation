@@ -34,3 +34,14 @@ def test_underground():
         '"building:levels"=>"5"',
     ])
     assert underground(tags).tolist() == [True, True, False, False]
+
+
+def test_priority_categories():
+    from sitefloor.gaps import category
+    assert category("台北福華大飯店", "commercial", None, None, None, None, None) == "飯店"
+    assert category("某某", "yes", None, None, None, None, None, "hotel") == "飯店"
+    assert category("劍湖山世界樂園", "yes", None, None, None, None, None) == "樂園"
+    assert category("威秀影城", "yes", None, None, None, None, None) == "電影院"
+    assert category("南港展覽館", "yes", None, None, None, None, None) == "展覽館"
+    assert category("國立故宮博物院", "yes", None, None, None, None, None) == "博物館／美術館"
+    assert category("台大醫院", "hospital", None, None, None, None, None) == "醫院"

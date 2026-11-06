@@ -20,20 +20,36 @@ from sitefloor.db import connect
 ROOT = Path(__file__).resolve().parent.parent
 PBF = ROOT / "data" / "raw" / "osm" / "taiwan-latest.osm.pbf"
 REPORT_DIR = ROOT / "data" / "reports"
-LANDMARK_CATS = ["百貨／購物中心", "量販／賣場", "運動場館", "交通（車站／航廈）", "醫院", "公家機關"]
+LANDMARK_CATS = ["百貨／購物中心", "飯店", "樂園", "電影院", "展覽館", "博物館／美術館", "量販／賣場", "運動場館",
+                 "交通（車站／航廈）", "醫院", "公家機關"]
 
 MALL_NAME = re.compile("百貨|購物|商場|廣場|outlet|Outlet|三越|SOGO|遠百|微風|京站|環球|大魯閣|高島屋")
 STORE_NAME = re.compile("家樂福|好市多|Costco|COSTCO|大潤發|IKEA|宜家|愛買|特力屋|全聯")
+HOTEL_NAME = re.compile("飯店|酒店|[Hh]otel|HOTEL")
+PARK_NAME = re.compile("樂園|遊樂園|主題園區")
+CINEMA_NAME = re.compile("影城|電影院|戲院|[Cc]inema")
+EXPO_NAME = re.compile("展覽館|展覽中心|會展中心|世貿|國際會議中心")
+MUSEUM_NAME = re.compile("博物館|博物院|美術館|紀念館|科學館|藝術館")
 
 
 def _tag(tags: pd.Series, k: str) -> pd.Series:
     return tags.str.extract(r'"' + re.escape(k) + r'"=>"([^"]*)"')[0]
 
 
-def category(name, building, shop, amenity, leisure, aeroway, railway) -> str:
-    b, s, a, n = str(building), str(shop), str(amenity), str(name or "")
+def category(name, building, shop, amenity, leisure, aeroway, railway, tourism=None) -> str:
+    b, s, a, n, t = str(building), str(shop), str(amenity), str(name or ""), str(tourism)
     if s in ("mall", "department_store") or (b == "retail" and MALL_NAME.search(n)):
         return "百貨／購物中心"
+    if b == "hotel" or t == "hotel" or HOTEL_NAME.search(n):
+        return "飯店"
+    if t == "theme_park" or str(leisure) == "water_park" or PARK_NAME.search(n):
+        return "樂園"
+    if a == "cinema" or CINEMA_NAME.search(n):
+        return "電影院"
+    if a in ("exhibition_centre", "conference_centre") or EXPO_NAME.search(n):
+        return "展覽館"
+    if b == "museum" or t in ("museum", "gallery") or MUSEUM_NAME.search(n):
+        return "博物館／美術館"
     if s in ("supermarket", "wholesale", "doityourself", "furniture", "hardware") or STORE_NAME.search(n):
         return "量販／賣場"
     if b in ("retail", "commercial", "supermarket", "kiosk") or s not in ("None", "nan"):
@@ -69,9 +85,10 @@ def read_osm_tags() -> pd.DataFrame:
     )
     d["uid"] = "osm:" + d.osm_way_id.fillna("r" + d.osm_id.astype(str)).astype(str)
     tags = d.other_tags.fillna("")
-    d["aeroway"], d["railway"] = _tag(tags, "aeroway"), _tag(tags, "railway")
+    d["aeroway"], d["railway"], d["tourism"] = _tag(tags, "aeroway"), _tag(tags, "railway"), _tag(tags, "tourism")
     d["wikidata"], d["wikipedia"] = _tag(tags, "wikidata"), _tag(tags, "wikipedia")
-    d["cat"] = [category(*x) for x in zip(d.name, d.building, d.shop, d.amenity, d.leisure, d.aeroway, d.railway)]
+    d["cat"] = [category(*x) for x in zip(d.name, d.building, d.shop, d.amenity, d.leisure, d.aeroway, d.railway,
+                                          d.tourism)]
     return d[["uid", "name", "building", "wikidata", "wikipedia", "cat"]].drop_duplicates("uid")
 
 
