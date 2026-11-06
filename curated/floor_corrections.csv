@@ -69,3 +69,7 @@ county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,che
 ,,,osm:782869361,5,1,,,https://zh.wikipedia.org/wiki/衛生福利部臺東醫院成功分院,部立臺東醫院成功分院,2026-11-05
 臺北市,萬華區,峨眉街83號,,7,1,,,https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D&sms=78D644F2755ACCAA&s=28FECD2BF7A73C78,峨嵋立體停車場（地下 1 層、地上 7 層；臺北市停車管理工程處委外公告）,2026-11-06
 ,,,osm:1052759757,4,,,1980,https://zh.wikipedia.org/wiki/中正紀念堂,中正紀念堂（1980 年 3 月完工；四樓大廳；臺北市建照套繪圖的 2005 年是後來的建照）,2026-11-06
+,,,osm:64566862,8,5,,2003,臺北市使用執照 092使字第0168號,台北101購物中心（OSM 分棟；與塔樓同基地、分開領使照，塔樓 093使字第0353號 101 層）,2026-11-06
+,,,osm:r206817,5,,,1919,https://www.president.gov.tw/qrcode/03e,總統府（日字形主體 5 層；中央塔 11 層、60 m）,2026-11-06
+臺北市,中正區,重慶南路一段122號,,5,,,1919,https://www.president.gov.tw/qrcode/03e,總統府（門牌點落在東側車廳，不在主體外框內）,2026-11-06
+,,,osm:142113976,12,2,,1994,https://en.wikipedia.org/wiki/Taipei_City_Hall,臺北市政府市政大樓（市府路1號的 2022 年使照是 321 m² 一層風雨走廊）,2026-11-06

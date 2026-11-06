@@ -29,7 +29,7 @@ PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
 TOWER_MARGIN = 2  # OSM 建物比臺北建照外框高出這麼多層以上，視為裙樓上的塔樓
 CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
-app = FastAPI(title="地址樓層查詢")
+app = FastAPI(title="台灣建物查詢")
 
 # ── 查詢次數限制（公開部署時避免被大量抓取）：每個 IP 在時間窗內的次數上限 ──
 RATE_LIMITS = {  # 路徑前綴：(次數, 秒)；依序比對，越特定的放越前面
@@ -142,7 +142,7 @@ async def api_feedback(request: Request):
             print("[feedback] GitHub Issue 建立失敗：", e)
     if cfg["ntfy_topic"]:
         try:
-            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "地址樓層查詢：樓層回報",
+            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "台灣建物查詢：樓層回報",
                                             "message": msg, "tags": ["memo"]})
             sent += 1
         except OSError as e:
@@ -270,17 +270,23 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                 "SELECT uid, parent_uid, levels, min_level, height, min_height, wkb FROM osm_parts "
                 "WHERE list_contains(?, parent_uid)", [uids]).fetchall():
             if uid not in REPLACED_PARTS:
-                parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w)))
+                parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w), uid))
+    # 分棟的人工校正（例：台北101購物中心 使照 8 層）：分棟用自己的編號，點了顯示分棟自己的樓層
+    part_fix = dict(_cur().execute(
+        "SELECT osm_uid, floors_above FROM corrections WHERE list_contains(?, osm_uid)",
+        [[p[5] for ps in parts.values() for p in ps]]).fetchall()) if parts else {}
     for i, (u, f, h, name, g) in enumerate(osm):
         if i in drop_osm:
             continue
-        for lv, mlv, ph, mh, pg in parts.get(u, []):
-            base, top = part_extent(lv, mlv, ph, mh, f)
-            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(pg)), uid=u, floors=lv or f,
+        for lv, mlv, ph, mh, pg, pu in parts.get(u, []):
+            lv = part_fix.get(pu, lv)
+            base, top = part_extent(lv, mlv, None if pu in part_fix else ph, mh, f)
+            feats.append(_feature(len(feats), json.loads(shapely.to_geojson(pg)), uid=pu, floors=lv or f,
                                   h=top, base=base, name=name, src="osm_part"))
         if u in MODELS:
             for ring, z0, z1 in MODELS[u]():
-                feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": [ring]}, uid=u, floors=f,
+                coords = ring if isinstance(ring[0][0], list) else [ring]  # 有中庭：[外圈, 中庭…]
+                feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": coords}, uid=u, floors=f,
                                       h=z1, base=z0, name=name, src="model"))
             continue
         if parts.get(u):
@@ -395,12 +401,36 @@ def _floors_from_doors(full_addrs: list[str]) -> dict | None:
             "note": f"這棟建物本身沒有樓層資料，改用棟內門牌查詢（{n}/{len(full_addrs)} 個門牌）"}
 
 
+def _osm_part(uid: str) -> dict:
+    """OSM 分棟（building:part，例：台北101購物中心）：樓層用分棟自己的（人工校正優先），門牌與風險資訊用所在建物的。"""
+    cur = _cur()
+    r = cur.execute("SELECT parent_uid, levels FROM osm_parts WHERE uid = ?", [uid]).fetchone()
+    if not r:
+        raise HTTPException(404)
+    parent, levels = r
+    out = _osm_building(parent)
+    fix = cur.execute("SELECT floors_above, floors_below, year, source, note FROM corrections WHERE osm_uid = ?",
+                      [uid]).fetchone()
+    pname = out.get("name") or ""
+    if fix:
+        out.update(floors_above=fix[0], floors_below=fix[1], year=fix[2],
+                   year_kind="竣工年（人工校正）" if fix[2] is not None else None, source="人工校正",
+                   note="；".join(x for x in (fix[4], fix[3]) if x))
+    else:
+        out.update(floors_above=levels, floors_below=None, year=None, year_kind=None, source="OpenStreetMap 分棟",
+                   note=f"{pname}的分棟（OSM building:part）；整棟資料請點主體")
+    out.update(uid=uid, parent_uid=parent)
+    return out
+
+
 def _osm_building(uid: str) -> dict:
     cur = _cur()
     r = cur.execute("""SELECT uid, name, building, levels, trade_floors, height,
                        (minlon + maxlon) / 2, (minlat + maxlat) / 2, curated_floors, permit_floors
                        FROM osm_buildings WHERE uid = ?""", [uid]).fetchone()
     if not r:
+        if cur.execute("SELECT count(*) FROM osm_parts WHERE uid = ?", [uid]).fetchone()[0]:
+            return _osm_part(uid)
         raise HTTPException(404)
     u, name, _btype, levels, tf, h, lon, lat, cf, pf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()

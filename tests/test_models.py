@@ -5,6 +5,7 @@ from sitefloor.models import (
     cks_hall,
     national_concert_hall,
     national_theater,
+    presidential_office,
     taipei101,
 )
 from sitefloor.render import part_extent
@@ -40,3 +41,16 @@ def test_cks_and_ntch_models():
     # 廡殿頂（戲劇院）屋頂最上層比歇山頂（音樂廳）短
     assert _span(theater[-1][0])[0] < _span(concert[-1][0])[0]
     assert {"osm:1052759757", "osm:1052759776", "osm:1052759775"} <= MODELS.keys()
+
+
+def test_presidential_office_has_courtyards():
+    segs = presidential_office()
+    body = segs[0][0]
+    assert len(body) == 3 and all(r[0] == r[-1] for r in body)  # 外圈＋兩個中庭（日字形）
+    assert max(z1 for _, _, z1 in segs) == 60  # 中央塔 60 m
+
+    def signed(ring):  # 中庭和外圈要反方向繞，MapLibre 才當成洞
+        return sum(a[0] * b[1] - b[0] * a[1] for a, b in pairwise(ring))
+
+    assert all(signed(body[0]) * signed(h) < 0 for h in body[1:])
+    assert "osm:r206817" in MODELS

@@ -6,7 +6,7 @@
 <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<title>地址樓層查詢</title>
+<title>台灣建物查詢</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.css">
 <style>
   :root {
@@ -44,6 +44,7 @@
   .risk h3 { font-size: 14px; margin: 0; }
   .risk h4 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 10px 0 0; }
   .risk dl { margin-top: 4px; }
+  .ufl { font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
   .rz { color: var(--lo); font-weight: 600; } .rn { color: var(--muted); } .rx { color: var(--muted); opacity: .7; }
   .hzl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; font-size: 14px; }
   .hzl label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -130,8 +131,8 @@
 <div id="app">
   <aside>
     <div>
-      <h1 class="brand"><img src="/logo.png" alt="" width="28" height="28">地址樓層查詢</h1>
-      <div class="sub">非官方查詢工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
+      <h1 class="brand"><img src="/logo.png" alt="" width="28" height="28">台灣建物查詢</h1>
+      <div class="sub">查門牌的樓層、構造、年份與災害潛勢<br>非官方工具，結果僅供參考 · <a href="/about">資料來源與授權</a></div>
     </div>
 
     <section>
@@ -522,7 +523,7 @@ function riskHtml(r) {
       <dt>樓層</dt><dd>${r.floors_above != null ? `地上 ${esc(r.floors_above)} 層` : "—"}${r.floors_below != null ? `、地下 ${esc(r.floors_below)} 層` : ""}</dd>
       <dt>屋齡</dt><dd>${age}${r.year_kind === "建照年" ? `<br><small class="rx">臺北市建照套繪圖只收民國 90 年後的建照；舊建物改建、增建也會領新建照，不一定是興建年</small>` : ""}</dd></dl>
     <h4>使用性質</h4><dl>
-      <dt>主要用途</dt><dd>${v(r.usage)}</dd>
+      <dt>主要用途</dt><dd>${v(r.usage)}${r.usage_source ? ` <small class="rx">（${esc(r.usage_source)}）</small>` : ""}${r.usage_floors ? `<div class="ufl">${r.usage_floors.split("；").map(x => `<div>${esc(x)}</div>`).join("")}</div>` : ""}</dd>
       <dt>使用分區</dt><dd>${v(r.zoning)}</dd>
       <dt>建物型態</dt><dd>${v(r.btype)}</dd></dl>
     <h4>安全防護</h4><dl>

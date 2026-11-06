@@ -1,6 +1,7 @@
 """地標手工立體模型：OSM 只有平面外框的地標，用多段疊起來的方塊畫出外型（取代該外框的單一方柱）。
 
 每個模型是一串 (外框, 底部高度 m, 頂部高度 m)，地圖用 fill-extrusion 的 base／height 疊起來。
+外框是一圈座標；有中庭時是 [外圈, 中庭, …]（例：總統府日字形）。
 模型用真實高度（公尺），不套「樓層×3.2m」。
 """
 
@@ -107,8 +108,24 @@ def national_concert_hall() -> list[tuple[list[list[float]], float, float]]:
     return _palace(121.519237, 25.037031, hip=False)
 
 
-# 模型已經畫進去的 OSM 分棟，地圖不另外畫（中正紀念堂銅像大廳＝堂身）
-REPLACED_PARTS = {"osm:1052759759"}
+def presidential_office() -> list[tuple[list, float, float]]:
+    """總統府（1919 年完工，坐西朝東）：日字形 5 層，中央塔 11 層、高 60 m（總統府網站、維基）。
+    外框依 OSM（132×92 m，南北長；兩個中庭各約 42×34 m），轉 -6 度；主體 5 層估 22 m（日治時期樓高約 4.4 m）。
+    中央塔在東側正面中間；塔身各段寬度依照片比例估計。"""
+    lon, lat, deg = 121.511975, 25.039992, -6
+    body = [_local(lon, lat, deg, pts) for pts in (
+        [(-45, -66), (47, -66), (47, 66), (-45, 66)],  # 外圈
+        [(-20, -46), (-20, -12), (22, -12), (22, -46)],  # 南中庭（中庭要和外圈反方向繞，MapLibre 才當成洞）
+        [(-20, 13), (-20, 46), (22, 46), (22, 13)],  # 北中庭
+    )]
+    segs: list[tuple[list, float, float]] = [(body, 0, 22)]
+    tower = [(22, 36, 18), (36, 48, 14), (48, 55, 10), *_taper(55, 60, 6, 2, 2)]
+    segs += [(_local(lon, lat, deg, _rect(w, w, 38)), z0, z1) for z0, z1, w in tower]
+    return segs
+
+
+# 模型已經畫進去的 OSM 分棟，地圖不另外畫（中正紀念堂銅像大廳＝堂身；總統府主體）
+REPLACED_PARTS = {"osm:1052759759", "osm:r19378990"}  # 總統府主體 5 層
 
 # OSM 建物 uid → 模型
 MODELS = {
@@ -116,4 +133,5 @@ MODELS = {
     "osm:1052759757": cks_hall,
     "osm:1052759776": national_theater,
     "osm:1052759775": national_concert_hall,
+    "osm:r206817": presidential_office,
 }
