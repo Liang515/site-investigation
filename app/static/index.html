@@ -129,13 +129,12 @@
     #pickBox, #typeBox { order: 5; padding: 0 16px; }
     aside > section:not(:first-of-type) { order: 6; padding-top: 24px; }
     aside > section:last-of-type { padding-bottom: 24px; }
-    .tiles { max-height: none; overflow: visible; }  /* 不要在整頁捲動裡再包一層捲動 */
     .crumbs button { padding: 6px 12px; }
     .desk-only { display: none; }
     .mob-only { display: inline !important; }
     .card .again { display: block !important; }
     input[type=text], #pickFilter, .fbform input { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
-    .tiles { max-height: 230px; }
+    .tiles { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }  /* 超過就在框內捲動，不能溢出蓋到下面的區塊 */
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
 </style>
