@@ -106,6 +106,29 @@ def read_parts(b: gpd.GeoDataFrame) -> pd.DataFrame:
 NO_TRADE_FLOORS = ("roof", "carport", "parking", "stadium", "construction", "ruins", "bridge")
 
 
+SMALL_PERMIT = 0.25  # 使照建築面積不到 OSM 外框面積的這個比例 → 使照講的是附屬小建物
+
+
+def mark_small_permits(con, b: gpd.GeoDataFrame):
+    """permits.small：使照的建築面積遠小於門牌所在的 OSM 建物、而且樓層和這棟對不上（例：臺北市政府市府路1號的
+    2022 年使照是 321 m² 的一層風雨走廊，OSM 標 12 層；市政大樓 1994 年的使照不在開放資料裡）。
+    這種使照的樓層、年份、構造、用途都不套用到這個門牌。樓層對得上的照用（例：OSM 一個外框圈了整個社區）。"""
+    if not con.execute("SELECT count(*) FROM information_schema.columns "
+                       "WHERE table_name = 'permits' AND column_name = 'small'").fetchall()[0][0]:
+        return
+    area = pd.DataFrame({"osm_uid": b.uid, "osm_area": b.geometry.to_crs(3826).area,
+                         "osm_floors": b.trade_floors.fillna(b.levels)})
+    con.register("area", area)
+    con.execute("""
+        UPDATE permits p SET small = (p.bldg_area < ? * a.osm_area AND p.floors_above IS DISTINCT FROM a.osm_floors)
+        FROM door_osm o JOIN area a USING (osm_uid)
+        WHERE p.county = o.county AND p.town = o.town AND p.base = o.base AND p.bldg_area IS NOT NULL""",
+                [SMALL_PERMIT])
+    con.unregister("area")
+    n = con.execute("SELECT count(*) FROM permits WHERE small").fetchone()[0]
+    print(f"  使照建築面積不到 OSM 外框 {SMALL_PERMIT:.0%}（不套用）：{n:,} 門牌")
+
+
 def main():
     t = time.time()
     con = connect(write=True)
@@ -130,6 +153,7 @@ def main():
         QUALIFY row_number() OVER (PARTITION BY uid ORDER BY k DESC, floors DESC) = 1""").df()
     b = b.merge(tf, on="uid", how="left")
     b.loc[b.building.isin(NO_TRADE_FLOORS), "trade_floors"] = None
+    mark_small_permits(con, b)
     # 棟內門牌的使用執照樓層眾數（permits.py 要先跑；地圖上色和建物卡片用，和地址查詢的使照樓層一致）
     has_permits = con.execute(
         "SELECT count(*) FROM information_schema.tables WHERE table_name = 'permits'").fetchone()[0]
@@ -140,7 +164,7 @@ def main():
                 SELECT o.osm_uid AS uid, o.base, p.floors_above AS floors
                 FROM door_osm o JOIN permits p ON p.county = o.county AND p.town = o.town
                      AND p.base IN (o.base, regexp_replace(o.base, '之\\d+號$', '號'))
-                WHERE p.floors_above BETWEEN 1 AND 110
+                WHERE p.floors_above BETWEEN 1 AND 110 AND NOT p.small
                 QUALIFY row_number() OVER (PARTITION BY o.county, o.town, o.base
                                            ORDER BY (p.base = o.base) DESC, p.year DESC) = 1)
             GROUP BY ALL)
