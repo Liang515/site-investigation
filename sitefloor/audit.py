@@ -1,7 +1,7 @@
 """正確性檢查：依 building_tiers 的級別挑建物，比對各資料來源，列出疑似有錯、需要查證的建物。
 
 檢查項目（代碼：嚴重度 3 高 / 2 中 / 1 低）：
-- overlap_drawn（3）：地圖上和另一個立體大面積重疊（同一棟被畫兩次）
+- overlap_drawn（3）：地圖上和另一個樓層不同的立體大面積重疊（同一棟被畫成兩種高度）
 - floors_conflict（2；差 5 層以上為 3）：實價、使照、OSM、市府建物圖的樓層任兩個差 2 層以上
 - floors_unknown（2）：第 1、2 級卻查不到樓層
 - year_suspect（2）：使照或建照年比棟內實價的建築完成年晚 YEAR_GAP 年以上（後來改建、增建的執照被當成興建年）
@@ -147,17 +147,19 @@ def overlaps(con, targets: set[str]) -> dict[str, str]:
     trusted = {osm_rows[i][0] for i in near_o if osm_rows[i][5] or osm_rows[i][0] in MODELS}
     city, drop = resolve_overlaps(osm, [(city_rows[i][0], city_rows[i][1], city_rows[i][2], cg[i]) for i in near_c],
                                   set(MODELS), trusted, TP_PERMIT_SOURCE)
-    drawn = [(u, g) for k, (u, _, _, _, g) in enumerate(osm) if k not in drop and u not in MODELS] + \
-            [(u, g) for u, _, g in city]
-    tree = shapely.STRtree([g for _, g in drawn])
+    drawn = [(u, f, g) for k, (u, f, _, _, g) in enumerate(osm) if k not in drop and u not in MODELS] + \
+            [(u, f, g) for u, f, g in city]
+    tree = shapely.STRtree([g for _, _, g in drawn])
     out: dict[str, str] = {}
-    for i, (u, g) in enumerate(drawn):
+    for i, (u, f, g) in enumerate(drawn):
         if u not in targets or not g.area:
             continue
         for j in tree.query(g, predicate="intersects"):
             if j == i:
                 continue
-            v, h = drawn[j]
+            v, f2, h = drawn[j]
+            if f2 == f:  # 樓層一樣，畫出來看起來是同一棟（例：建物圖本身重複的外框），不列
+                continue
             if h.area and _inter_area(g, h) / min(g.area, h.area) >= OVERLAP_SHARE:
                 out[u] = v
                 break

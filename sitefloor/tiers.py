@@ -2,9 +2,9 @@
 
 | 級 | 條件（符合任一） |
 |---|---|
-| 1 地標／指標 | 有立體模型或在地標表；OSM 有 wikidata／wikipedia；TALL_FLOORS 層以上或 TALL_M 公尺以上；
+| 1 地標／指標 | 有立體模型或在地標表；OSM 有 wikidata／wikipedia 且為地標類別或 MID_FLOORS 層以上；TALL_FLOORS 層以上或 TALL_M 公尺以上；
 |               | 有名稱且 NAMED_FLOORS 層以上；實價單價在該縣市前 PRICE_TOP（PRICE_MIN_FLOORS 層以上、有 PRICE_MIN_TRADES 筆以上買賣） |
-| 2 公共與場館 | 公家機關、運動場館、醫院、交通、學校、百貨／購物中心（gaps.category） |
+| 2 公共與場館 | 公家機關、運動場館、醫院、交通、學校、百貨／購物中心（gaps.category）；其他有維基連結的 |
 | 3 有名稱或中高樓 | 其他有名稱的建物，或 MID_FLOORS 層以上 |
 | 4 一般 | 其他 |
 
@@ -33,6 +33,7 @@ NAMED_FLOORS = 15
 MID_FLOORS = 8
 PRICE_TOP, PRICE_MIN_TRADES, PRICE_MIN_FLOORS = 0.01, 3, 6  # 高單價只算大樓（店面單價高但不是指標）
 TIER2_CATS = {"公家機關", "運動場館", "醫院", "交通（車站／航廈）", "學校", "百貨／購物中心"}
+WIKI_CATS = TIER2_CATS - {"學校"}  # 有維基連結又是這些類別（或 MID_FLOORS 層以上）才算第 1 級；其他有維基的算第 2 級
 
 
 def assign_tier(r: dict) -> tuple[int, list[str]]:
@@ -40,7 +41,7 @@ def assign_tier(r: dict) -> tuple[int, list[str]]:
     why1 = [label for label, hit in (
         ("立體模型", r.get("model")),
         ("地標", r.get("landmark")),
-        ("維基", r.get("wiki")),
+        ("維基", r.get("wiki") and (r.get("cat") in WIKI_CATS or (r.get("floors") or 0) >= MID_FLOORS)),
         (f"{TALL_FLOORS} 層以上", (r.get("floors") or 0) >= TALL_FLOORS),
         (f"{TALL_M} m 以上", (r.get("height") or 0) >= TALL_M),
         (f"有名稱且 {NAMED_FLOORS} 層以上", bool(r.get("name")) and (r.get("floors") or 0) >= NAMED_FLOORS),
@@ -48,8 +49,8 @@ def assign_tier(r: dict) -> tuple[int, list[str]]:
     ) if hit]
     if why1:
         return 1, why1
-    if r.get("cat") in TIER2_CATS:
-        return 2, [r["cat"]]
+    if r.get("cat") in TIER2_CATS or r.get("wiki"):
+        return 2, [r["cat"] if r.get("cat") in TIER2_CATS else "維基"]
     why3 = [label for label, hit in (("有名稱", bool(r.get("name"))),
                                      (f"{MID_FLOORS} 層以上", (r.get("floors") or 0) >= MID_FLOORS)) if hit]
     if why3:
