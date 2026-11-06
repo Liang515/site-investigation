@@ -363,7 +363,7 @@ def main(argv: list[str]):
     if "--setup-notify" in argv:
         return setup_notify()
     if "--test-notify" in argv:
-        return notify("台灣建物查詢：測試", "收到這則就代表推播設定成功")
+        return notify("建物查詢平台：測試", "收到這則就代表推播設定成功")
     force, check_only = "--force" in argv, "--check" in argv
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     new, steps, notes, manual = check_sources(state, force)
@@ -391,7 +391,7 @@ def main(argv: list[str]):
         print("第一次執行：已記錄各來源目前的版本，之後有新版才會更新")
         return
     if not steps:
-        notify("台灣建物查詢", "本週沒有新資料" + (f"；{len(manual)} 項要手動更新" if manual else ""))
+        notify("建物查詢平台", "本週沒有新資料" + (f"；{len(manual)} 項要手動更新" if manual else ""))
         if manual:
             report.write_text(
                 f"# {today} 資料更新\n\n沒有可自動更新的新資料。\n\n## 要手動更新\n"
@@ -439,10 +439,10 @@ def main(argv: list[str]):
         if manual:
             summary.append(f"另有 {len(manual)} 項要手動更新")
         summary.append(f"報告：data/reports/{today}.md；確認後執行 vercel deploy --prod --yes")
-        notify("台灣建物查詢：資料已更新", "\n".join(summary))
+        notify("建物查詢平台：資料已更新", "\n".join(summary))
     except Exception as e:
         report.write_text(f"# {today} 資料更新失敗\n\n{e}\n\n```\n{traceback.format_exc()}\n```\n\n" + "\n".join(log))
-        notify("台灣建物查詢：更新失敗", f"{e}\n報告：data/reports/{today}.md", priority=4)
+        notify("建物查詢平台：更新失敗", f"{e}\n報告：data/reports/{today}.md", priority=4)
         raise
 
 

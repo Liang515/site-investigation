@@ -31,7 +31,7 @@ TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差�
 MINOR_PERMIT_FLOORS = 2  # 建照外框只有 1–2 層、OSM 同位置高很多：多半是舊大樓後來的增建小建照
 CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
-app = FastAPI(title="台灣建物查詢")
+app = FastAPI(title="建物查詢平台")
 
 # ── 查詢次數限制（公開部署時避免被大量抓取）：每個 IP 在時間窗內的次數上限 ──
 RATE_LIMITS = {  # 路徑前綴：(次數, 秒)；依序比對，越特定的放越前面
@@ -144,7 +144,7 @@ async def api_feedback(request: Request):
             print("[feedback] GitHub Issue 建立失敗：", e)
     if cfg["ntfy_topic"]:
         try:
-            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "台灣建物查詢：樓層回報",
+            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：樓層回報",
                                             "message": msg, "tags": ["memo"]})
             sent += 1
         except OSError as e:
