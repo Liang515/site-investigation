@@ -20,11 +20,13 @@ cd site-investigation && uv sync
 
 ## 3. 搬資料（在原本這台筆電上執行）
 
-先在 Mac mini 打開「系統設定 → 一般 → 共享 → 遠端登入」，再從筆電複製：
+先在 Mac mini 打開「系統設定 → 一般 → 共享 → 遠端登入」，再在筆電的專案資料夾執行：
 
 ```bash
-rsync -a --progress ~/Documents/site-investigation/data/ <Mac mini 使用者名稱>@<Mac mini 名稱>.local:~/Documents/site-investigation/data/
+git pull && zsh scripts/sync_data_to_mini.sh
 ```
+
+預設複製到 `liangchen@Mac-mini.local:~/site-investigation/data/`；位置不同時用 `MINI=使用者@名稱.local DEST=路徑/data/` 指定。
 
 或用隨身硬碟把整個 `data/` 資料夾複製到 Mac mini 的 `~/Documents/site-investigation/data/`。
 
