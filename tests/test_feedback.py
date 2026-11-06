@@ -92,3 +92,22 @@ def test_map_click_report_becomes_osm_row_and_keeps_height(tmp_path, monkeypatch
     df = curated.load()
     assert len(df) == 1 and int(df.floors_above.iloc[0]) == 7 and df.height_m.iloc[0] == 64  # 實際高度保留
     assert int(df.year.iloc[0]) == 2023  # 竣工年保留
+
+
+def test_other_kinds_need_detail_not_floors():
+    fb = feedback.validate({"address": "臺北市信義區松高路77號", "kind": "shape", "detail": "應該只有一棟塔樓"})
+    assert fb["kind"] == "shape" and fb["floors_above"] is None
+    issue = feedback.issue(fb)
+    assert issue["title"].startswith("建物形狀或立體圖錯誤") and "人工查證" in issue["body"]
+    assert feedback.parse_issue(issue["body"])["detail"] == "應該只有一棟塔樓"  # 審核指令讀得回來
+    with pytest.raises(ValueError):
+        feedback.validate({"address": "某地址", "kind": "shape"})  # 其他類型要說明
+    with pytest.raises(ValueError):
+        feedback.validate({"address": "某地址", "kind": "floors"})  # 樓層錯誤要填樓層
+    with pytest.raises(ValueError):
+        feedback.validate({"address": "某地址", "kind": "hack", "detail": "x" * 5})
+
+
+def test_old_reports_without_kind_are_floors():
+    fb = feedback.validate({"address": "某地址", "floors_above": "12"})
+    assert fb["kind"] == "floors" and "樓層錯誤" in feedback.summary(fb)

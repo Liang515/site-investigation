@@ -1,4 +1,5 @@
-"""樓層回報的格式：網站收到回報 → 開成私人 repo 的 GitHub Issue；審核指令（sitefloor.review）再讀回來。
+"""問題回報的格式：網站收到回報 → 開成私人 repo 的 GitHub Issue；審核指令（sitefloor.review）再讀回來。
+類型（kind）：樓層錯誤可由審核指令自動寫進校正表；其他類型（地址、形狀、年份…）只列出，人工處理。
 
 Issue 內文的使用者輸入全部放進程式碼區塊，避免 @提及、連結、Markdown 被解讀；
 另附一段 JSON 讓審核指令讀，不靠解析顯示用的文字。
@@ -9,6 +10,14 @@ import re
 
 MARKER = "sitefloor-feedback"
 APPROVE_LABEL = "採用"
+KINDS = {  # 回報類型 → 顯示名稱；舊回報沒有類型，當作樓層
+    "floors": "樓層錯誤",
+    "address": "地址或位置錯誤",
+    "shape": "建物形狀或立體圖錯誤",
+    "info": "年份、構造或用途錯誤",
+    "hazard": "災害潛勢或消防資訊錯誤",
+    "other": "其他問題",
+}
 
 
 def clean(x, n: int) -> str:
@@ -25,26 +34,47 @@ def building_uid(x) -> str:
     return x if _BUILDING_UID.fullmatch(x) else ""
 
 
-def validate(body: dict) -> dict:
-    """檢查回報內容；不合格丟 ValueError（訊息給使用者看）。"""
-    addr = clean(body.get("address"), 100)
+def _int(x) -> int | None:
+    x = str(x if x is not None else "").strip()
+    if not x:
+        return None
     try:
-        above = int(body.get("floors_above"))
-        below = int(body["floors_below"]) if str(body.get("floors_below") or "").strip() else None
-    except (TypeError, ValueError):
+        return int(x)
+    except ValueError:
         raise ValueError("樓層要填整數") from None
-    if not addr or not 1 <= above <= 110 or (below is not None and not 0 <= below <= 20):
-        raise ValueError("地址必填；地上樓層 1–110、地下樓層 0–20")
-    return {"address": addr, "floors_above": above, "floors_below": below,
+
+
+def validate(body: dict) -> dict:
+    """檢查回報內容；不合格丟 ValueError（訊息給使用者看）。
+    樓層錯誤：地上樓層必填；其他類型：說明必填，樓層可不填。"""
+    addr = clean(body.get("address"), 100)
+    kind = body.get("kind") or "floors"
+    if kind not in KINDS:
+        raise ValueError("問題類型不正確")
+    above, below = _int(body.get("floors_above")), _int(body.get("floors_below"))
+    detail = clean(body.get("detail"), 500)
+    if not addr:
+        raise ValueError("地址必填")
+    if kind == "floors" and above is None:
+        raise ValueError("請填地上樓層")
+    if kind != "floors" and len(detail) < 2:
+        raise ValueError("請簡單說明是什麼問題")
+    if (above is not None and not 1 <= above <= 110) or (below is not None and not 0 <= below <= 20):
+        raise ValueError("地上樓層 1–110、地下樓層 0–20")
+    return {"kind": kind, "address": addr, "floors_above": above, "floors_below": below, "detail": detail,
             "basis": clean(body.get("basis"), 200), "contact": clean(body.get("contact"), 100),
             "shown": clean(body.get("shown"), 20), "building": building_uid(body.get("building"))}
 
 
 def summary(fb: dict) -> str:
     """純文字摘要（推播、部署紀錄用）。"""
-    below = f"、地下 {fb['floors_below']} 層" if fb["floors_below"] is not None else ""
-    lines = [f"地址：{fb['address']}", f"網站顯示：{fb['shown'] or '—'} 層", f"回報：地上 {fb['floors_above']} 層{below}",
-             f"依據：{fb['basis'] or '未填'}"]
+    lines = [f"類型：{KINDS[fb.get('kind') or 'floors']}", f"地址：{fb['address']}", f"網站顯示：{fb['shown'] or '—'} 層"]
+    if fb["floors_above"] is not None:
+        below = f"、地下 {fb['floors_below']} 層" if fb["floors_below"] is not None else ""
+        lines.append(f"回報：地上 {fb['floors_above']} 層{below}")
+    if fb.get("detail"):
+        lines.append(f"說明：{fb['detail']}")
+    lines.append(f"依據：{fb['basis'] or '未填'}")
     if fb.get("building"):
         lines.append(f"建物：{fb['building']}（在地圖上點選的建物）")
     if fb["contact"]:
@@ -58,12 +88,15 @@ def issue(fb: dict) -> dict:
     data = json.dumps(fb, ensure_ascii=False).replace("`", "'")
     body = "\n".join([
         "```text", text, "```", "",
-        f"審核：查證無誤就加上標籤「{APPROVE_LABEL}」，不採用直接關閉。",
-        "要修正就在下面留言再加標籤，例：「改成 18 層」「地下 3 層」「地址：臺北市信義區忠孝東路四段535號」。",
-        "之後在本機執行 `uv run python -m sitefloor.review` 寫進校正表。", "",
+        *([f"審核：查證無誤就加上標籤「{APPROVE_LABEL}」，不採用直接關閉。",
+           "要修正就在下面留言再加標籤，例：「改成 18 層」「地下 3 層」「地址：臺北市信義區忠孝東路四段535號」。",
+           "之後在本機執行 `uv run python -m sitefloor.review` 寫進校正表。"]
+          if (fb.get("kind") or "floors") == "floors" else
+          ["審核：不是樓層問題，要人工查證處理；處理完直接關閉。"]), "",
         f"<!-- {MARKER} -->", "```json", data, "```",
     ])
-    return {"title": f"樓層回報：{fb['address']}", "body": body}
+    kind = fb.get("kind") or "floors"
+    return {"title": f"{KINDS[kind]}：{fb['address']}", "body": body}
 
 
 def parse_issue(body: str) -> dict | None:

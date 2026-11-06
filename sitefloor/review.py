@@ -19,7 +19,7 @@ import time
 
 from sitefloor import curated
 from sitefloor.address import parse
-from sitefloor.feedback import APPROVE_LABEL, apply_comments, parse_issue
+from sitefloor.feedback import APPROVE_LABEL, KINDS, apply_comments, parse_issue
 from sitefloor.update import NOTIFY_FILE, ROOT, run_step
 
 REBUILD = ["curated", "osm", "coverage", "gaps", "export", "smoke"]
@@ -105,14 +105,21 @@ def main(argv: list[str]):
         for i in todo:
             fb, _ = read(i)
             mark = "✓ 已標採用" if any(lb["name"] == APPROVE_LABEL for lb in i["labels"]) else "待審核"
-            line = f"地上 {fb['floors_above']} 層，依據：{fb['basis'] or '未填'}" if fb else "（格式無法讀取）"
+            if not fb:
+                line = "（格式無法讀取）"
+            elif (fb.get("kind") or "floors") != "floors":
+                line = f"{KINDS[fb['kind']]}（人工處理）：{fb['detail']}"
+            else:
+                line = f"地上 {fb['floors_above']} 層，依據：{fb['basis'] or '未填'}"
             print(f"#{i['number']} [{mark}] {i['title']}｜{line}\n   {i['url']}")
         return
 
     approved, rows, bad = issues(rp, APPROVE_LABEL), [], []
     for i in approved:
         fb, why = read(i)
-        if fb:
+        if fb and (fb.get("kind") or "floors") != "floors":
+            bad.append((i, f"是「{KINDS[fb['kind']]}」，不會自動寫進校正表，請人工處理"))
+        elif fb:
             rows.append((i, to_row(fb, i["number"])))
         else:
             bad.append((i, why))

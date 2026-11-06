@@ -107,7 +107,8 @@
   .fbform { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: var(--fs-cap); color: var(--muted); }
   .fbform label { display: flex; flex-direction: column; gap: 4px; }
   .fbform .wide { grid-column: 1 / -1; }
-  .fbform input { font: inherit; font-size: var(--fs-body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); }
+  .fbform input, .fbform select, .fbform textarea { font: inherit; font-size: var(--fs-body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); }
+  .fbform textarea { resize: vertical; }
   .fbform button { justify-self: start; }
   .card .again { margin-top: 12px; width: 100%; }
   .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
@@ -133,7 +134,7 @@
     .desk-only { display: none; }
     .mob-only { display: inline !important; }
     .card .again { display: block !important; }
-    input[type=text], #pickFilter, .fbform input { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
+    input[type=text], #pickFilter, .fbform input, .fbform select, .fbform textarea { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
     .tiles { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }  /* 超過就在框內捲動，不能溢出蓋到下面的區塊 */
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
@@ -587,13 +588,18 @@ function riskHtml(r) {
   </div>`;
 }
 
-// ── 樓層回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
+// ── 問題回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
+// 類型要和 sitefloor/feedback.py 的 KINDS 一致
+const FB_KINDS = [["floors", "樓層錯誤"], ["address", "地址或位置錯誤"], ["shape", "建物形狀或立體圖錯誤"],
+  ["info", "年份、構造或用途錯誤"], ["hazard", "災害潛勢或消防資訊錯誤"], ["other", "其他問題"]];
 function feedbackHtml(r, building = "") {
   const addr = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
-  return `<details class="fb"><summary>樓層有誤？回報正確樓層</summary>
+  return `<details class="fb"><summary>資料有誤？回報問題</summary>
     <form class="fbform" data-addr="${esc(addr)}" data-shown="${esc(r.floors_above ?? "")}" data-bldg="${esc(building)}">
-      <label>地上樓層<input name="floors_above" type="number" min="1" max="110" required></label>
-      <label>地下樓層<input name="floors_below" type="number" min="0" max="20" placeholder="可不填"></label>
+      <label class="wide">問題類型<select name="kind">${FB_KINDS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
+      <label class="fl">地上樓層<input name="floors_above" type="number" min="1" max="110" required></label>
+      <label class="fl">地下樓層<input name="floors_below" type="number" min="0" max="20" placeholder="可不填"></label>
+      <label class="wide fd" hidden>說明<textarea name="detail" maxlength="500" rows="3" placeholder="例：這裡應該只有一棟、地址對到隔壁、年份不對"></textarea></label>
       <label class="wide">依據<input name="basis" maxlength="200" placeholder="例：住在這裡、使用執照、建案資料"></label>
       <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
       <button type="submit">送出</button><span class="fbmsg hint"></span>
@@ -601,6 +607,15 @@ function feedbackHtml(r, building = "") {
 }
 document.getElementById("result").addEventListener("click", e => {
   if (e.target.closest(".again")) document.querySelector(".tabs").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+// 樓層錯誤才要填樓層；其他問題改填說明
+document.getElementById("result").addEventListener("change", e => {
+  if (e.target.name !== "kind") return;
+  const f = e.target.closest(".fbform"), floors = e.target.value === "floors";
+  f.querySelectorAll(".fl").forEach(l => l.hidden = !floors);
+  f.querySelector("[name=floors_above]").required = floors;
+  f.querySelector(".fd").hidden = floors;
+  f.querySelector("[name=detail]").required = !floors;
 });
 document.getElementById("result").addEventListener("submit", async e => {
   const f = e.target.closest(".fbform"); if (!f) return;
@@ -611,7 +626,7 @@ document.getElementById("result").addEventListener("submit", async e => {
   data.address = f.dataset.addr; data.shown = f.dataset.shown; data.building = f.dataset.bldg;
   const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   const out = await resp.json().catch(() => ({}));
-  if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input").forEach(i => i.disabled = true); }
+  if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input, select, textarea").forEach(i => i.disabled = true); }
   else { msg.textContent = out.detail || `送出失敗（${resp.status}）`; btn.disabled = false; }
 });
 

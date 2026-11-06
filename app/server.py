@@ -143,7 +143,8 @@ async def api_feedback(request: Request):
             print("[feedback] GitHub Issue 建立失敗：", e)
     if cfg["ntfy_topic"]:
         try:
-            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：樓層回報",
+            _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"],
+                                            "title": f"建物查詢平台：{feedback.KINDS[fb['kind']]}",
                                             "message": msg, "tags": ["memo"]})
             sent += 1
         except OSError as e:
