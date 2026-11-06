@@ -40,9 +40,17 @@ def _num(s: pd.Series) -> pd.Series:
     return pd.to_numeric(s.str.extract(r"^\s*(\d+(?:\.\d+)?)")[0], errors="coerce")
 
 
+def underground(tags: pd.Series) -> pd.Series:
+    """地下構造：location=underground／underwater，或 layer<0 而且沒標 location=surface
+    （中正紀念堂標 layer=-1、location=surface：台基裡有地下樓層，但建物在地面上）。"""
+    location = tags.map(lambda s: _tag(s, "location"))
+    layer = pd.to_numeric(tags.map(lambda s: _tag(s, "layer")), errors="coerce")
+    return location.isin(["underground", "underwater"]) | ((layer < 0) & (location != "surface"))
+
+
 def read_buildings() -> gpd.GeoDataFrame:
     """OSM 建物外框＋運動場館（leisure=stadium，OSM 不算 building，例：天母棒球場）。
-    地下構造（location=underground 或 layer<0，例：捷運松江南京站）不收：它們不是地面上的建物，
+    地下構造（見 underground，例：捷運松江南京站）不收：它們不是地面上的建物，
     外框又常蓋住上方大樓的門牌，會把大樓的實價樓層套到整個車站上。"""
     df = pyogrio.read_dataframe(
         PBF,
@@ -50,10 +58,7 @@ def read_buildings() -> gpd.GeoDataFrame:
         columns=["osm_id", "osm_way_id", "name", "building", "leisure", "other_tags"],
         where="building IS NOT NULL OR leisure = 'stadium'",
     )
-    tags = df.other_tags.fillna("")
-    layer = pd.to_numeric(tags.map(lambda s: _tag(s, "layer")), errors="coerce")
-    underground = tags.map(lambda s: _tag(s, "location")).isin(["underground", "underwater"]) | (layer < 0)
-    df = df[~underground].copy()
+    df = df[~underground(df.other_tags.fillna(""))].copy()
     tags = df.other_tags.fillna("")
     df["building"] = df.building.fillna("stadium")
     levels = _num(tags.map(lambda s: _tag(s, "building:levels")))

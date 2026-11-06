@@ -1,7 +1,7 @@
 import pandas as pd
 
 from sitefloor.gaps import category
-from sitefloor.osm import _num, _tag
+from sitefloor.osm import _num, _tag, underground
 
 
 def test_tag():
@@ -24,3 +24,13 @@ def test_gap_category():
     assert category("天母棒球場", "stadium", None, None, "stadium", None, None) == "運動場館"
     assert category("臺南火車站", "train_station", None, None, None, None, "station") == "交通（車站／航廈）"
     assert category(None, "apartments", None, None, None, None, None) == "住宅"
+
+
+def test_underground():
+    tags = pd.Series([
+        '"layer"=>"-2","location"=>"underground"',  # 捷運站
+        '"layer"=>"-1"',
+        '"height"=>"14.5","layer"=>"-1","location"=>"surface"',  # 中正紀念堂：台基有地下樓層，建物在地面上
+        '"building:levels"=>"5"',
+    ])
+    assert underground(tags).tolist() == [True, True, False, False]

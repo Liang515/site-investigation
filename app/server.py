@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sitefloor import feedback
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many
-from sitefloor.models import MODELS
+from sitefloor.models import MODELS, REPLACED_PARTS
 from sitefloor.render import FLOOR_M, extrude_height, part_extent
 from sitefloor.suggest import Suggester, split_base
 
@@ -230,8 +230,9 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     truncated = len(rows) > MAX_BUILDINGS
     city = []
     drop_osm: set[int] = set()
-    # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框
-    known = [i for i, o in enumerate(osm) if o[1] is not None]
+    # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框。
+    # 有手工模型的算知道（例：中正紀念堂 OSM 沒標樓層，但模型比建照外框 4 層準）
+    known = [i for i, o in enumerate(osm) if o[1] is not None or o[0] in MODELS]
     tree = shapely.STRtree([osm[i][4] for i in known]) if known else None
     for u, f, src, w in rows[:MAX_BUILDINGS]:
         g = shapely.from_wkb(w)
@@ -251,7 +252,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                              and not (osm[k][1] is not None and f is not None and osm[k][1] > f + TOWER_MARGIN)}
         city.append((u, f, g))
     # 樓層未知的 OSM 建物若大半落在要畫的市府外框裡，不畫（市府外框有樓層）
-    unknown = [i for i, o in enumerate(osm) if o[1] is None]
+    unknown = [i for i, o in enumerate(osm) if o[1] is None and o[0] not in MODELS]
     if unknown and city:
         ctree = shapely.STRtree([c[2] for c in city])
         for i in unknown:
@@ -265,10 +266,11 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     parts: dict[str, list] = defaultdict(list)
     if osm and _has_table("osm_parts"):
         uids = [o[0] for i, o in enumerate(osm) if i not in drop_osm]
-        for pu, lv, mlv, ph, mh, w in _cur().execute(
-                "SELECT parent_uid, levels, min_level, height, min_height, wkb FROM osm_parts "
+        for uid, pu, lv, mlv, ph, mh, w in _cur().execute(
+                "SELECT uid, parent_uid, levels, min_level, height, min_height, wkb FROM osm_parts "
                 "WHERE list_contains(?, parent_uid)", [uids]).fetchall():
-            parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w)))
+            if uid not in REPLACED_PARTS:
+                parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w)))
     for i, (u, f, h, name, g) in enumerate(osm):
         if i in drop_osm:
             continue
