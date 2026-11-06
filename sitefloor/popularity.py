@@ -19,7 +19,7 @@ ENV_FILE = ROOT / ".env.local"
 OUT_FILE = ROOT / "data" / "state" / "popularity.json"
 TIMEOUT = 0.5
 PREFIX = "count:"
-UID = re.compile(r"^(osm:r?\d+|tp:\d+|tc:\d+)$")
+UID = re.compile(r"^(osm:r?\d+|cur:[a-z0-9_]{1,40}|tp:\d+|tc:\d+)$")
 
 
 def _env_file() -> dict[str, str]:

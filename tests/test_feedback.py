@@ -74,6 +74,7 @@ def test_building_uid():
     assert feedback.building_uid("osm:442195153") == "osm:442195153"
     assert feedback.building_uid("osm:r6821492") == "osm:r6821492"
     assert feedback.building_uid("tp:2507") == "tp:2507"
+    assert feedback.building_uid("cur:xinhe_01") == "cur:xinhe_01"  # 人工補畫的外框
     for bad in ("", "osm:abc", "javascript:alert(1)", "osm:1 OR 1=1", None):
         assert feedback.building_uid(bad) == ""
 

@@ -27,6 +27,7 @@ from sitefloor.suggest import Suggester, split_base
 STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
 PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
+OSM_TABLE = ("osm:", "cur:")  # 存在 osm_buildings 的建物：OSM 外框、人工補畫的外框（curated/buildings.geojson）
 PILLAR_NEAR_M = 25  # 門牌點常落在建物外框外的騎樓、路邊：這個距離內已有樓層相同（±1）的建物就不畫方柱
 
 app = FastAPI(title="建物查詢平台")
@@ -349,13 +350,13 @@ def _door_uids(uid: str) -> list[str]:
 def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
     """棟內門牌（含座標），供建物風險資訊用；沒有就找 NEAR_DOOR_M 內最近的門牌。回傳 (門牌, 說明)。"""
     cur = _cur()
-    if uid.startswith("osm:"):
+    if uid.startswith(OSM_TABLE):
         sql = """SELECT o.county, o.town, o.base, avg(a.lon) AS lon FROM door_osm o
                  LEFT JOIN addresses a USING (county, town, base) WHERE o.osm_uid = ? GROUP BY ALL LIMIT 200"""
     else:
         sql = """SELECT county, town, base, avg(lon) AS lon FROM addresses WHERE list_contains(?, bldg_uid)
                  GROUP BY ALL LIMIT 200"""
-    doors = cur.execute(sql, [uid if uid.startswith("osm:") else _door_uids(uid)]).df()
+    doors = cur.execute(sql, [uid if uid.startswith(OSM_TABLE) else _door_uids(uid)]).df()
     if not doors.empty or lon is None or lat is None:
         return doors, None
     d = NEAR_DOOR_M / 111_000
@@ -438,7 +439,7 @@ def _osm_building(uid: str) -> dict:
         below, year = cur.execute(
             "SELECT max(floors_below), max(year) FROM corrections WHERE osm_uid = ?", [uid]).fetchone()
     src = ("人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None
-           else "使用執照（棟內門牌）" if pf is not None else "OpenStreetMap")
+           else "使用執照（棟內門牌）" if pf is not None else "人工補畫外框" if u.startswith("cur:") else "OpenStreetMap")
     known_floors = next((x for x in (cf, tf, pf, levels) if x is not None), None)
     note = [] if known_floors is not None else ["OSM 有這棟的外框，但沒有樓層資料（地圖畫成灰色）"]
     if name:
@@ -463,7 +464,7 @@ def _osm_building(uid: str) -> dict:
 @app.get("/api/building/{uid}")
 def api_building(uid: str):
     popularity.incr(uid)
-    if uid.startswith("osm:"):
+    if uid.startswith(OSM_TABLE):
         return _osm_building(uid)
     cur = _cur()
     b = cur.execute("""SELECT uid, county, source, floors_above, floors_below, structure, btype,

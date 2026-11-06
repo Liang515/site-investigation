@@ -16,9 +16,10 @@ def test_only_building_uids_are_counted(monkeypatch):
     monkeypatch.setattr(popularity, "config", lambda: ("https://x", "t"))
     monkeypatch.setattr(popularity, "_call", lambda cfg, *cmd, **kw: sent.append(cmd))
     monkeypatch.setattr(popularity.threading, "Thread", lambda target, daemon: type("T", (), {"start": lambda self: target()})())
-    for uid in ("osm:123", "osm:r456", "tp:7", "tc:8", "臺北市信義區", "osm:1 OR 1", None):
+    for uid in ("osm:123", "osm:r456", "cur:xinhe_01", "tp:7", "tc:8", "臺北市信義區", "osm:1 OR 1", None):
         popularity.incr(uid)
-    assert [c[1] for c in sent] == ["count:osm:123", "count:osm:r456", "count:tp:7", "count:tc:8"]
+    assert [c[1] for c in sent] == ["count:osm:123", "count:osm:r456", "count:cur:xinhe_01", "count:tp:7",
+                                    "count:tc:8"]
 
 
 def test_fetch_all_pages_through_scan(monkeypatch, tmp_path):

@@ -16,7 +16,7 @@ def clean(x, n: int) -> str:
     return re.sub(r"[\x00-\x1f\x7f]", " ", str(x or "")).strip()[:n]
 
 
-_BUILDING_UID = re.compile(r"osm:r?\d{1,12}|tp:\d{1,7}|tc:\d{1,8}")
+_BUILDING_UID = re.compile(r"osm:r?\d{1,12}|cur:[a-z0-9_]{1,40}|tp:\d{1,7}|tc:\d{1,8}")
 
 
 def building_uid(x) -> str:
