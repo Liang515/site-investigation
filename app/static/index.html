@@ -391,10 +391,25 @@ function select(uid) {
 }
 
 // 點地圖上的建物：只看建物圖屬性
+// 點地圖建物的卡片抬頭：名稱、地址（Google 地圖＋街景）；沒有門牌的用建物位置開地圖
+function bldgHead(b) {
+  const first = (b.addresses || [])[0];
+  const more = (b.addresses || []).length > 1 ? `<small class="rx">（共 ${b.addresses.length} 個門牌，見下方）</small>` : "";
+  let place = "—";
+  if (first) place = gmapLink({ normalized: `${b.county || ""}${first}`, lat: b.lat, lon: b.lon }) + more;
+  else if (b.lat != null) {
+    const at = `${b.lat},${b.lon}`;
+    place = `<a href="${esc(`https://www.google.com/maps/search/?api=1&query=${at}`)}" target="_blank" rel="noopener">Google 地圖 ↗</a>`
+      + ` · <a href="${esc(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}`)}" target="_blank" rel="noopener">街景 ↗</a>`
+      + ` <small class="rx">（沒有門牌，依建物位置）</small>`;
+  }
+  return `<dl style="margin-top:10px">${b.name ? `<dt>名稱</dt><dd>${esc(b.name)}</dd>` : ""}<dt>地址</dt><dd>${place}</dd></dl>`;
+}
+
 async function showBuilding(uid) {
   const b = await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json();
   select(uid);
-  document.getElementById("result").innerHTML = card(b, "", b);
+  document.getElementById("result").innerHTML = card(b, bldgHead(b), b);
   // 在地圖上點的建物也能回報：附上建物編號（OSM 建物審核後整棟套用，地標常沒有門牌）
   const first = (b.addresses || [])[0];
   const addr = first ? `${b.county || ""}${first}` : (b.name || `地圖建物 ${uid}`);
