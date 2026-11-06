@@ -27,6 +27,7 @@ from sitefloor.suggest import Suggester, split_base
 STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
 PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
+PILLAR_NEAR_M = 25  # 門牌點常落在建物外框外的騎樓、路邊：這個距離內已有樓層相同（±1）的建物就不畫方柱
 
 app = FastAPI(title="建物查詢平台")
 
@@ -277,7 +278,14 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
         GROUP BY a.county, a.town, a.base LIMIT {MAX_BUILDINGS}
     """, [x0, x1, y0, y1]).fetchall()
     half = PILLAR_M / 2 / 111320
+    drawn = [(o[4], o[1]) for i, o in enumerate(osm) if i not in drop_osm and o[1] is not None] + \
+            [(g, f) for _, f, g in city if f is not None]
+    dtree = shapely.STRtree([g for g, _ in drawn]) if drawn else None
+    near = PILLAR_NEAR_M / 111320
     for addr, lon, lat, f in pts:
+        if dtree is not None and any(abs(drawn[int(j)][1] - f) <= 1
+                                     for j in dtree.query(shapely.Point(lon, lat), predicate="dwithin", distance=near)):
+            continue
         dx = half / math.cos(math.radians(lat))
         ring = [[lon - dx, lat - half], [lon + dx, lat - half], [lon + dx, lat + half], [lon - dx, lat + half],
                 [lon - dx, lat - half]]
