@@ -40,7 +40,7 @@ vercel link --yes --project site-investigation
 
 ```bash
 uv run python -m sitefloor.update --check        # 列出哪些來源有新版（約 30 秒）
-uv run python -m sitefloor.update --test-notify  # 手機應收到「地址樓層查詢：測試」
+uv run python -m sitefloor.update --test-notify  # 手機應收到「台灣建物查詢：測試」
 ```
 
 ## 6. 安裝每週排程（Mac mini 上）
