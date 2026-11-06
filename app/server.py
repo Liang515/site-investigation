@@ -20,16 +20,12 @@ from sitefloor import feedback
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many
 from sitefloor.models import MODELS, REPLACED_PARTS
-from sitefloor.render import FLOOR_M, extrude_height, part_extent
+from sitefloor.render import FLOOR_M, extrude_height, part_extent, resolve_overlaps
 from sitefloor.suggest import Suggester, split_base
 
 STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
 PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
-TOWER_MARGIN = 2  # OSM 建物比臺北建照外框高出這麼多層以上，視為裙樓上的塔樓
-TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差不多大的是同一棟、只是樓層不同
-MINOR_PERMIT_FLOORS = 2  # 建照外框只有 1–2 層、OSM 同位置高很多：多半是舊大樓後來的增建小建照
-CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
 app = FastAPI(title="建物查詢平台")
 
@@ -197,10 +193,7 @@ def _feature(i: int, geom: dict, **props) -> dict:
 @app.get("/api/buildings")
 def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxlat")):
     """地圖立體建物，OSM 建物（每棟分開）、市府建物圖、實價門牌方柱三種。
-    OSM 與建物圖重疊時（建物圖外框有 30% 以上被 OSM 蓋住）：
-    - 臺中建物圖（對實價 53%）不如 OSM（70%）→ 畫 OSM。
-    - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM
-      （OSM 常把同一張建照拆成多棟畫）；不一致時保留建照外框，並拿掉大半落在框內的 OSM 建物。
+    OSM 與建物圖重疊時畫哪個：見 sitefloor/render.py resolve_overlaps。
     高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。
     例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py）
     與人工校正有填 height_m 的（一層很高的場館）用真實高度。"""
@@ -229,41 +222,8 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
         LIMIT {MAX_BUILDINGS + 1}
     """, box).fetchall()
     truncated = len(rows) > MAX_BUILDINGS
-    city = []
-    drop_osm: set[int] = set()
-    # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框。
-    # 有手工模型的也算知道樓層
-    known = [i for i, o in enumerate(osm) if o[1] is not None or o[0] in MODELS]
-    tree = shapely.STRtree([osm[i][4] for i in known]) if known else None
-    for u, f, src, w in rows[:MAX_BUILDINGS]:
-        g = shapely.from_wkb(w)
-        if g is None or g.is_empty:
-            continue
-        if tree is not None and g.area:
-            hit = [known[int(j)] for j in tree.query(g, predicate="intersects")]
-            inter = {k: shapely.intersection(g, osm[k][4]).area for k in hit}
-            if sum(inter.values()) / g.area >= CITY_COVERED_MAX:
-                top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
-                if not str(src).startswith(TP_PERMIT_SOURCE) or top == f or any(osm[k][0] in trusted for k in inter):
-                    continue  # 改畫 OSM
-                if f is not None and f <= MINOR_PERMIT_FLOORS and top is not None and top > f + TOWER_MARGIN:
-                    continue  # 增建小建照，改畫 OSM
-                # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起。
-                # 但比建照高出 TOWER_MARGIN 層以上、外框又明顯較小的照畫：那是裙樓上的塔樓；
-                # 差一兩層、或外框差不多大的當成同一棟
-                drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5
-                             and not (osm[k][1] is not None and f is not None and osm[k][1] > f + TOWER_MARGIN
-                                      and osm[k][4].area < TOWER_MAX_SHARE * g.area)}
-        city.append((u, f, g))
-    # 樓層未知的 OSM 建物若大半落在要畫的市府外框裡，不畫（市府外框有樓層）
-    unknown = [i for i, o in enumerate(osm) if o[1] is None and o[0] not in MODELS]
-    if unknown and city:
-        ctree = shapely.STRtree([c[2] for c in city])
-        for i in unknown:
-            g = osm[i][4]
-            if g.area and any(shapely.intersection(g, city[int(j)][2]).area / g.area >= 0.5
-                              for j in ctree.query(g, predicate="intersects")):
-                drop_osm.add(i)
+    city, drop_osm = resolve_overlaps(osm, [(u, f, src, shapely.from_wkb(w)) for u, f, src, w in rows[:MAX_BUILDINGS]],
+                                      set(MODELS), trusted, TP_PERMIT_SOURCE)
     feats: list[dict] = []
     # OSM 分棟（building:part）：分棟各用自己的高度畫，外框只畫扣掉分棟的部分；有手工模型的地標
     # 塔樓改畫模型、外框剩下的部分不畫
