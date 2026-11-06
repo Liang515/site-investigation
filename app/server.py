@@ -27,6 +27,8 @@ STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
 PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
 TOWER_MARGIN = 2  # OSM 建物比臺北建照外框高出這麼多層以上，視為裙樓上的塔樓
+TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差不多大的是同一棟、只是樓層不同（例：仁愛路三段128號 建照 17、OSM 誤標 25）
+MINOR_PERMIT_FLOORS = 2  # 建照外框只有 1–2 層、OSM 同位置高很多：多半是舊大樓後來的增建小建照（例：科教館 1 vs 11）
 CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
 app = FastAPI(title="台灣建物查詢")
@@ -245,11 +247,15 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                 top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
                 if not str(src).startswith(TP_PERMIT_SOURCE) or top == f or any(osm[k][0] in trusted for k in inter):
                     continue  # 改畫 OSM
+                if f is not None and f <= MINOR_PERMIT_FLOORS and top is not None and top > f + TOWER_MARGIN:
+                    continue  # 增建小建照，改畫 OSM
                 # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起。
                 # 但比建照高出 TOWER_MARGIN 層以上的照畫：那是裙樓上的塔樓（例：大巨蛋東側建照 5 層，
-                # 裡面的台北洲際酒店、遠雄巨蛋大樓各 20 層）；差一兩層的才當成同一棟（例：遼寧街 177 號 20 vs 19）
+                # 裡面的台北洲際酒店、遠雄巨蛋大樓各 20 層，外框只有建照的 27%、34%）；差一兩層、或外框差不多大的
+                # 當成同一棟（例：遼寧街 177 號 20 vs 19；仁愛路三段128號 建照 17、OSM 誤標 25，外框 83%）
                 drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5
-                             and not (osm[k][1] is not None and f is not None and osm[k][1] > f + TOWER_MARGIN)}
+                             and not (osm[k][1] is not None and f is not None and osm[k][1] > f + TOWER_MARGIN
+                                      and osm[k][4].area < TOWER_MAX_SHARE * g.area)}
         city.append((u, f, g))
     # 樓層未知的 OSM 建物若大半落在要畫的市府外框裡，不畫（市府外框有樓層）
     unknown = [i for i, o in enumerate(osm) if o[1] is None and o[0] not in MODELS]
