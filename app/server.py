@@ -27,8 +27,8 @@ STATIC = Path(__file__).parent / "static"
 MAX_BUILDINGS = 6000
 PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
 TOWER_MARGIN = 2  # OSM 建物比臺北建照外框高出這麼多層以上，視為裙樓上的塔樓
-TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差不多大的是同一棟、只是樓層不同（例：仁愛路三段128號 建照 17、OSM 誤標 25）
-MINOR_PERMIT_FLOORS = 2  # 建照外框只有 1–2 層、OSM 同位置高很多：多半是舊大樓後來的增建小建照（例：科教館 1 vs 11）
+TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差不多大的是同一棟、只是樓層不同
+MINOR_PERMIT_FLOORS = 2  # 建照外框只有 1–2 層、OSM 同位置高很多：多半是舊大樓後來的增建小建照
 CITY_COVERED_MAX = 0.3  # 市府外框被 OSM 建物蓋住超過此比例就改畫 OSM
 
 app = FastAPI(title="台灣建物查詢")
@@ -200,11 +200,10 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     OSM 與建物圖重疊時（建物圖外框有 30% 以上被 OSM 蓋住）：
     - 臺中建物圖（對實價 53%）不如 OSM（70%）→ 畫 OSM。
     - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM
-      （例：富邦 A25 塔樓 54 層一致，OSM 把同建照的美術館分開畫）；不一致時（例：遼寧街 177 號建照 20 層、
-      OSM 標 19 層）保留建照外框，並拿掉大半落在框內的 OSM 建物。
+      （OSM 常把同一張建照拆成多棟畫）；不一致時保留建照外框，並拿掉大半落在框內的 OSM 建物。
     高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。
-    例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py，例：101）
-    與人工校正有填 height_m 的（例：巨蛋，一層很高）用真實高度。"""
+    例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py）
+    與人工校正有填 height_m 的（一層很高的場館）用真實高度。"""
     x0, y0, x1, y1 = map(float, bbox.split(","))
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
@@ -221,8 +220,8 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
         osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w, _, _ in rows]
-        real_h = {r[0]: r[5] for r in rows if r[5] is not None}  # 人工校正的實際高度（例：巨蛋）
-        # 人工校正或有手工模型的 OSM 建物一定畫，不被臺北建照外框蓋掉（例：大巨蛋建照外框 5 層、校正 6 層）
+        real_h = {r[0]: r[5] for r in rows if r[5] is not None}  # 人工校正的實際高度
+        # 人工校正或有手工模型的 OSM 建物一定畫，不被臺北建照外框蓋掉
         trusted = {r[0] for r in rows if r[6] or r[0] in MODELS}
     rows = _cur().execute(f"""
         SELECT uid, floors_above, source, wkb FROM buildings
@@ -233,7 +232,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     city = []
     drop_osm: set[int] = set()
     # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框。
-    # 有手工模型的算知道（例：中正紀念堂 OSM 沒標樓層，但模型比建照外框 4 層準）
+    # 有手工模型的也算知道樓層
     known = [i for i, o in enumerate(osm) if o[1] is not None or o[0] in MODELS]
     tree = shapely.STRtree([osm[i][4] for i in known]) if known else None
     for u, f, src, w in rows[:MAX_BUILDINGS]:
@@ -250,9 +249,8 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                 if f is not None and f <= MINOR_PERMIT_FLOORS and top is not None and top > f + TOWER_MARGIN:
                     continue  # 增建小建照，改畫 OSM
                 # 保留臺北建照外框；大半在框內的 OSM 建物不畫，避免兩個立體疊在一起。
-                # 但比建照高出 TOWER_MARGIN 層以上的照畫：那是裙樓上的塔樓（例：大巨蛋東側建照 5 層，
-                # 裡面的台北洲際酒店、遠雄巨蛋大樓各 20 層，外框只有建照的 27%、34%）；差一兩層、或外框差不多大的
-                # 當成同一棟（例：遼寧街 177 號 20 vs 19；仁愛路三段128號 建照 17、OSM 誤標 25，外框 83%）
+                # 但比建照高出 TOWER_MARGIN 層以上、外框又明顯較小的照畫：那是裙樓上的塔樓；
+                # 差一兩層、或外框差不多大的當成同一棟
                 drop_osm |= {k for k, a in inter.items() if osm[k][4].area and a / osm[k][4].area >= 0.5
                              and not (osm[k][1] is not None and f is not None and osm[k][1] > f + TOWER_MARGIN
                                       and osm[k][4].area < TOWER_MAX_SHARE * g.area)}
@@ -267,7 +265,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                               for j in ctree.query(g, predicate="intersects")):
                 drop_osm.add(i)
     feats: list[dict] = []
-    # OSM 分棟（building:part）：分棟各用自己的高度畫，外框只畫扣掉分棟的部分；有手工模型的地標（例：101）
+    # OSM 分棟（building:part）：分棟各用自己的高度畫，外框只畫扣掉分棟的部分；有手工模型的地標
     # 塔樓改畫模型、外框剩下的部分不畫
     parts: dict[str, list] = defaultdict(list)
     if osm and _has_table("osm_parts"):
@@ -277,7 +275,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
                 "WHERE list_contains(?, parent_uid)", [uids]).fetchall():
             if uid not in REPLACED_PARTS:
                 parts[pu].append((lv, mlv, ph, mh, shapely.from_wkb(w), uid))
-    # 分棟的人工校正（例：台北101購物中心 使照 8 層）：分棟用自己的編號，點了顯示分棟自己的樓層
+    # 分棟的人工校正：分棟用自己的編號，點了顯示分棟自己的樓層
     part_fix = dict(_cur().execute(
         "SELECT osm_uid, floors_above FROM corrections WHERE list_contains(?, osm_uid)",
         [[p[5] for ps in parts.values() for p in ps]]).fetchall()) if parts else {}
@@ -290,7 +288,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
             feats.append(_feature(len(feats), json.loads(shapely.to_geojson(pg)), uid=pu, floors=lv or f,
                                   h=top, base=base, name=name, src="osm_part"))
         if u in MODELS:
-            for ring, z0, z1 in MODELS[u]():
+            for ring, z0, z1 in MODELS[u](g):
                 coords = ring if isinstance(ring[0][0], list) else [ring]  # 有中庭：[外圈, 中庭…]
                 feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": coords}, uid=u, floors=f,
                                       h=z1, base=z0, name=name, src="model"))
@@ -408,7 +406,7 @@ def _floors_from_doors(full_addrs: list[str]) -> dict | None:
 
 
 def _osm_part(uid: str) -> dict:
-    """OSM 分棟（building:part，例：台北101購物中心）：樓層用分棟自己的（人工校正優先），門牌與風險資訊用所在建物的。"""
+    """OSM 分棟（building:part）：樓層用分棟自己的（人工校正優先），門牌與風險資訊用所在建物的。"""
     cur = _cur()
     r = cur.execute("SELECT parent_uid, levels FROM osm_parts WHERE uid = ?", [uid]).fetchone()
     if not r:
@@ -442,7 +440,7 @@ def _osm_building(uid: str) -> dict:
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
     n, county = cur.execute("SELECT count(*), any_value(county) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()
     below = year = None
-    if cf is not None:  # 人工校正的地下樓層、竣工年（例：中正紀念堂 1980）
+    if cf is not None:  # 人工校正的地下樓層、竣工年
         below, year = cur.execute(
             "SELECT max(floors_below), max(year) FROM corrections WHERE osm_uid = ?", [uid]).fetchone()
     src = ("人工校正" if cf is not None else "實價登錄（棟內門牌）" if tf is not None
