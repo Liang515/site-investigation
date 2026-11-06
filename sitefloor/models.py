@@ -195,6 +195,36 @@ def tower_crown(g, body_top: float, roof: float, inset: float, n: int, spire_top
     return segs
 
 
+def podium_tower(g, podium: float, inset: float, body_top: float, roof: float, crown_inset: float,
+                 n: int = 3) -> list[tuple[list, float, float]]:
+    """裙樓＋塔樓：外框是整個基地，裙樓到 podium 公尺；塔樓為外框往內收 inset 公尺（位置取基地中央），
+    到 body_top 後分 n 段再往內收 crown_inset 到 roof。"""
+    m, back = _meters(g)
+    tower = m.buffer(-inset, join_style="mitre")
+    segs = [(_coords(g), 0, podium)]
+    if tower.is_empty:
+        return segs
+    for ring, z0, z1 in tower_crown(back(tower), body_top, roof, crown_inset, n):
+        segs.append((ring, z0 if z0 else podium, z1))
+    return segs
+
+
+def nanshan_plaza(g) -> list[tuple[list, float, float]]:
+    """臺北南山廣場（2017）：地上 48 層、高 272 m（維基百科）；頂部分段收進。裙樓微風南山是另一個外框。"""
+    return tower_crown(g, 238, 272, 8, 4)
+
+
+def cathay_landmark(g) -> list[tuple[list, float, float]]:
+    """國泰置地廣場（2015）：地上 46 層、高 212 m，B1–4F 裙樓（維基百科）。
+    OSM 只有整個基地的外框，塔樓位置取基地中央（近似）。"""
+    return podium_tower(g, 24, 20, 200, 212, 4)
+
+
+def fubon_a25(g) -> list[tuple[list, float, float]]:
+    """富邦人壽大樓（富邦A25，2022）：地上 54 層、高 266 m（維基百科）。"""
+    return tower_crown(g, 252, 266, 4, 2)
+
+
 def shin_kong_tower(g) -> list[tuple[list, float, float]]:
     """新光人壽保險摩天大樓（1993）：地上 51 層，屋頂 238.15 m、尖頂 244.15 m（維基百科）；頂部收分。"""
     return tower_crown(g, 200, 238.15, 12, 4, 244.15)
@@ -211,6 +241,9 @@ MODELS = {
     "osm:1052759775": national_concert_hall,
     "osm:r206817": presidential_office,
     "osm:204711206": shin_kong_tower,
+    "osm:383731054": nanshan_plaza,
+    "osm:378443967": cathay_landmark,
+    "osm:1010525370": fubon_a25,
     "osm:230984631": xinzhuang_gym,
     "osm:r9106110": xinzhuang_baseball_stands,
     "osm:665628025": lambda _g=None: [],  # 球場整座外框（含草皮）不畫，看台另外畫

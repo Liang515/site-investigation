@@ -18,7 +18,7 @@ county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,che
 ,,,osm:663679150,14,5,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百信義A13（B4–B5 汽車停車場）,2026-11-05
 ,,,osm:274646859,9,4,,,https://zh.wikipedia.org/wiki/寶麗廣塲,寶麗廣塲 BELLAVITA,2026-11-05
 ,,,osm:513491894,7,,,,https://zh.wikipedia.org/wiki/微風廣場,微風南山商場（南山廣場裙樓，營業 B2–7F）；地下總層數未確認,2026-11-05
-,,,osm:383731054,48,,,,https://zh.wikipedia.org/wiki/臺北南山廣場,臺北南山廣場主塔,2026-11-05
+,,,osm:383731054,48,5,272,2017,https://zh.wikipedia.org/wiki/臺北南山廣場,臺北南山廣場,2026-11-06
 ,,,osm:r6821492,12,3,,,https://zh.wikipedia.org/wiki/大葉高島屋,大葉高島屋,2026-11-05
 ,,,osm:109836992,5,2,,,https://zh.wikipedia.org/wiki/大江國際購物中心,大江國際購物中心,2026-11-05
 ,,,osm:90993708,13,3,,,https://zh.wikipedia.org/wiki/大立百貨,大立百貨 B館（B2–B3 停車場）,2026-11-05
@@ -135,3 +135,6 @@ county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,che
 ,,,osm:274647896,7,5,,2002,https://zh.wikipedia.org/wiki/新光三越信義新天地,新光三越信義新天地 A8館,2026-11-06
 ,,,osm:204711206,51,7,244.15,1993,https://zh.wikipedia.org/wiki/新光人壽保險摩天大樓,新光人壽保險摩天大樓,2026-11-06
 ,,,osm:148849083,14,2,,2000,https://tw-landmark.blogspot.com/2019/06/skm-taichung-zhonggang.html,新光三越台中中港店,2026-11-06
+,,,osm:378443967,46,6,212,2015,https://zh.wikipedia.org/wiki/國泰置地廣場,國泰置地廣場,2026-11-06
+,,,osm:1010525370,54,4,266,2022,https://zh.wikipedia.org/wiki/富邦A25,富邦人壽大樓（富邦A25）,2026-11-06
+臺北市,信義區,松仁路100號,,48,5,,2017,https://zh.wikipedia.org/wiki/臺北南山廣場,臺北南山廣場,2026-11-06
