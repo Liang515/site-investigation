@@ -119,3 +119,14 @@ def test_general_report_without_address():
     assert "地址：未指定地點" in feedback.summary(fb)
     with pytest.raises(ValueError):
         feedback.validate({"kind": "floors", "floors_above": "5"})  # 樓層錯誤一定要有地址
+
+
+def test_quick_flag_needs_only_target():
+    fb = feedback.validate({"quick": True, "address": "臺北市信義區松高路77號", "shown": "54"})
+    assert fb["quick"] and fb["floors_above"] is None
+    issue = feedback.issue(fb)
+    assert issue["title"] == "標記有誤：臺北市信義區松高路77號" and "人工查證" in issue["body"]
+    assert "一鍵標記" in feedback.summary(fb) and feedback.parse_issue(issue["body"])["quick"]
+    assert feedback.validate({"quick": True, "building": "osm:123"})["building"] == "osm:123"
+    with pytest.raises(ValueError):
+        feedback.validate({"quick": True})  # 沒有地址也沒有建物

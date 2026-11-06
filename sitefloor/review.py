@@ -107,8 +107,8 @@ def main(argv: list[str]):
             mark = "✓ 已標採用" if any(lb["name"] == APPROVE_LABEL for lb in i["labels"]) else "待審核"
             if not fb:
                 line = "（格式無法讀取）"
-            elif (fb.get("kind") or "floors") != "floors":
-                line = f"{KINDS[fb['kind']]}（人工處理）：{fb['detail']}"
+            elif (fb.get("kind") or "floors") != "floors" or fb.get("quick") or fb["floors_above"] is None:
+                line = f"{KINDS[fb.get('kind') or 'floors']}（人工處理）：{fb['detail'] or '一鍵標記，未填細節'}"
             else:
                 line = f"地上 {fb['floors_above']} 層，依據：{fb['basis'] or '未填'}"
             print(f"#{i['number']} [{mark}] {i['title']}｜{line}\n   {i['url']}")
@@ -117,8 +117,9 @@ def main(argv: list[str]):
     approved, rows, bad = issues(rp, APPROVE_LABEL), [], []
     for i in approved:
         fb, why = read(i)
-        if fb and (fb.get("kind") or "floors") != "floors":
-            bad.append((i, f"是「{KINDS[fb['kind']]}」，不會自動寫進校正表，請人工處理"))
+        if fb and ((fb.get("kind") or "floors") != "floors" or fb.get("quick") or fb["floors_above"] is None):
+            what = "標記有誤" if fb.get("quick") else KINDS[fb.get("kind") or "floors"]
+            bad.append((i, f"是「{what}」，不會自動寫進校正表，請人工處理"))
         elif fb:
             rows.append((i, to_row(fb, i["number"])))
         else:

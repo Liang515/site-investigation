@@ -110,6 +110,8 @@
   .fbform input, .fbform select, .fbform textarea { font: inherit; font-size: var(--fs-body); padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--panel); }
   .fbform textarea { resize: vertical; }
   .fbform button { justify-self: start; }
+  .fbbtns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
   .card .again { margin-top: 12px; width: 100%; }
   .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
   #pickFilter { width: 100%; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
@@ -612,12 +614,13 @@ function feedbackHtml(r, building = "") {
   return `<details class="fb"><summary>資料有誤？回報問題</summary>
     <form class="fbform" data-addr="${esc(addr)}" data-shown="${esc(r.floors_above ?? "")}" data-bldg="${esc(building)}">
       <label class="wide">問題類型<select name="kind">${FB_KINDS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select></label>
-      <label class="fl">地上樓層<input name="floors_above" type="number" min="1" max="110" required></label>
+      <label class="fl">地上樓層<input name="floors_above" type="number" min="1" max="110"></label>
       <label class="fl">地下樓層<input name="floors_below" type="number" min="0" max="20" placeholder="可不填"></label>
       <label class="wide fd" hidden>說明<textarea name="detail" maxlength="500" rows="3" placeholder="例：這裡應該只有一棟、地址對到隔壁、年份不對"></textarea></label>
       <label class="wide">依據<input name="basis" maxlength="200" placeholder="例：住在這裡、使用執照、建案資料"></label>
       <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
-      <button type="submit">送出</button><span class="fbmsg hint"></span>
+      <div class="wide fbbtns"><button type="submit">送出</button><span class="fbmsg hint"></span></div>
+      <div class="hint wide">不知道正確資料也可以：什麼都不填直接送出，就是「標記這筆有誤」。</div>
     </form></details>`;
 }
 document.getElementById("result").addEventListener("click", e => {
@@ -629,21 +632,25 @@ document.addEventListener("change", e => {
   const f = e.target.closest(".fbform"), floors = e.target.value === "floors";
   if (!f.querySelector(".fl")) return;  // 側欄的一般回報沒有樓層欄位
   f.querySelectorAll(".fl").forEach(l => l.hidden = !floors);
-  f.querySelector("[name=floors_above]").required = floors;
   f.querySelector(".fd").hidden = floors;
-  f.querySelector("[name=detail]").required = !floors;
 });
-document.addEventListener("submit", async e => {
-  const f = e.target.closest(".fbform"); if (!f) return;
-  e.preventDefault();
-  const msg = f.querySelector(".fbmsg"), btn = f.querySelector("button");
-  btn.disabled = true; msg.textContent = "送出中…";
-  const data = Object.fromEntries(new FormData(f));
+async function sendFeedback(f, data) {
+  const msg = f.querySelector(".fbmsg"), btns = f.querySelectorAll("button");
+  btns.forEach(b => b.disabled = true); msg.textContent = "送出中…";
   if (f.dataset.addr !== undefined) Object.assign(data, { address: f.dataset.addr, shown: f.dataset.shown, building: f.dataset.bldg });
   const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   const out = await resp.json().catch(() => ({}));
   if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input, select, textarea").forEach(i => i.disabled = true); }
-  else { msg.textContent = out.detail || `送出失敗（${resp.status}）`; btn.disabled = false; }
+  else { msg.textContent = out.detail || `送出失敗（${resp.status}）`; btns.forEach(b => b.disabled = false); }
+}
+// 結果卡片的回報：有填資料就是一般回報；樓層、說明、依據都沒填就送出＝只標記這筆有誤
+document.addEventListener("submit", e => {
+  const f = e.target.closest(".fbform"); if (!f) return;
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(f));
+  const filled = ["floors_above", "floors_below", "detail", "basis"].some(k => String(data[k] || "").trim());
+  if (f.dataset.addr !== undefined && !filled) data.quick = true;
+  sendFeedback(f, data);
 });
 
 // ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick 回傳下一層） ──

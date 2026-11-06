@@ -49,6 +49,7 @@ def test_priority_categories():
 
 def test_curated_buildings_geojson():
     import geopandas as gpd
+
     from sitefloor.osm import CURATED_GEOJSON
     assert CURATED_GEOJSON.exists()
     gdf = gpd.read_file(CURATED_GEOJSON)

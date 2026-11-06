@@ -48,29 +48,36 @@ def _int(x) -> int | None:
 
 def validate(body: dict) -> dict:
     """檢查回報內容；不合格丟 ValueError（訊息給使用者看）。
-    樓層錯誤：地址、地上樓層必填；其他類型：說明必填，地址（地點）與樓層可不填。"""
+    樓層錯誤：地址、地上樓層必填；其他類型：說明必填，地址（地點）與樓層可不填。
+    一鍵標記（quick）：只要有地址或建物編號，其他都不用填。"""
     addr = clean(body.get("address"), 100)
     kind = body.get("kind") or "floors"
     if kind not in KINDS:
         raise ValueError("問題類型不正確")
     above, below = _int(body.get("floors_above")), _int(body.get("floors_below"))
     detail = clean(body.get("detail"), 500)
-    if kind == "floors" and not addr:
+    building = building_uid(body.get("building"))
+    quick = bool(body.get("quick"))
+    if quick:  # 一鍵標記：只要知道是哪一筆
+        if not (addr or building):
+            raise ValueError("找不到要標記的地址或建物")
+    elif kind == "floors" and not addr:
         raise ValueError("地址必填")
-    if kind == "floors" and above is None:
+    elif kind == "floors" and above is None:
         raise ValueError("請填地上樓層")
-    if kind != "floors" and len(detail) < 2:
+    elif kind != "floors" and len(detail) < 2:
         raise ValueError("請簡單說明是什麼問題")
     if (above is not None and not 1 <= above <= 110) or (below is not None and not 0 <= below <= 20):
         raise ValueError("地上樓層 1–110、地下樓層 0–20")
     return {"kind": kind, "address": addr, "floors_above": above, "floors_below": below, "detail": detail,
             "basis": clean(body.get("basis"), 200), "contact": clean(body.get("contact"), 100),
-            "shown": clean(body.get("shown"), 20), "building": building_uid(body.get("building"))}
+            "shown": clean(body.get("shown"), 20), "building": building, "quick": quick}
 
 
 def summary(fb: dict) -> str:
     """純文字摘要（推播、部署紀錄用）。"""
-    lines = [f"類型：{KINDS[fb.get('kind') or 'floors']}", f"地址：{fb['address'] or NO_PLACE}"]
+    kind = KINDS[fb.get("kind") or "floors"] + ("（一鍵標記，未填細節）" if fb.get("quick") else "")
+    lines = [f"類型：{kind}", f"地址：{fb['address'] or NO_PLACE}"]
     if fb["shown"]:
         lines.append(f"網站顯示：{fb['shown']} 層")
     if fb["floors_above"] is not None:
@@ -95,12 +102,13 @@ def issue(fb: dict) -> dict:
         *([f"審核：查證無誤就加上標籤「{APPROVE_LABEL}」，不採用直接關閉。",
            "要修正就在下面留言再加標籤，例：「改成 18 層」「地下 3 層」「地址：臺北市信義區忠孝東路四段535號」。",
            "之後在本機執行 `uv run python -m sitefloor.review` 寫進校正表。"]
-          if (fb.get("kind") or "floors") == "floors" else
-          ["審核：不是樓層問題，要人工查證處理；處理完直接關閉。"]), "",
+          if (fb.get("kind") or "floors") == "floors" and not fb.get("quick") else
+          ["審核：不是可自動寫回的樓層回報，要人工查證處理；處理完直接關閉。"]), "",
         f"<!-- {MARKER} -->", "```json", data, "```",
     ])
     kind = fb.get("kind") or "floors"
-    return {"title": f"{KINDS[kind]}：{fb['address'] or NO_PLACE}", "body": body}
+    head = "標記有誤" if fb.get("quick") else KINDS[kind]
+    return {"title": f"{head}：{fb['address'] or fb.get('building') or NO_PLACE}", "body": body}
 
 
 def parse_issue(body: str) -> dict | None:
