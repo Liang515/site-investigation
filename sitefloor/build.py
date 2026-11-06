@@ -13,6 +13,7 @@ import duckdb
 import geopandas as gpd
 import pandas as pd
 import pyogrio
+import shapely
 
 from sitefloor.address import from_parts
 from sitefloor.db import DB_PATH, connect
@@ -79,6 +80,7 @@ def _write(con: duckdb.DuckDBPyConnection, county: str, bldg: gpd.GeoDataFrame, 
         "minlon": bounds.minx, "minlat": bounds.miny, "maxlon": bounds.maxx, "maxlat": bounds.maxy,
         "wkb": bw.geometry.to_wkb(),
         "permit_no": bw.get("permit_no"),
+        "annex": None,
     })
     aw = addr.to_crs(4326)
     adf = pd.DataFrame({
@@ -114,6 +116,24 @@ def taipei_permit_no(s: pd.Series) -> pd.Series:
     return s.str.extract(r"^(\d+\.\d+)")[0]
 
 
+ANNEX_SHARE, ANNEX_MAX_M2 = 0.25, 300  # 不到同建照最大外框的 1/4、又小於 300 m² → 附屬建物
+
+
+def mark_annexes(con):
+    """buildings.annex：同一張建照拆成多個外框時，明顯較小的那幾塊是附屬建物（門廳、機電、車道出入口…）。
+    套繪圖每塊都記整張建照的最高樓層，這些小塊如果照畫會變成一根根高柱子。"""
+    rows = con.execute("SELECT uid, permit_no, wkb FROM buildings WHERE permit_no IS NOT NULL AND wkb IS NOT NULL").fetchall()
+    g = shapely.from_wkb([w for _, _, w in rows])
+    d = pd.DataFrame({"uid": [u for u, _, _ in rows], "permit_no": [p for _, p, _ in rows],
+                      "a": shapely.area(shapely.transform(g, lambda c: c * [101_000, 110_574]))})
+    big = d.groupby("permit_no").a.transform("max")
+    d["annex"] = (d.a < ANNEX_SHARE * big) & (d.a < ANNEX_MAX_M2)
+    con.register("annex_df", d[["uid", "annex"]])
+    con.execute("UPDATE buildings SET annex = a.annex FROM annex_df a WHERE buildings.uid = a.uid")
+    con.unregister("annex_df")
+    print(f"  同建照的附屬小外框 {int(d.annex.sum()):,} 個")
+
+
 def build_taipei(con):
     b = pyogrio.read_dataframe("data/raw/tp_gis/taipei_1151005.shp")
     b = b[b.bud_floor > 0].reset_index(drop=True)
@@ -130,6 +150,7 @@ def build_taipei(con):
     a = pd.read_csv("data/raw/tp_gis/addr.csv", dtype=str)
     a = _addr_points(a, "橫座標", "縱座標", "臺北市", "街路段")
     _write(con, "臺北市", b, _match(a, b))
+    mark_annexes(con)
 
 
 # ── 只有門牌點位、沒有建物圖的縣市 ──────────────────────────────

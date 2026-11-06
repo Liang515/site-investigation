@@ -185,6 +185,12 @@ def api_stats():
             for c, n, t, h, a in rows]
 
 
+@lru_cache(maxsize=16)
+def _has_column(table: str, col: str) -> bool:
+    return bool(_cur().execute("SELECT count(*) FROM information_schema.columns WHERE table_name = ? AND column_name = ?",
+                               [table, col]).fetchone()[0])
+
+
 def _has_table(name: str) -> bool:
     return bool(_cur().execute(
         "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [name]).fetchone()[0])
@@ -220,8 +226,10 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
         real_h = {r[0]: r[5] for r in rows if r[5] is not None}  # 人工校正的實際高度
         # 人工校正或有手工模型的 OSM 建物一定畫，不被臺北建照外框蓋掉
         trusted = {r[0] for r in rows if r[6] or r[0] in MODELS}
+    # 同建照的附屬小外框：套繪圖記的是整張建照的最高樓層，不是它自己的，當成樓層未知（畫成矮的一層）
+    annex = "coalesce(annex, false)" if _has_column("buildings", "annex") else "false"
     rows = _cur().execute(f"""
-        SELECT uid, floors_above, source, wkb FROM buildings
+        SELECT uid, CASE WHEN {annex} THEN NULL ELSE floors_above END, source, wkb FROM buildings
         WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
         LIMIT {MAX_BUILDINGS + 1}
     """, box).fetchall()
@@ -470,6 +478,11 @@ def api_building(uid: str):
     out = b.iloc[0].to_dict()
     out = {k: (None if pd.isna(v) else v) for k, v in out.items()}
     out.update(addresses=[a for (a,) in addrs], n_units=n)
+    if _has_column("buildings", "annex") and cur.execute("SELECT annex FROM buildings WHERE uid = ?", [uid]).fetchone()[0]:
+        out["note"] = (f"同一張建照拆出來的附屬小外框；套繪圖記的 {out['floors_above']} 層是整張建照的最高樓層，"
+                       "不是這塊的樓層")
+        out["floors_above"] = None
+        return _with_risk(out)
     if out.get("floors_above") is None:
         full = [c + t + b for c, t, b in cur.execute(
             "SELECT DISTINCT county, town, base FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 2, 3 LIMIT 30",

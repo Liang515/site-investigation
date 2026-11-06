@@ -234,6 +234,10 @@ const HAZARD_LAYERS = HAZARDS.flatMap(h => h.point
      { id: `hz-${h.kind}-line`, type: "line", source: `hz-${h.kind}`, layout: { visibility: "none" },
        paint: { "line-color": rankColor(h.colors), "line-width": 1, "line-opacity": 0.7 } }]);
 
+// 沒有樓層、只有 OSM 高度的建物：以 高度÷3.2m 上色
+const BLDG_COLOR = ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
+  ["step", ["coalesce", ["get", "floors"], ["/", ["get", "h"], 3.2]], RAMP[0][1], ...RAMP.slice(1).flat()]];
+const SEL_COLOR = "#ff8f00";
 const map = !MAP_OK ? NOOP : new maplibregl.Map({
   container: "map",
   style: {
@@ -252,9 +256,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
       { id: "emap", type: "raster", source: "emap" },
       ...HAZARD_LAYERS,
       { id: "bldg", type: "fill-extrusion", source: "bldg", paint: {
-          // 沒有樓層、只有 OSM 高度的建物：以 高度÷3.2m 上色
-          "fill-extrusion-color": ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
-            ["step", ["coalesce", ["get", "floors"], ["/", ["get", "h"], 3.2]], RAMP[0][1], ...RAMP.slice(1).flat()]],
+          "fill-extrusion-color": BLDG_COLOR,
           "fill-extrusion-height": ["coalesce", ["get", "h"], 3.2],
           "fill-extrusion-base": ["coalesce", ["get", "base"], 0],
           "fill-extrusion-opacity": 0.85 } },
@@ -369,7 +371,24 @@ function gmapLink(r) {
   return link + pano;
 }
 
-function select(uid) { map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]); }
+// 飛到查到的建物：畫面中心放在建物上，鏡頭站在門牌那一側（臨街面）朝建物看，
+// 避免同一基地的其他高樓擋在鏡頭和這棟之間
+function viewOf(door, bldg) {
+  const view = { center: [door.lon, door.lat], zoom: 18, pitch: 55 };
+  if (!bldg || bldg.lon == null) return view;
+  const k = Math.cos(door.lat * Math.PI / 180);
+  const dx = (bldg.lon - door.lon) * k, dy = bldg.lat - door.lat;
+  view.center = [bldg.lon, bldg.lat];
+  if (Math.hypot(dx, dy) > 3e-5) view.bearing = Math.atan2(dx, dy) * 180 / Math.PI;  // 門牌離建物中心 3 m 以上才轉向
+  return view;
+}
+
+// 選取的建物：整棟立體改成橘色（高樓在斜視角會擋住地面的外框線），地面外框線保留
+function select(uid) {
+  map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]);
+  map.setPaintProperty("bldg", "fill-extrusion-color",
+    uid ? ["case", ["==", ["get", "uid"], uid], SEL_COLOR, BLDG_COLOR] : BLDG_COLOR);
+}
 
 // 點地圖上的建物：只看建物圖屬性
 async function showBuilding(uid) {
@@ -428,16 +447,16 @@ async function doLookup(q) {
       <dt>比對方式</dt><dd>${v(r.level)}</dd>
       <dt>信心</dt><dd><span class="badge b-${esc(r.confidence)}">${esc(r.confidence)}</span></dd>
     </dl>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}`;
-  if (r.lon != null) {
-    map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
-    map.flyTo({ center: [r.lon, r.lat], zoom: 18, pitch: 55 });
-  }
   // 基隆、南投、嘉義市、宜蘭、連江沒有門牌座標：只有實價登錄，地圖無法定位
   const noCoord = r.lon == null && r.county && r.confidence !== "無" && r.confidence !== "待確認"
     ? `<div class="note">${esc(r.county)}沒有開放門牌座標資料，地圖無法定位到這個門牌（樓層資料來自實價登錄）。</div>` : "";
   // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
   const uid = r.osm_uid || r.bldg_uid;
   const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
+  if (r.lon != null) {
+    map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
+    map.flyTo(viewOf(r, bldg));
+  }
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   const cardEl = document.getElementById("result").querySelector(".card");
