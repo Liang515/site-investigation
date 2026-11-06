@@ -80,7 +80,10 @@
   .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: var(--fs-cap); margin-bottom: 8px; }
   .crumbs button { background: var(--accent-soft); color: var(--accent); padding: 4px 10px; font-size: var(--fs-cap); }
   .crumbs .cur { color: var(--muted); }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; padding: 2px; }
+  /* 高度上限讓 22 個縣市整個放得下；更多（路、門牌）時框內捲動，下緣淡出提示還有 */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 380px; overflow-y: auto; padding: 2px; }
+  .tiles.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); }
   .tiles.wide { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .tiles.num { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
   .tile { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 9px 4px; font-weight: 500; line-height: 1.3; position: relative; }
@@ -683,6 +686,13 @@ function renderCrumbs() {
     + `<span class="cur">${chosen.length ? "›" : ""} 選${LEVEL_NAME[pickLevel]}</span>`;
 }
 
+// 框內還有沒捲到的項目：下緣淡出（Mac 預設不顯示捲軸，否則看起來像框線被切掉）
+function tileFade() {
+  tilesEl.classList.toggle("more", tilesEl.scrollHeight - tilesEl.scrollTop - tilesEl.clientHeight > 4);
+}
+tilesEl.addEventListener("scroll", tileFade, { passive: true });
+window.addEventListener("resize", tileFade);
+
 function renderTiles() {
   const f = filterEl.value.trim();
   const items = f ? pickItems.filter(x => (pickLevel === "lane" ? laneLabel(x.name) : x.name).includes(f)) : pickItems;
@@ -693,6 +703,8 @@ function renderTiles() {
     const has = pickLevel === "door" ? x.has : false;
     return `<button class="tile${has ? " has" : ""}" data-i="${pickItems.indexOf(x)}">${esc(label)}${sub ? `<small>${sub}</small>` : ""}</button>`;
   }).join("") : `<span class="hint">沒有符合的${LEVEL_NAME[pickLevel]}</span>`;
+  tilesEl.scrollTop = 0;
+  tileFade();
   document.getElementById("pickHint").innerHTML = pickLevel === "door"
     ? `<span style="color:var(--hi)">●</span> 這個門牌自己有實價登錄（最可能查到樓層）；沒有的也會用同棟、同巷推估`
     : pickLevel === "road" ? "依門牌數排序，常見的路在前面" : "";
