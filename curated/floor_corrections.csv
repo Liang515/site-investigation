@@ -7,9 +7,9 @@ county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,che
 ,,,osm:258262896,8,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 A館（B2–B4 停車場）,2026-11-05
 ,,,osm:258262897,6,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 B館（B2–B4 停車場）,2026-11-05
 ,,,osm:286883510,11,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越嘉義垂楊店（B2–B4 停車場）,2026-11-05
-,,,osm:391309615,6,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A11館（B3–B5 停車場）,2026-11-05
-,,,osm:269773067,9,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A9館（B3–B5 停車場）,2026-11-05
-,,,osm:274647897,6,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A4館（B3–B5 停車場）,2026-11-05
+,,,osm:391309615,6,5,,1997,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A11館（B3–B5 停車場）,2026-11-05
+,,,osm:269773067,9,5,,2003,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A9館（B3–B5 停車場）,2026-11-05
+,,,osm:274647897,6,5,,2005,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A4館（B3–B5 停車場）,2026-11-05
 ,,,osm:382872848,11,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越高雄左營店 一館（B3–B4 停車場）,2026-11-05
 ,,,osm:170129878,12,3,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百桃園（B2–B3 停車場）,2026-11-05
 ,,,osm:912474281,8,4,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百竹北（B1 機車、B2–B4 汽車停車場）,2026-11-05
@@ -81,3 +81,6 @@ county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,che
 ,,,osm:r8376918,6,2,,1985,https://zh.wikipedia.org/wiki/國家圖書館_(臺灣),國家圖書館,2026-11-06
 ,,,osm:232674052,13,,,1984,https://www.oyster.com/taipei/hotels/howard-plaza-hotel-taipei/,台北福華大飯店,2026-11-06
 ,,,osm:667074054,30,,109,1996,https://en.wikipedia.org/wiki/Howard_Plaza_Hotel_Kaohsiung,高雄福華大飯店,2026-11-06
+,,,osm:274647896,7,5,,2002,https://zh.wikipedia.org/wiki/新光三越信義新天地,新光三越信義新天地 A8館,2026-11-06
+,,,osm:204711206,51,7,244.15,1993,https://zh.wikipedia.org/wiki/新光人壽保險摩天大樓,新光人壽保險摩天大樓,2026-11-06
+,,,osm:148849083,14,2,,2000,https://tw-landmark.blogspot.com/2019/06/skm-taichung-zhonggang.html,新光三越台中中港店,2026-11-06

@@ -178,6 +178,28 @@ def xinzhuang_baseball_stands(g) -> list[tuple[list, float, float]]:
     return stadium_stands(g, 14)
 
 
+def tower_crown(g, body_top: float, roof: float, inset: float, n: int, spire_top: float | None = None,
+                spire_w: float = 4) -> list[tuple[list, float, float]]:
+    """依 OSM 外框的塔樓：外框到 body_top 公尺，頂部分 n 段往內收 inset 公尺到 roof，中央尖塔到 spire_top。"""
+    m, back = _meters(g)
+    segs = [(_coords(g), 0, body_top)]
+    for i in range(n):
+        shrunk = m.buffer(-inset * (i + 1) / n, join_style="mitre")
+        if shrunk.is_empty:
+            break
+        segs.append((_coords(back(shrunk)), body_top + (roof - body_top) * i / n,
+                     body_top + (roof - body_top) * (i + 1) / n))
+    if spire_top:
+        c = g.centroid
+        segs.append((_square(c.x, c.y, spire_w), roof, spire_top))
+    return segs
+
+
+def shin_kong_tower(g) -> list[tuple[list, float, float]]:
+    """新光人壽保險摩天大樓（1993）：地上 51 層，屋頂 238.15 m、尖頂 244.15 m（維基百科）；頂部收分。"""
+    return tower_crown(g, 200, 238.15, 12, 4, 244.15)
+
+
 # 模型已經畫進去的 OSM 分棟，地圖不另外畫
 REPLACED_PARTS = {"osm:1052759759", "osm:r19378990"}
 
@@ -188,6 +210,7 @@ MODELS = {
     "osm:1052759776": national_theater,
     "osm:1052759775": national_concert_hall,
     "osm:r206817": presidential_office,
+    "osm:204711206": shin_kong_tower,
     "osm:230984631": xinzhuang_gym,
     "osm:r9106110": xinzhuang_baseball_stands,
     "osm:665628025": lambda _g=None: [],  # 球場整座外框（含草皮）不畫，看台另外畫

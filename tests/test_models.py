@@ -54,3 +54,14 @@ def test_presidential_office_has_courtyards():
 
     assert all(signed(body[0]) * signed(h) < 0 for h in body[1:])
     assert "osm:r206817" in MODELS
+
+
+def test_tower_crown_steps_in_to_spire():
+    import shapely
+
+    from sitefloor.models import tower_crown
+    g = shapely.box(121.0, 25.0, 121.0004, 25.0008)  # 約 40×88 m
+    segs = tower_crown(g, 200, 238.15, 12, 4, 244.15)
+    assert segs[0][1:] == (0, 200) and segs[-1][2] == 244.15
+    widths = [max(p[0] for p in ring[0]) - min(p[0] for p in ring[0]) for ring, _, _ in segs[:-1]]
+    assert widths == sorted(widths, reverse=True)  # 越往上越窄
