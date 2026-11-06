@@ -161,7 +161,31 @@ class Suggester:
             for _num, _sub, _near, base, has in pick:
                 h = hint or ("" if exact else f"沒有 {door_label(qlane, num, sub, False)}，最接近的門牌")
                 out.append({"text": f"{head}{base}", "kind": "door", "has": has, "hint": h, "exact": bool(exact)})
+        if num is not None and not fix:
+            out += self._exact_elsewhere(con, a, qroad, qlane, num, sub, {x["text"] for x in out})
         return out
+
+    @staticmethod
+    def _exact_elsewhere(con, a, road, lane, num, sub, seen) -> list[dict]:
+        """路名完全相同的區很多時（中正路 181 個區），_roads 只取門牌最多的前 5 個；
+        門牌少的區（臺北市中正區仁愛路一段）有完全相符的門牌也要列出，一次查所有區。"""
+        base = road + door_label(lane, num, sub, False)
+        where = "base = ?" + (" AND county = ?" if a.county else "") + (" AND town = ?" if a.town else "")
+        args = [base] + [x for x in (a.county, a.town) if x]
+        rows = con.execute(
+            f"""
+            SELECT d.county, d.town, t.base IS NOT NULL FROM (
+                SELECT DISTINCT county, town FROM addresses WHERE {where}
+                UNION SELECT county, town FROM door_trade WHERE {where}) d
+            LEFT JOIN door_trade t ON t.county = d.county AND t.town = d.town AND t.base = ?
+            WHERE d.town IS NOT NULL ORDER BY d.county, d.town""",
+            args * 2 + [base],
+        ).fetchall()
+        return [
+            {"text": f"{c}{t}{base}", "kind": "door", "has": has, "hint": "", "exact": True}
+            for c, t, has in rows
+            if f"{c}{t}{base}" not in seen
+        ]
 
     @staticmethod
     def _doors(con, county, town, road, lane) -> list[tuple[int, int, bool, str, bool]]:

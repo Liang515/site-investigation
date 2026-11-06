@@ -21,3 +21,23 @@ def test_variants_fix_town_typo():
 def test_variants_ambiguous_county_not_guessed():
     # 新竹有市有縣，不猜
     assert all(not v.startswith(("新竹市", "新竹縣")) for v, _ in variants("新竹光復路1號"))
+
+
+def test_exact_door_beyond_top_roads():
+    # 同名路很多個區都有時，門牌少的區（臺北市中正區仁愛路一段）排在前 5 名之外，完全相符的門牌仍要列出
+    import duckdb
+
+    from sitefloor.suggest import Suggester
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE addresses (county VARCHAR, town VARCHAR, base VARCHAR)")
+    con.execute("CREATE TABLE door_trade (county VARCHAR, town VARCHAR, base VARCHAR)")
+    towns = [("新北市", f"甲{i}區", 100 - i) for i in range(6)] + [("臺北市", "中正區", 10)]
+    rows = [(c, t, f"仁愛路一段{n}號") for c, t, k in towns for n in range(1, k + 1) if n != 17]
+    rows.append(("臺北市", "中正區", "仁愛路一段17號"))
+    con.executemany("INSERT INTO addresses VALUES (?, ?, ?)", rows)
+    con.execute(
+        "CREATE TABLE roads AS SELECT county, town, '仁愛路一段' AS road, count(*) AS n FROM addresses GROUP BY ALL"
+    )
+    got = [x["text"] for x in Suggester(con).suggest(con, "仁愛路1段17號")]
+    assert "臺北市中正區仁愛路一段17號" in got
