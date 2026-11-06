@@ -75,6 +75,12 @@
   .tile small { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
   .tile.has::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--hi); }
   #f { position: relative; }
+  /* 輸入框右側的清除鈕（有文字才出現） */
+  .qwrap { position: relative; flex: 1; min-width: 0; display: flex; }
+  .qwrap input { padding-right: 34px; }
+  #qClear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; padding: 0;
+    border-radius: 50%; background: transparent; color: var(--muted); font-size: 20px; line-height: 1; }
+  #qClear:hover { background: var(--bg); color: var(--ink); }
   #sugg { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.08); max-height: 320px; overflow-y: auto; }
   .sg { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border-radius: 0; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   .sg:last-child { border-bottom: 0; }
@@ -137,7 +143,7 @@
         <div class="hint" id="pickHint" style="margin-top:6px"></div>
       </div>
       <div id="typeBox" hidden>
-        <form id="f" autocomplete="off"><input id="q" type="text" placeholder="地址或地標，例：市政路390號"><button>查詢</button><div id="sugg" hidden></div></form>
+        <form id="f" autocomplete="off"><span class="qwrap"><input id="q" type="text" placeholder="地址或地標，例：市政路390號"><button type="button" id="qClear" aria-label="清除" title="清除" hidden>×</button></span><button>查詢</button><div id="sugg" hidden></div></form>
         <div class="hint" style="margin-top:6px">可以打錯字、用簡寫或只打一部分，會列出最接近的門牌</div>
       </div>
       <div id="result" style="margin-top:12px"></div>
@@ -460,12 +466,19 @@ async function updateSugg() {
   suggEl.hidden = !items.length;
 }
 function chooseSugg(text, kind) {
-  qEl.value = text;
+  qEl.value = text; syncClear();
   hideSugg();
   if (kind === "road") { qEl.focus(); updateSugg(); return; }  // 選了路，接著打門牌號
   doLookup(text);
 }
-qEl.addEventListener("input", () => { clearTimeout(suggTimer); suggTimer = setTimeout(updateSugg, 200); });
+const qClear = document.getElementById("qClear");
+const syncClear = () => { qClear.hidden = !qEl.value; };
+qEl.addEventListener("input", () => { syncClear(); clearTimeout(suggTimer); suggTimer = setTimeout(updateSugg, 200); });
+// 一鍵清除：清掉文字與建議，游標留在輸入框可以直接打下一筆（查詢結果和地圖不動）
+qClear.addEventListener("click", () => {
+  clearTimeout(suggTimer); suggSeq++;
+  qEl.value = ""; lastSubmitted = ""; hideSugg(); syncClear(); qEl.focus();
+});
 qEl.addEventListener("keydown", e => {
   if (suggEl.hidden || !suggItems.length) return;
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -605,7 +618,7 @@ tilesEl.addEventListener("click", e => {
   const x = pickItems[+b.dataset.i];
   if (pickLevel === "door") {
     const q = pick.county + pick.town + x.base;
-    document.getElementById("q").value = q;
+    document.getElementById("q").value = q; syncClear();
     tilesEl.querySelectorAll(".tile").forEach(t => t.style.outline = "");
     b.style.outline = "2px solid var(--accent)";
     doLookup(q);
@@ -640,7 +653,7 @@ loadPick();
 // 方柱（沒有建物外框、用實價登錄樓層畫的門牌）點了直接查該門牌
 map.on("click", "bldg", e => {
   const p = e.features[0].properties;
-  if (p.pillar) { document.getElementById("q").value = p.addr; doLookup(p.addr); }
+  if (p.pillar) { document.getElementById("q").value = p.addr; syncClear(); doLookup(p.addr); }
   else showBuilding(p.uid);
 });
 map.on("mouseenter", "bldg", () => map.getCanvas().style.cursor = "pointer");
