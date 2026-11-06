@@ -183,6 +183,18 @@
     </section>
 
     <section>
+      <details class="fb fb-general"><summary>回報問題</summary>
+        <form class="fbform">
+          <label class="wide">問題類型<select name="kind"></select></label>
+          <label class="wide">地點<input name="address" maxlength="100" placeholder="可不填，例：信義計畫區、某條路一帶"></label>
+          <label class="wide">說明<textarea name="detail" maxlength="500" rows="3" required placeholder="例：這一區的建物都畫錯了、手機版某個按鈕沒反應"></textarea></label>
+          <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
+          <button type="submit">送出</button><span class="fbmsg hint"></span>
+          <div class="hint wide">樓層錯誤請先查詢該地址或點選建物，從結果卡片下方回報。</div>
+        </form></details>
+    </section>
+
+    <section>
       <details><summary>各縣市涵蓋率</summary><table id="stats"></table></details>
     </section>
   </aside>
@@ -591,7 +603,10 @@ function riskHtml(r) {
 // ── 問題回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
 // 類型要和 sitefloor/feedback.py 的 KINDS 一致
 const FB_KINDS = [["floors", "樓層錯誤"], ["address", "地址或位置錯誤"], ["shape", "建物形狀或立體圖錯誤"],
-  ["info", "年份、構造或用途錯誤"], ["hazard", "災害潛勢或消防資訊錯誤"], ["other", "其他問題"]];
+  ["info", "年份、構造或用途錯誤"], ["hazard", "災害潛勢或消防資訊錯誤"], ["site", "網站功能或建議"], ["other", "其他問題"]];
+// 側欄的一般回報：不限地址，樓層錯誤要從結果卡片回報
+document.querySelector(".fb-general select").innerHTML = FB_KINDS.filter(([k]) => k !== "floors")
+  .map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
 function feedbackHtml(r, building = "") {
   const addr = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
   return `<details class="fb"><summary>資料有誤？回報問題</summary>
@@ -609,21 +624,22 @@ document.getElementById("result").addEventListener("click", e => {
   if (e.target.closest(".again")) document.querySelector(".tabs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 // 樓層錯誤才要填樓層；其他問題改填說明
-document.getElementById("result").addEventListener("change", e => {
+document.addEventListener("change", e => {
   if (e.target.name !== "kind") return;
   const f = e.target.closest(".fbform"), floors = e.target.value === "floors";
+  if (!f.querySelector(".fl")) return;  // 側欄的一般回報沒有樓層欄位
   f.querySelectorAll(".fl").forEach(l => l.hidden = !floors);
   f.querySelector("[name=floors_above]").required = floors;
   f.querySelector(".fd").hidden = floors;
   f.querySelector("[name=detail]").required = !floors;
 });
-document.getElementById("result").addEventListener("submit", async e => {
+document.addEventListener("submit", async e => {
   const f = e.target.closest(".fbform"); if (!f) return;
   e.preventDefault();
   const msg = f.querySelector(".fbmsg"), btn = f.querySelector("button");
   btn.disabled = true; msg.textContent = "送出中…";
   const data = Object.fromEntries(new FormData(f));
-  data.address = f.dataset.addr; data.shown = f.dataset.shown; data.building = f.dataset.bldg;
+  if (f.dataset.addr !== undefined) Object.assign(data, { address: f.dataset.addr, shown: f.dataset.shown, building: f.dataset.bldg });
   const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
   const out = await resp.json().catch(() => ({}));
   if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input, select, textarea").forEach(i => i.disabled = true); }

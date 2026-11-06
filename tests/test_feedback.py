@@ -111,3 +111,11 @@ def test_other_kinds_need_detail_not_floors():
 def test_old_reports_without_kind_are_floors():
     fb = feedback.validate({"address": "某地址", "floors_above": "12"})
     assert fb["kind"] == "floors" and "樓層錯誤" in feedback.summary(fb)
+
+
+def test_general_report_without_address():
+    fb = feedback.validate({"kind": "site", "detail": "手機版地圖載入很慢"})
+    assert fb["address"] == "" and feedback.issue(fb)["title"] == "網站功能或建議：未指定地點"
+    assert "地址：未指定地點" in feedback.summary(fb)
+    with pytest.raises(ValueError):
+        feedback.validate({"kind": "floors", "floors_above": "5"})  # 樓層錯誤一定要有地址

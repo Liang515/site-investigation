@@ -16,8 +16,10 @@ KINDS = {  # 回報類型 → 顯示名稱；舊回報沒有類型，當作樓�
     "shape": "建物形狀或立體圖錯誤",
     "info": "年份、構造或用途錯誤",
     "hazard": "災害潛勢或消防資訊錯誤",
+    "site": "網站功能或建議",
     "other": "其他問題",
 }
+NO_PLACE = "未指定地點"
 
 
 def clean(x, n: int) -> str:
@@ -46,14 +48,14 @@ def _int(x) -> int | None:
 
 def validate(body: dict) -> dict:
     """檢查回報內容；不合格丟 ValueError（訊息給使用者看）。
-    樓層錯誤：地上樓層必填；其他類型：說明必填，樓層可不填。"""
+    樓層錯誤：地址、地上樓層必填；其他類型：說明必填，地址（地點）與樓層可不填。"""
     addr = clean(body.get("address"), 100)
     kind = body.get("kind") or "floors"
     if kind not in KINDS:
         raise ValueError("問題類型不正確")
     above, below = _int(body.get("floors_above")), _int(body.get("floors_below"))
     detail = clean(body.get("detail"), 500)
-    if not addr:
+    if kind == "floors" and not addr:
         raise ValueError("地址必填")
     if kind == "floors" and above is None:
         raise ValueError("請填地上樓層")
@@ -68,7 +70,9 @@ def validate(body: dict) -> dict:
 
 def summary(fb: dict) -> str:
     """純文字摘要（推播、部署紀錄用）。"""
-    lines = [f"類型：{KINDS[fb.get('kind') or 'floors']}", f"地址：{fb['address']}", f"網站顯示：{fb['shown'] or '—'} 層"]
+    lines = [f"類型：{KINDS[fb.get('kind') or 'floors']}", f"地址：{fb['address'] or NO_PLACE}"]
+    if fb["shown"]:
+        lines.append(f"網站顯示：{fb['shown']} 層")
     if fb["floors_above"] is not None:
         below = f"、地下 {fb['floors_below']} 層" if fb["floors_below"] is not None else ""
         lines.append(f"回報：地上 {fb['floors_above']} 層{below}")
@@ -96,7 +100,7 @@ def issue(fb: dict) -> dict:
         f"<!-- {MARKER} -->", "```json", data, "```",
     ])
     kind = fb.get("kind") or "floors"
-    return {"title": f"{KINDS[kind]}：{fb['address']}", "body": body}
+    return {"title": f"{KINDS[kind]}：{fb['address'] or NO_PLACE}", "body": body}
 
 
 def parse_issue(body: str) -> dict | None:
