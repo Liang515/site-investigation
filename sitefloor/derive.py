@@ -19,8 +19,8 @@ SUGGEST_LANE = r"^(.*?)((?:\d+巷)?(?:\d+弄)?)$"
 DOOR_RE = r"^(.*?)(\d+)(之(\d+))?號$"
 
 SQL = f"""
--- 總樓層取眾數；平手時優先「有記載所在樓層」的紀錄（例：松江路169號 2 筆整棟出租記 2 層、
--- 2 筆 4 樓、7 樓的記 17 層 → 17），再取最近一筆成交、再取較高（DuckDB 的 mode() 平手時每次結果不同）
+-- 總樓層取眾數；平手時優先「有記載所在樓層」的紀錄（整棟出租的紀錄常把
+-- 總樓層記錯），再取最近一筆成交、再取較高（DuckDB 的 mode() 平手時每次結果不同）
 CREATE OR REPLACE TABLE door_trade AS
 WITH t AS (
     SELECT * FROM trades WHERE total_floors IS NOT NULL AND town IS NOT NULL AND base LIKE '%號'

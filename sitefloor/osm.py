@@ -3,7 +3,7 @@
 - osm_buildings：OSM 建物外框（全部，含樓層不明的；地下構造除外）。levels＝OSM 標註的地上樓層（building:levels）；
   height＝OSM 標註高度（公尺）；trade_floors＝落在這棟裡的門牌的實價總樓層眾數；permit_floors＝這些門牌的使用執照樓層眾數。
   height 換算樓層只有 30% 相符（樓高差異大），所以只拿來畫地圖，不當樓層。
-- osm_parts：OSM 分棟（building:part，例：台北101 的購物中心 6 層）。parent_uid＝所在的建物外框；
+- osm_parts：OSM 分棟（building:part，例：塔樓下的購物中心）。parent_uid＝所在的建物外框；
   地圖把分棟用各自的高度畫，外框只畫扣掉分棟的部分（見 render.split_parts）。
 - door_osm：門牌號（county, town, base）落在哪棟 OSM 建物裡。
 - same_osm：OSM 同棟推估。同一 OSM 外框內有實價的門牌的總樓層眾數（n＝有實價的門牌數、spread＝最大減最小、
@@ -110,8 +110,8 @@ SMALL_PERMIT = 0.25  # 使照建築面積不到 OSM 外框面積的這個比例 
 
 
 def mark_small_permits(con, b: gpd.GeoDataFrame):
-    """permits.small：使照的建築面積遠小於門牌所在的 OSM 建物、而且樓層和這棟對不上（例：臺北市政府市府路1號的
-    2022 年使照是 321 m² 的一層風雨走廊，OSM 標 12 層；市政大樓 1994 年的使照不在開放資料裡）。
+    """permits.small：使照的建築面積遠小於門牌所在的 OSM 建物、而且樓層和這棟對不上（同一門牌後來
+    增建的附屬小建物，例如一層的風雨走廊；原本主建物的使照在開放資料範圍之前）。
     這種使照的樓層、年份、構造、用途都不套用到這個門牌。樓層對得上的照用（例：OSM 一個外框圈了整個社區）。"""
     if not con.execute("SELECT count(*) FROM information_schema.columns "
                        "WHERE table_name = 'permits' AND column_name = 'small'").fetchall()[0][0]:

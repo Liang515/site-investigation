@@ -353,7 +353,7 @@ QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY (p.base = k.base) DESC, p.y
 
 def _add_usage(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
     """使用性質：使用執照核准用途（臺北逐層、新北、新竹市）優先，其次實價登錄的主要用途眾數。
-    使照是整棟的核准用途（例：遼寧街179號 辦公、金融保險、餐飲、零售商場、健身休閒），實價只看得到成交那幾戶。"""
+    使照是整棟的核准用途（可分到每一層），實價只看得到成交那幾戶。"""
     p = _optional(con, _PERMIT_USE_SQL, ["i", "p_usage", "p_usage_floors", "p_zoning"]).set_index("i")
     for c in ("usage", "zoning"):
         if c not in df:

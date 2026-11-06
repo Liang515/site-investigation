@@ -3,7 +3,7 @@
 一列＝一棟（或一個門牌）的已確認樓層。兩種指定方式擇一或並用：
 - county, town, base：門牌號（例：使用者回報、查證過的實價錯誤）
 - osm_uid：OpenStreetMap 建物（例：百貨、球場等沒有單一門牌的地標；查詢時落在這棟裡的門牌都會套用）
-欄位：floors_above（必填）、floors_below、height_m、year（竣工年，選填；例：中正紀念堂 1980，臺北建照套繪圖只有改建的 2005 年建照）、source（依據，例：官網樓層介紹網址、使用執照字號、使用者回報）、note、checked（查證日期）。
+欄位：floors_above（必填）、floors_below、height_m、year（竣工年，選填；建物圖或使照只有後來改建的年份時用）、source（依據，例：官網樓層介紹網址、使用執照字號、使用者回報）、note、checked（查證日期）。
 
 查詢時優先序最高（高於實價登錄），地圖上 OSM 建物也改用這個樓層。
 用法：uv run python -m sitefloor.curated   （osm 之前；每週更新會自動跑）
@@ -40,7 +40,7 @@ def load() -> pd.DataFrame:
                 raise ValueError
         except (TypeError, ValueError):
             bad.append(f"第 {i + 2} 列：floors_above 要是 1–110 的整數")
-        if has(r["height_m"]):  # 實際高度（公尺），選填：地圖改用這個高度畫（例：巨蛋一層很高）
+        if has(r["height_m"]):  # 實際高度（公尺），選填：地圖改用這個高度畫（一層很高的場館）
             try:
                 if not 2 <= float(r["height_m"]) <= 600:
                     raise ValueError

@@ -9,8 +9,8 @@
 
 欄位：county, town, base, floors_above, floors_below, structure, year（竣工年；沒有就用使照發照年）, permit_no, source,
 usage（核准用途，依建築技術規則使用類組歸類，臺北依樓地板面積由大到小）、usage_floors（臺北：各樓層用途摘要）、zoning（使用分區）、
-bldg_area（建築面積 m²；臺北、新北）、small（osm.py 填：建築面積不到門牌所在 OSM 建物外框的 1/4，這張使照講的是附屬小建物，
-例：臺北市政府市府路1號的 2022 年使照是 321 m² 的一層風雨走廊，不能當成市政大樓 12 層）
+bldg_area（建築面積 m²；臺北、新北）、small（osm.py 填：建築面積不到門牌所在 OSM 建物外框的 1/4、樓層又對不上，
+這張使照講的是後來增建的附屬小建物，不套用）
 同一門牌有多張使照時取最新一張。用途是領使照時核准的；後來變更使用（變使）不在這份資料裡。
 
 用法：uv run python -m sitefloor.permits   （要先停掉 server）
@@ -90,7 +90,7 @@ _TP_FLOOR = re.compile(r"(?:^|-)(地下|地上)(\d+)樓")
 
 def taipei_usage(el) -> tuple[str | None, str | None]:
     """臺北使照「建築概要」逐層用途 → (整棟用途：依樓地板面積由大到小, 各樓層摘要：同用途的連續樓層合併)。
-    例：遼寧街179號 →「辦公、金融保險、餐飲、零售商場、健身休閒」「B3–B2 餐飲、零售商場、健身休閒；1F …；3–20F 辦公、金融保險」"""
+    例：「辦公、金融保險、餐飲」「B2–B1 餐飲；1F 金融保險、餐飲；3–20F 辦公、金融保險」"""
     floors: dict[int, list[str]] = {}  # 地下 N 樓 → -N
     area: dict[str, float] = {}
     for f in el.iterfind(".//建築概要/樓層"):
