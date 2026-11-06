@@ -13,7 +13,7 @@ npm i -g vercel
 ## 2. 取得程式
 
 ```bash
-mkdir -p ~/Documents && cd ~/Documents
+cd ~
 git clone https://github.com/Liang515/site-investigation.git
 cd site-investigation && uv sync
 ```
@@ -28,12 +28,12 @@ git pull && zsh scripts/sync_data_to_mini.sh
 
 預設複製到 `liangchen@Mac-mini.local:~/site-investigation/data/`；位置不同時用 `MINI=使用者@名稱.local DEST=路徑/data/` 指定。
 
-或用隨身硬碟把整個 `data/` 資料夾複製到 Mac mini 的 `~/Documents/site-investigation/data/`。
+或用隨身硬碟把整個 `data/` 資料夾複製到 Mac mini 的 `~/site-investigation/data/`。
 
 ## 4. Vercel 部署權限（Mac mini 上）
 
 ```bash
-cd ~/Documents/site-investigation
+cd ~/site-investigation
 vercel login
 vercel link --yes --project site-investigation
 vercel env pull .env.local   # 查詢熱度（Upstash）的連線設定，每週更新拉回計數用；不進版控
@@ -60,7 +60,7 @@ zsh scripts/install_schedule.sh
 2. 要看完整報告：Mac mini 上的 `data/reports/<日期>.md`。
 3. 沒問題就部署（Mac mini 上，或從筆電遠端）：
    ```bash
-   ssh <Mac mini 使用者名稱>@<Mac mini 名稱>.local "zsh -lc 'cd ~/Documents/site-investigation && scripts/deploy.sh'"
+   ssh <Mac mini 使用者名稱>@<Mac mini 名稱>.local "zsh -lc 'cd ~/site-investigation && scripts/deploy.sh'"
    ```
    （`zsh -lc` 讓 ssh 載入 Homebrew 的路徑，否則找不到 `vercel`）
 
