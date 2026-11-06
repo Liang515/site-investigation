@@ -36,7 +36,7 @@ def test_reviewer_edits_json():
 
 def test_merge_replaces_same_door(tmp_path, monkeypatch):
     f = tmp_path / "c.csv"
-    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:1,9,3,,src,,\n新北市,五股區,凌雲路一段83巷1之5號,,8,,,舊,,\n")
+    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:1,9,3,,,src,,\n新北市,五股區,凌雲路一段83巷1之5號,,8,,,,舊,,\n")
     monkeypatch.setattr(curated, "CSV", f)
     added, replaced = review.merge([review.to_row(_fb(basis="住戶"), 12)])
     assert (added, replaced) == (0, 1)
@@ -80,7 +80,7 @@ def test_building_uid():
 
 def test_map_click_report_becomes_osm_row_and_keeps_height(tmp_path, monkeypatch):
     f = tmp_path / "c.csv"
-    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:442195153,6,2,64,維基,臺北大巨蛋,\n")
+    f.write_text(",".join(curated.COLUMNS) + "\n,,,osm:442195153,6,2,64,2023,維基,臺北大巨蛋,\n")
     monkeypatch.setattr(curated, "CSV", f)
     fb = feedback.validate({"address": "臺北大巨蛋", "floors_above": "7", "building": "osm:442195153"})
     body = feedback.issue(fb)["body"]
@@ -90,3 +90,4 @@ def test_map_click_report_becomes_osm_row_and_keeps_height(tmp_path, monkeypatch
     assert review.merge([row]) == (0, 1)
     df = curated.load()
     assert len(df) == 1 and int(df.floors_above.iloc[0]) == 7 and df.height_m.iloc[0] == 64  # 實際高度保留
+    assert int(df.year.iloc[0]) == 2023  # 竣工年保留

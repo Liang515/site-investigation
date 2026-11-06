@@ -1,70 +1,71 @@
-county,town,base,osm_uid,floors_above,floors_below,height_m,source,note,checked
-,,,osm:155816458,9,3,,https://www.colatour.com.tw/C10T_Ticket/C10T02_Feature.aspx?ItemNo=4883,美麗華百樂園（樓層 B3–9F）,2026-11-05
-,,,osm:139211591,13,3,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,SOGO 台北忠孝館（營業 B2–13F，B3 停車場）,2026-11-05
-,,,osm:155814892,11,6,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,SOGO 台北復興館（營業 B3–11F，B4–B6 停車場）,2026-11-05
-,,,osm:442195152,8,2,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,遠東 Garden City 商場棟（B2–8F）,2026-11-05
-,,,osm:170129762,12,6,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越桃園站前店（營業 B1–12F，B2–B6 停車場）,2026-11-05
-,,,osm:258262896,8,4,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 A館（B2–B4 停車場）,2026-11-05
-,,,osm:258262897,6,4,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 B館（B2–B4 停車場）,2026-11-05
-,,,osm:286883510,11,4,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越嘉義垂楊店（B2–B4 停車場）,2026-11-05
-,,,osm:391309615,6,5,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A11館（B3–B5 停車場）,2026-11-05
-,,,osm:269773067,9,5,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A9館（B3–B5 停車場）,2026-11-05
-,,,osm:274647897,6,5,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A4館（B3–B5 停車場）,2026-11-05
-,,,osm:382872848,11,4,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越高雄左營店 一館（B3–B4 停車場）,2026-11-05
-,,,osm:170129878,12,3,,https://zh.wikipedia.org/wiki/遠東百貨,遠百桃園（B2–B3 停車場）,2026-11-05
-,,,osm:912474281,8,4,,https://zh.wikipedia.org/wiki/遠東百貨,遠百竹北（B1 機車、B2–B4 汽車停車場）,2026-11-05
-,,,osm:544706372,7,1,,https://zh.wikipedia.org/wiki/遠東百貨,遠百嘉義,2026-11-05
-,,,osm:246838222,3,2,,https://zh.wikipedia.org/wiki/遠東百貨,遠百花蓮（B2 與頂層為停車場）,2026-11-05
-,,,osm:663679150,14,5,,https://zh.wikipedia.org/wiki/遠東百貨,遠百信義A13（B4–B5 汽車停車場）,2026-11-05
-,,,osm:274646859,9,4,,https://zh.wikipedia.org/wiki/寶麗廣塲,寶麗廣塲 BELLAVITA,2026-11-05
-,,,osm:513491894,7,,,https://zh.wikipedia.org/wiki/微風廣場,微風南山商場（南山廣場裙樓，營業 B2–7F）；地下總層數未確認,2026-11-05
-,,,osm:383731054,48,,,https://zh.wikipedia.org/wiki/臺北南山廣場,臺北南山廣場主塔,2026-11-05
-,,,osm:r6821492,12,3,,https://zh.wikipedia.org/wiki/大葉高島屋,大葉高島屋,2026-11-05
-,,,osm:109836992,5,2,,https://zh.wikipedia.org/wiki/大江國際購物中心,大江國際購物中心,2026-11-05
-,,,osm:90993708,13,3,,https://zh.wikipedia.org/wiki/大立百貨,大立百貨 B館（B2–B3 停車場）,2026-11-05
-,,,osm:108338155,13,5,,https://zh.wikipedia.org/wiki/大統百貨,大統百貨和平店建物（地上13層至地下5層）,2026-11-05
-,,,osm:552332386,17,4,,https://zh.wikipedia.org/wiki/耐斯廣場,耐斯廣場（前棟 8F 為商場、後棟 5–17F 為飯店；OSM 外框為整個建物）,2026-11-05
-,,,osm:221985402,7,6,,https://zh.wikipedia.org/wiki/義大世界購物廣場,義大世界購物廣場 A/B/C 區,2026-11-05
-,,,osm:r8463564,6,1,,https://zh.wikipedia.org/wiki/光華商場,光華數位新天地,2026-11-05
-,,,osm:1389576156,9,2,,https://zh.wikipedia.org/wiki/南紡購物中心,南紡置地廣場（A2館）,2026-11-05
-,,,osm:454892809,9,5,,https://zh.wikipedia.org/wiki/秀泰生活台中文心店,秀泰生活台中文心店（使用執照 106中都使字第01772號）,2026-11-05
-,,,osm:442195153,6,2,64,https://zh.wikipedia.org/wiki/臺北大巨蛋,臺北大巨蛋（球場區地上 6 層、地下 2 層；地上高 64 m）,2026-11-05
-,,,osm:244001544,5,2,,https://zh.wikipedia.org/wiki/臺北小巨蛋,臺北小巨蛋,2026-11-05
-,,,osm:281751127,2,1,,https://zh.wikipedia.org/wiki/松山運動中心,松山運動中心,2026-11-05
-,,,osm:667875596,5,3,,https://zh.wikipedia.org/wiki/板橋國民運動中心,板橋國民運動中心,2026-11-05
-,,,osm:544051984,3,,,https://zh.wikipedia.org/wiki/朝馬國民運動中心,朝馬國民運動中心（共三層樓）,2026-11-05
-,,,osm:687883008,3,3,,https://zh.wikipedia.org/wiki/北區國民運動中心,臺中北區國民運動中心,2026-11-05
-,,,osm:112004509,4,1,,https://zh.wikipedia.org/wiki/土城國民運動中心,土城國民運動中心,2026-11-05
-,,,osm:r5663918,6,,42,https://en.wikipedia.org/wiki/Kaohsiung_Arena,高雄巨蛋（高 42 m、6 層）,2026-11-05
-,,,osm:629510929,3,,,https://zh.wikipedia.org/wiki/屏東車站,屏東車站站房,2026-11-05
-,,,osm:582910772,2,1,,https://zh.wikipedia.org/wiki/苗栗縣三灣鄉立圖書館,三灣鄉立圖書館,2026-11-05
-,,,osm:961080088,3,2,,https://zh.wikipedia.org/wiki/中台世界博物館,中台世界博物館,2026-11-05
-,,,osm:232326529,4,,,https://zh.wikipedia.org/wiki/中山堂_(臺北市),臺北中山堂,2026-11-05
-,,,osm:272512033,10,1,,https://zh.wikipedia.org/wiki/精武圖書館,國資圖精武分館,2026-11-05
-,,,osm:553687451,5,1,,https://zh.wikipedia.org/wiki/國立歷史博物館,國立歷史博物館,2026-11-05
-,,,osm:161025892,2,3,,https://zh.wikipedia.org/wiki/國立臺灣文學館,國立臺灣文學館,2026-11-05
-,,,osm:327088319,11,3,,https://zh.wikipedia.org/wiki/國立臺灣科學教育館,國立臺灣科學教育館,2026-11-05
-,,,osm:240137720,3,2,,https://zh.wikipedia.org/wiki/國立臺灣美術館,國立臺灣美術館,2026-11-05
-,,,osm:273394749,3,1,,https://zh.wikipedia.org/wiki/奇美博物館,奇美博物館,2026-11-05
-,,,osm:317123812,10,3,,https://zh.wikipedia.org/wiki/新北市立圖書館總館,新北市立圖書館總館,2026-11-05
-,,,osm:292141417,7,1,,https://zh.wikipedia.org/wiki/朝陽科技大學波錠紀念圖書館,朝陽科大波錠紀念圖書館,2026-11-05
-,,,osm:244567975,3,1,,https://zh.wikipedia.org/wiki/臺中市屯區藝文中心,臺中市屯區藝文中心,2026-11-05
-,,,osm:242304226,6,1,,https://zh.wikipedia.org/wiki/臺中市政府陽明大樓,臺中市政府陽明大樓,2026-11-05
-,,,osm:263600169,6,2,,https://zh.wikipedia.org/wiki/臺灣嘉義地方法院,臺灣嘉義地方法院,2026-11-05
-,,,osm:r8822964,5,1,,https://zh.wikipedia.org/wiki/臺灣宜蘭地方法院,臺灣宜蘭地方法院,2026-11-05
-,,,osm:296618643,7,2,,https://zh.wikipedia.org/wiki/臺灣橋頭地方法院,臺灣橋頭地方法院,2026-11-05
-,,,osm:r3423895,6,2,,https://zh.wikipedia.org/wiki/臺灣高雄地方法院,臺灣高雄地方法院（辦公大樓）,2026-11-05
-,,,osm:237923929,18,4,,https://zh.wikipedia.org/wiki/行政院新莊聯合辦公大樓,行政院新莊聯合辦公大樓（南北兩棟各 18 層）,2026-11-05
-,,,osm:r6464911,3,,,https://zh.wikipedia.org/wiki/高雄展覽館,高雄展覽館,2026-11-05
-,,,osm:238680127,3,2,,https://zh.wikipedia.org/wiki/新北市立鶯歌陶瓷博物館,鶯歌陶瓷博物館,2026-11-05
-,,,osm:967436877,4,,,https://zh.wikipedia.org/wiki/MITSUI_OUTLET_PARK_台南,三井 OUTLET PARK 台南,2026-11-05
-,,,osm:507946422,4,1,,https://zh.wikipedia.org/wiki/IFG遠雄廣場新竹店,iFG 遠雄廣場新竹店,2026-11-05
-,,,osm:327914332,2,2,,https://zh.wikipedia.org/wiki/日曜天地Outlet,日曜天地,2026-11-05
-,,,osm:298062234,8,4,,https://zh.wikipedia.org/wiki/南港運動中心,南港運動中心,2026-11-05
-,,,osm:462001007,6,3,,https://zh.wikipedia.org/wiki/大同運動中心,大同運動中心,2026-11-05
-,,,osm:556230662,3,1,,https://zh.wikipedia.org/wiki/新科國民運動中心,新科國民運動中心,2026-11-05
-,,,osm:258432685,4,3,,https://zh.wikipedia.org/wiki/中山運動中心,臺北市中山運動中心,2026-11-05
-,,,osm:780088861,4,2,,https://zh.wikipedia.org/wiki/蘆竹國民運動中心,蘆竹國民運動中心,2026-11-05
-,,,osm:263473687,9,2,,https://zh.wikipedia.org/wiki/亞洲大學附屬醫院,亞洲大學附屬醫院醫院大樓,2026-11-05
-,,,osm:782869361,5,1,,https://zh.wikipedia.org/wiki/衛生福利部臺東醫院成功分院,部立臺東醫院成功分院,2026-11-05
-臺北市,萬華區,峨眉街83號,,7,1,,https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D&sms=78D644F2755ACCAA&s=28FECD2BF7A73C78,峨嵋立體停車場（地下 1 層、地上 7 層；臺北市停車管理工程處委外公告）,2026-11-06
+county,town,base,osm_uid,floors_above,floors_below,height_m,year,source,note,checked
+,,,osm:155816458,9,3,,,https://www.colatour.com.tw/C10T_Ticket/C10T02_Feature.aspx?ItemNo=4883,美麗華百樂園（樓層 B3–9F）,2026-11-05
+,,,osm:139211591,13,3,,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,SOGO 台北忠孝館（營業 B2–13F，B3 停車場）,2026-11-05
+,,,osm:155814892,11,6,,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,SOGO 台北復興館（營業 B3–11F，B4–B6 停車場）,2026-11-05
+,,,osm:442195152,8,2,,,https://zh.wikipedia.org/wiki/遠東SOGO百貨,遠東 Garden City 商場棟（B2–8F）,2026-11-05
+,,,osm:170129762,12,6,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越桃園站前店（營業 B1–12F，B2–B6 停車場）,2026-11-05
+,,,osm:258262896,8,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 A館（B2–B4 停車場）,2026-11-05
+,,,osm:258262897,6,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越台北天母店 B館（B2–B4 停車場）,2026-11-05
+,,,osm:286883510,11,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越嘉義垂楊店（B2–B4 停車場）,2026-11-05
+,,,osm:391309615,6,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A11館（B3–B5 停車場）,2026-11-05
+,,,osm:269773067,9,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A9館（B3–B5 停車場）,2026-11-05
+,,,osm:274647897,6,5,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越信義新天地 A4館（B3–B5 停車場）,2026-11-05
+,,,osm:382872848,11,4,,,https://zh.wikipedia.org/wiki/新光三越百貨,新光三越高雄左營店 一館（B3–B4 停車場）,2026-11-05
+,,,osm:170129878,12,3,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百桃園（B2–B3 停車場）,2026-11-05
+,,,osm:912474281,8,4,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百竹北（B1 機車、B2–B4 汽車停車場）,2026-11-05
+,,,osm:544706372,7,1,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百嘉義,2026-11-05
+,,,osm:246838222,3,2,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百花蓮（B2 與頂層為停車場）,2026-11-05
+,,,osm:663679150,14,5,,,https://zh.wikipedia.org/wiki/遠東百貨,遠百信義A13（B4–B5 汽車停車場）,2026-11-05
+,,,osm:274646859,9,4,,,https://zh.wikipedia.org/wiki/寶麗廣塲,寶麗廣塲 BELLAVITA,2026-11-05
+,,,osm:513491894,7,,,,https://zh.wikipedia.org/wiki/微風廣場,微風南山商場（南山廣場裙樓，營業 B2–7F）；地下總層數未確認,2026-11-05
+,,,osm:383731054,48,,,,https://zh.wikipedia.org/wiki/臺北南山廣場,臺北南山廣場主塔,2026-11-05
+,,,osm:r6821492,12,3,,,https://zh.wikipedia.org/wiki/大葉高島屋,大葉高島屋,2026-11-05
+,,,osm:109836992,5,2,,,https://zh.wikipedia.org/wiki/大江國際購物中心,大江國際購物中心,2026-11-05
+,,,osm:90993708,13,3,,,https://zh.wikipedia.org/wiki/大立百貨,大立百貨 B館（B2–B3 停車場）,2026-11-05
+,,,osm:108338155,13,5,,,https://zh.wikipedia.org/wiki/大統百貨,大統百貨和平店建物（地上13層至地下5層）,2026-11-05
+,,,osm:552332386,17,4,,,https://zh.wikipedia.org/wiki/耐斯廣場,耐斯廣場（前棟 8F 為商場、後棟 5–17F 為飯店；OSM 外框為整個建物）,2026-11-05
+,,,osm:221985402,7,6,,,https://zh.wikipedia.org/wiki/義大世界購物廣場,義大世界購物廣場 A/B/C 區,2026-11-05
+,,,osm:r8463564,6,1,,,https://zh.wikipedia.org/wiki/光華商場,光華數位新天地,2026-11-05
+,,,osm:1389576156,9,2,,,https://zh.wikipedia.org/wiki/南紡購物中心,南紡置地廣場（A2館）,2026-11-05
+,,,osm:454892809,9,5,,,https://zh.wikipedia.org/wiki/秀泰生活台中文心店,秀泰生活台中文心店（使用執照 106中都使字第01772號）,2026-11-05
+,,,osm:442195153,6,2,64,,https://zh.wikipedia.org/wiki/臺北大巨蛋,臺北大巨蛋（球場區地上 6 層、地下 2 層；地上高 64 m）,2026-11-05
+,,,osm:244001544,5,2,,,https://zh.wikipedia.org/wiki/臺北小巨蛋,臺北小巨蛋,2026-11-05
+,,,osm:281751127,2,1,,,https://zh.wikipedia.org/wiki/松山運動中心,松山運動中心,2026-11-05
+,,,osm:667875596,5,3,,,https://zh.wikipedia.org/wiki/板橋國民運動中心,板橋國民運動中心,2026-11-05
+,,,osm:544051984,3,,,,https://zh.wikipedia.org/wiki/朝馬國民運動中心,朝馬國民運動中心（共三層樓）,2026-11-05
+,,,osm:687883008,3,3,,,https://zh.wikipedia.org/wiki/北區國民運動中心,臺中北區國民運動中心,2026-11-05
+,,,osm:112004509,4,1,,,https://zh.wikipedia.org/wiki/土城國民運動中心,土城國民運動中心,2026-11-05
+,,,osm:r5663918,6,,42,,https://en.wikipedia.org/wiki/Kaohsiung_Arena,高雄巨蛋（高 42 m、6 層）,2026-11-05
+,,,osm:629510929,3,,,,https://zh.wikipedia.org/wiki/屏東車站,屏東車站站房,2026-11-05
+,,,osm:582910772,2,1,,,https://zh.wikipedia.org/wiki/苗栗縣三灣鄉立圖書館,三灣鄉立圖書館,2026-11-05
+,,,osm:961080088,3,2,,,https://zh.wikipedia.org/wiki/中台世界博物館,中台世界博物館,2026-11-05
+,,,osm:232326529,4,,,,https://zh.wikipedia.org/wiki/中山堂_(臺北市),臺北中山堂,2026-11-05
+,,,osm:272512033,10,1,,,https://zh.wikipedia.org/wiki/精武圖書館,國資圖精武分館,2026-11-05
+,,,osm:553687451,5,1,,,https://zh.wikipedia.org/wiki/國立歷史博物館,國立歷史博物館,2026-11-05
+,,,osm:161025892,2,3,,,https://zh.wikipedia.org/wiki/國立臺灣文學館,國立臺灣文學館,2026-11-05
+,,,osm:327088319,11,3,,,https://zh.wikipedia.org/wiki/國立臺灣科學教育館,國立臺灣科學教育館,2026-11-05
+,,,osm:240137720,3,2,,,https://zh.wikipedia.org/wiki/國立臺灣美術館,國立臺灣美術館,2026-11-05
+,,,osm:273394749,3,1,,,https://zh.wikipedia.org/wiki/奇美博物館,奇美博物館,2026-11-05
+,,,osm:317123812,10,3,,,https://zh.wikipedia.org/wiki/新北市立圖書館總館,新北市立圖書館總館,2026-11-05
+,,,osm:292141417,7,1,,,https://zh.wikipedia.org/wiki/朝陽科技大學波錠紀念圖書館,朝陽科大波錠紀念圖書館,2026-11-05
+,,,osm:244567975,3,1,,,https://zh.wikipedia.org/wiki/臺中市屯區藝文中心,臺中市屯區藝文中心,2026-11-05
+,,,osm:242304226,6,1,,,https://zh.wikipedia.org/wiki/臺中市政府陽明大樓,臺中市政府陽明大樓,2026-11-05
+,,,osm:263600169,6,2,,,https://zh.wikipedia.org/wiki/臺灣嘉義地方法院,臺灣嘉義地方法院,2026-11-05
+,,,osm:r8822964,5,1,,,https://zh.wikipedia.org/wiki/臺灣宜蘭地方法院,臺灣宜蘭地方法院,2026-11-05
+,,,osm:296618643,7,2,,,https://zh.wikipedia.org/wiki/臺灣橋頭地方法院,臺灣橋頭地方法院,2026-11-05
+,,,osm:r3423895,6,2,,,https://zh.wikipedia.org/wiki/臺灣高雄地方法院,臺灣高雄地方法院（辦公大樓）,2026-11-05
+,,,osm:237923929,18,4,,,https://zh.wikipedia.org/wiki/行政院新莊聯合辦公大樓,行政院新莊聯合辦公大樓（南北兩棟各 18 層）,2026-11-05
+,,,osm:r6464911,3,,,,https://zh.wikipedia.org/wiki/高雄展覽館,高雄展覽館,2026-11-05
+,,,osm:238680127,3,2,,,https://zh.wikipedia.org/wiki/新北市立鶯歌陶瓷博物館,鶯歌陶瓷博物館,2026-11-05
+,,,osm:967436877,4,,,,https://zh.wikipedia.org/wiki/MITSUI_OUTLET_PARK_台南,三井 OUTLET PARK 台南,2026-11-05
+,,,osm:507946422,4,1,,,https://zh.wikipedia.org/wiki/IFG遠雄廣場新竹店,iFG 遠雄廣場新竹店,2026-11-05
+,,,osm:327914332,2,2,,,https://zh.wikipedia.org/wiki/日曜天地Outlet,日曜天地,2026-11-05
+,,,osm:298062234,8,4,,,https://zh.wikipedia.org/wiki/南港運動中心,南港運動中心,2026-11-05
+,,,osm:462001007,6,3,,,https://zh.wikipedia.org/wiki/大同運動中心,大同運動中心,2026-11-05
+,,,osm:556230662,3,1,,,https://zh.wikipedia.org/wiki/新科國民運動中心,新科國民運動中心,2026-11-05
+,,,osm:258432685,4,3,,,https://zh.wikipedia.org/wiki/中山運動中心,臺北市中山運動中心,2026-11-05
+,,,osm:780088861,4,2,,,https://zh.wikipedia.org/wiki/蘆竹國民運動中心,蘆竹國民運動中心,2026-11-05
+,,,osm:263473687,9,2,,,https://zh.wikipedia.org/wiki/亞洲大學附屬醫院,亞洲大學附屬醫院醫院大樓,2026-11-05
+,,,osm:782869361,5,1,,,https://zh.wikipedia.org/wiki/衛生福利部臺東醫院成功分院,部立臺東醫院成功分院,2026-11-05
+臺北市,萬華區,峨眉街83號,,7,1,,,https://pma.gov.taipei/News_Content.aspx?n=E43F2E5AE1223B3D&sms=78D644F2755ACCAA&s=28FECD2BF7A73C78,峨嵋立體停車場（地下 1 層、地上 7 層；臺北市停車管理工程處委外公告）,2026-11-06
+,,,osm:1052759757,4,,,1980,https://zh.wikipedia.org/wiki/中正紀念堂,中正紀念堂（1980 年 3 月完工；四樓大廳；臺北市建照套繪圖的 2005 年是後來的建照）,2026-11-06

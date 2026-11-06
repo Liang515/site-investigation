@@ -3,7 +3,7 @@
 一列＝一棟（或一個門牌）的已確認樓層。兩種指定方式擇一或並用：
 - county, town, base：門牌號（例：使用者回報、查證過的實價錯誤）
 - osm_uid：OpenStreetMap 建物（例：百貨、球場等沒有單一門牌的地標；查詢時落在這棟裡的門牌都會套用）
-欄位：floors_above（必填）、floors_below、source（依據，例：官網樓層介紹網址、使用執照字號、使用者回報）、note、checked（查證日期）。
+欄位：floors_above（必填）、floors_below、height_m、year（竣工年，選填；例：中正紀念堂 1980，臺北建照套繪圖只有改建的 2005 年建照）、source（依據，例：官網樓層介紹網址、使用執照字號、使用者回報）、note、checked（查證日期）。
 
 查詢時優先序最高（高於實價登錄），地圖上 OSM 建物也改用這個樓層。
 用法：uv run python -m sitefloor.curated   （osm 之前；每週更新會自動跑）
@@ -17,7 +17,7 @@ from sitefloor.address import parse
 from sitefloor.db import connect
 
 CSV = Path(__file__).resolve().parent.parent / "curated" / "floor_corrections.csv"
-COLUMNS = ["county", "town", "base", "osm_uid", "floors_above", "floors_below", "height_m", "source", "note", "checked"]
+COLUMNS = ["county", "town", "base", "osm_uid", "floors_above", "floors_below", "height_m", "year", "source", "note", "checked"]
 
 
 def load() -> pd.DataFrame:
@@ -46,11 +46,14 @@ def load() -> pd.DataFrame:
                     raise ValueError
             except ValueError:
                 bad.append(f"第 {i + 2} 列：height_m 要是 2–600 的數字（公尺）")
+        if has(r["year"]) and not (r["year"].isdigit() and 1800 <= int(r["year"]) <= 2100):
+            bad.append(f"第 {i + 2} 列：year 要是西元年（例：1980）")
     if bad:
         raise ValueError("floor_corrections.csv 有誤：\n" + "\n".join(bad))
     df["floors_above"] = df.floors_above.astype(int).astype("Int16")
     df["floors_below"] = pd.to_numeric(df.floors_below, errors="coerce").astype("Int16")
     df["height_m"] = pd.to_numeric(df.height_m, errors="coerce")
+    df["year"] = pd.to_numeric(df.year, errors="coerce").astype("Int16")
     return df
 
 

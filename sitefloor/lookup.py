@@ -130,11 +130,12 @@ QUALIFY row_number() OVER (PARTITION BY q.idx ORDER BY s.spread, s.n DESC) = 1
 
 # 人工校正（curated/floor_corrections.csv）：門牌直接指定，或門牌落在指定的 OSM 建物裡
 _CORR_SQL = f"""
-SELECT idx, c_floors, c_below, c_source FROM (
-    SELECT q.idx, c.floors_above AS c_floors, c.floors_below AS c_below, c.source AS c_source, 0 AS pri
+SELECT idx, c_floors, c_below, c_year, c_source FROM (
+    SELECT q.idx, c.floors_above AS c_floors, c.floors_below AS c_below, c.year AS c_year, c.source AS c_source,
+           0 AS pri
     FROM q JOIN corrections c ON c.base = q.base AND {_MATCH.format(t="c")}
     UNION ALL
-    SELECT q.idx, c.floors_above, c.floors_below, c.source, 1
+    SELECT q.idx, c.floors_above, c.floors_below, c.year, c.source, 1
     FROM q JOIN door_osm o ON o.base = q.base AND {_MATCH.format(t="o")}
     JOIN corrections c ON c.osm_uid = o.osm_uid
 ) QUALIFY row_number() OVER (PARTITION BY idx ORDER BY pri) = 1
@@ -219,9 +220,9 @@ def _resolve(r, covered: set[str]) -> dict:
         floors_below=next((x for x in (r.c_below, r.p_below, r.floors_below) if not _na(x)), None),
         structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure) if not _na(x)), None),
         btype=r.t_btype if not _na(r.t_btype) else r.b_btype,
-        year=next((x for x in (r.t_year, r.p_year, r.b_year) if not _na(x)), None),
-        year_kind="建築完成年" if not _na(r.t_year) else "竣工年（使照）" if not _na(r.p_year) else (
-            None if _na(r.b_year) else r.b_year_kind),
+        year=next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year) if not _na(x)), None),
+        year_kind="竣工年（人工校正）" if not _na(r.c_year) else "建築完成年" if not _na(r.t_year) else (
+            "竣工年（使照）" if not _na(r.p_year) else None if _na(r.b_year) else r.b_year_kind),
         level=LEVEL_NAME.get(min(x for x in (r.lvl, r.tlvl) if not _na(x))),
     )
     b, t = r.b_floors, r.t_floors
@@ -306,7 +307,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     same = con.execute(_SAME_SQL).df()
     nb = con.execute(_NB_SQL).df()
     osm = _optional(con, _OSM_SQL, ["idx", "osm_uid", "o_floors", "o_name"])
-    corr = _optional(con, _CORR_SQL, ["idx", "c_floors", "c_below", "c_source"])
+    corr = _optional(con, _CORR_SQL, ["idx", "c_floors", "c_below", "c_year", "c_source"])
     same_osm = _optional(con, _SAME_OSM_SQL, ["idx", "so_floors", "so_n", "so_spread", "so_btype"])
     permit = _optional(con, _PERMIT_SQL, ["idx", "p_floors", "p_below", "p_structure", "p_year", "p_no", "p_source",
                                           "p_exact"])

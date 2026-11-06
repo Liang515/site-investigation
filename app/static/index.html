@@ -520,7 +520,7 @@ function riskHtml(r) {
     <h4>建築結構</h4><dl>
       <dt>構造</dt><dd>${v(r.structure)}</dd>
       <dt>樓層</dt><dd>${r.floors_above != null ? `地上 ${esc(r.floors_above)} 層` : "—"}${r.floors_below != null ? `、地下 ${esc(r.floors_below)} 層` : ""}</dd>
-      <dt>屋齡</dt><dd>${age}</dd></dl>
+      <dt>屋齡</dt><dd>${age}${r.year_kind === "建照年" ? `<br><small class="rx">臺北市建照套繪圖只收民國 90 年後的建照；舊建物改建、增建也會領新建照，不一定是興建年</small>` : ""}</dd></dl>
     <h4>使用性質</h4><dl>
       <dt>主要用途</dt><dd>${v(r.usage)}</dd>
       <dt>使用分區</dt><dd>${v(r.zoning)}</dd>

@@ -84,9 +84,10 @@ def merge(rows: list[dict]) -> tuple[int, int]:
     new_keys = {_key(r) for r in rows}
     kept = [r for r in old if _key(r) not in new_keys]
     prev = {_key(r): r for r in old if _key(r) in new_keys}
-    for r in rows:  # 回報只改樓層；舊列有的實際高度（height_m）保留
-        if not r.get("height_m") and prev.get(_key(r), {}).get("height_m"):
-            r["height_m"] = prev[_key(r)]["height_m"]
+    for r in rows:  # 回報只改樓層；舊列有的實際高度（height_m）、竣工年（year）保留
+        for k in ("height_m", "year"):
+            if not r.get(k) and prev.get(_key(r), {}).get(k):
+                r[k] = prev[_key(r)][k]
     with open(curated.CSV, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=curated.COLUMNS)
         w.writeheader()
