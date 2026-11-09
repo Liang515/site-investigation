@@ -116,6 +116,20 @@ def read_parts(b: gpd.GeoDataFrame) -> pd.DataFrame:
 NO_TRADE_FLOORS = ("roof", "carport", "parking", "stadium", "construction", "ruins", "bridge")
 
 
+# OSM 同棟推估（scripts/validate_phase1.py 留一驗證時用拿掉樣本的 door_trade 重算）
+SAME_OSM_SQL = f"""
+CREATE OR REPLACE TABLE same_osm AS
+SELECT o.county, o.town, o.base, g.floors, g.n, g.spread, g.btype
+FROM door_osm o JOIN (
+    SELECT o.osm_uid, mode(t.floors) AS floors, count(DISTINCT o.county || o.town || o.base) AS n,
+           max(t.floors) - min(t.floors) AS spread, mode(t.btype) AS btype
+    FROM door_osm o JOIN door_trade t USING (county, town, base)
+    JOIN osm_buildings ob ON ob.uid = o.osm_uid AND ob.building NOT IN {NO_TRADE_FLOORS}
+    GROUP BY 1
+) g USING (osm_uid)
+"""
+
+
 SMALL_PERMIT = 0.25  # 使照建築面積不到 OSM 外框面積的這個比例 → 使照講的是附屬小建物
 
 
@@ -234,16 +248,7 @@ def main():
     con.execute("CREATE OR REPLACE TABLE osm_parts AS SELECT * FROM parts")
     print(f"  osm_parts {len(parts):,}（分棟，落在 {parts.parent_uid.nunique():,} 棟建物裡）")
 
-    con.execute(f"""
-        CREATE OR REPLACE TABLE same_osm AS
-        SELECT o.county, o.town, o.base, g.floors, g.n, g.spread, g.btype
-        FROM door_osm o JOIN (
-            SELECT o.osm_uid, mode(t.floors) AS floors, count(DISTINCT o.county || o.town || o.base) AS n,
-                   max(t.floors) - min(t.floors) AS spread, mode(t.btype) AS btype
-            FROM door_osm o JOIN door_trade t USING (county, town, base)
-            JOIN osm_buildings ob ON ob.uid = o.osm_uid AND ob.building NOT IN {NO_TRADE_FLOORS}
-            GROUP BY 1
-        ) g USING (osm_uid)""")
+    con.execute(SAME_OSM_SQL)
     n = con.execute("SELECT count(*), count(*) FILTER (WHERE spread = 0) FROM same_osm").fetchone()
     print(f"  same_osm {n[0]:,}（棟內樓層一致 {n[1]:,}）")
 
