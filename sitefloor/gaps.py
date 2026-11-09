@@ -1,6 +1,6 @@
 """缺口盤點：依建物類型統計哪些建物還沒有樓層，列出樓層未知的地標，供日後補資料。
 
-類型由 OSM 標籤判斷（百貨／購物中心、量販／賣場、運動場館、交通、醫院、學校、公家機關…）。
+類型由 OSM 標籤判斷（百貨／購物中心、市場、量販／賣場、運動場館、交通、醫院、學校、公家機關…）。
 之後接上新的樓層來源（例：人工整理的百貨樓層表），重跑這支就能看到每一類補了多少、還缺多少。
 
 輸出：
@@ -20,7 +20,7 @@ from sitefloor.db import connect
 ROOT = Path(__file__).resolve().parent.parent
 PBF = ROOT / "data" / "raw" / "osm" / "taiwan-latest.osm.pbf"
 REPORT_DIR = ROOT / "data" / "reports"
-LANDMARK_CATS = ["百貨／購物中心", "飯店", "樂園", "電影院", "展覽館", "博物館／美術館", "量販／賣場", "運動場館",
+LANDMARK_CATS = ["百貨／購物中心", "飯店", "樂園", "電影院", "展覽館", "博物館／美術館", "市場", "量販／賣場", "運動場館",
                  "交通（車站／航廈）", "醫院", "公家機關"]
 
 MALL_NAME = re.compile("百貨|購物|商場|廣場|outlet|Outlet|三越|SOGO|遠百|微風|京站|環球|大魯閣|高島屋")
@@ -30,6 +30,7 @@ PARK_NAME = re.compile("樂園|遊樂園|主題園區")
 CINEMA_NAME = re.compile("影城|電影院|戲院|[Cc]inema")
 EXPO_NAME = re.compile("展覽館|展覽中心|會展中心|世貿|國際會議中心")
 MUSEUM_NAME = re.compile("博物館|博物院|美術館|紀念館|科學館|藝術館")
+MARKET_NAME = re.compile("(?<!超級)市場")  # 公有市場、果菜市場、魚市場；超級市場算量販
 
 
 def _tag(tags: pd.Series, k: str) -> pd.Series:
@@ -50,6 +51,8 @@ def category(name, building, shop, amenity, leisure, aeroway, railway, tourism=N
         return "展覽館"
     if b == "museum" or t in ("museum", "gallery") or MUSEUM_NAME.search(n):
         return "博物館／美術館"
+    if a == "marketplace" or MARKET_NAME.search(n):
+        return "市場"
     if s in ("supermarket", "wholesale", "doityourself", "furniture", "hardware") or STORE_NAME.search(n):
         return "量販／賣場"
     if b in ("retail", "commercial", "supermarket", "kiosk") or s not in ("None", "nan"):

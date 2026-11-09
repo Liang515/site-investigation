@@ -2,7 +2,7 @@
 
 | 級 | 條件（符合任一） |
 |---|---|
-| 1 地標／指標 | 有立體模型或在地標表；有名稱的飯店、醫院、樂園、百貨、電影院、展覽館、博物館；OSM 有 wikidata／wikipedia 且為地標類別或 MID_FLOORS 層以上；TALL_FLOORS 層以上或 TALL_M 公尺以上；
+| 1 地標／指標 | 有立體模型或在地標表；有名稱的飯店、醫院、樂園、百貨、電影院、展覽館、博物館、市場；OSM 有 wikidata／wikipedia 且為地標類別或 MID_FLOORS 層以上；TALL_FLOORS 層以上或 TALL_M 公尺以上；
 |               | 有名稱且 NAMED_FLOORS 層以上；實價單價在該縣市前 PRICE_TOP（PRICE_MIN_FLOORS 層以上、有 PRICE_MIN_TRADES 筆以上買賣） |
 | 2 公共與場館 | 公家機關、運動場館、醫院、交通、學校、百貨／購物中心（gaps.category）；其他有維基連結的 |
 | 3 有名稱或中高樓 | 其他有名稱的建物，或 MID_FLOORS 層以上 |
@@ -33,7 +33,7 @@ NAMED_FLOORS = 15
 MID_FLOORS = 8
 PRICE_TOP, PRICE_MIN_TRADES, PRICE_MIN_FLOORS = 0.01, 3, 6  # 高單價只算大樓（店面單價高但不是指標）
 # 有名稱就算第 1 級的類別（大家常查、常被拿來當地標的場所）
-PRIORITY_CATS = {"飯店", "醫院", "樂園", "百貨／購物中心", "電影院", "展覽館", "博物館／美術館"}
+PRIORITY_CATS = {"飯店", "醫院", "樂園", "百貨／購物中心", "電影院", "展覽館", "博物館／美術館", "市場"}
 TIER2_CATS = PRIORITY_CATS | {"公家機關", "運動場館", "交通（車站／航廈）", "學校"}
 WIKI_CATS = TIER2_CATS - {"學校"}  # 有維基連結又是這些類別（或 MID_FLOORS 層以上）才算第 1 級；其他有維基的算第 2 級
 
