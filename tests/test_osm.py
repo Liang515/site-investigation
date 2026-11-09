@@ -23,6 +23,8 @@ def test_num():
 def test_gap_category():
     assert category("大葉高島屋", "retail", None, None, None, None, None) == "百貨／購物中心"
     assert category("好市多北投店", "retail", "wholesale", None, None, None, None) == "量販／賣場"
+    assert category("小北百貨軍校店", "retail", "department_store", None, None, None, None) == "量販／賣場"
+    assert category("好鄰居五金百貨白河店", "retail", None, None, None, None, None) == "量販／賣場"
     assert category("南門市場", "yes", None, None, None, None, None) == "市場"
     assert category("板橋果菜批發市場", "retail", None, None, None, None, None) == "市場"
     assert category(None, "retail", None, "marketplace", None, None, None) == "市場"
