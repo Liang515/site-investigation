@@ -18,6 +18,34 @@ SUGGEST_LANE = r"^(.*?)((?:\d+巷)?(?:\d+弄)?)$"
 # 門牌號拆解：前綴（路街巷弄）＋號＋之號
 DOOR_RE = r"^(.*?)(\d+)(之(\d+))?號$"
 
+# 同棟推估（scripts/validate_phase1.py 留一驗證時用拿掉樣本的 door_trade 重算）
+SAME_BLDG_SQL = """
+CREATE OR REPLACE TABLE same_bldg AS
+WITH door AS (
+    SELECT DISTINCT county, town, base, bldg_uid, round(lon, 6) AS x, round(lat, 6) AS y FROM addresses
+),
+dt AS (SELECT d.*, t.floors, t.btype FROM door d JOIN door_trade t USING (county, town, base)),
+g1 AS (
+    SELECT bldg_uid, mode(floors) AS f, count(DISTINCT base) AS n, max(floors) - min(floors) AS spread,
+           mode(btype) AS btype
+    FROM dt WHERE bldg_uid IS NOT NULL GROUP BY 1
+),
+g2 AS (
+    SELECT county, x, y, mode(floors) AS f, count(DISTINCT base) AS n, max(floors) - min(floors) AS spread,
+           mode(btype) AS btype
+    FROM dt GROUP BY ALL
+),
+cand AS (
+    SELECT d.county, d.town, d.base, g1.f AS floors, g1.n, g1.spread, g1.btype, '同棟（建物圖）' AS method
+    FROM door d JOIN g1 USING (bldg_uid)
+    UNION ALL
+    SELECT d.county, d.town, d.base, g2.f, g2.n, g2.spread, g2.btype, '同點位門牌'
+    FROM door d JOIN g2 USING (county, x, y)
+)
+SELECT * FROM cand
+QUALIFY row_number() OVER (PARTITION BY county, town, base ORDER BY spread, n DESC) = 1;
+"""
+
 SQL = f"""
 -- 總樓層取眾數；平手時優先「有記載所在樓層」的紀錄（整棟出租的紀錄常把
 -- 總樓層記錯），再取最近一筆成交、再取較高（DuckDB 的 mode() 平手時每次結果不同）
@@ -46,31 +74,7 @@ SELECT county, town, base, floors, n, btype,
 FROM door_trade
 WHERE regexp_matches(base, '{DOOR_RE}') AND length(regexp_extract(base, '{DOOR_RE}', 2)) <= 5;
 
-CREATE OR REPLACE TABLE same_bldg AS
-WITH door AS (
-    SELECT DISTINCT county, town, base, bldg_uid, round(lon, 6) AS x, round(lat, 6) AS y FROM addresses
-),
-dt AS (SELECT d.*, t.floors, t.btype FROM door d JOIN door_trade t USING (county, town, base)),
-g1 AS (
-    SELECT bldg_uid, mode(floors) AS f, count(DISTINCT base) AS n, max(floors) - min(floors) AS spread,
-           mode(btype) AS btype
-    FROM dt WHERE bldg_uid IS NOT NULL GROUP BY 1
-),
-g2 AS (
-    SELECT county, x, y, mode(floors) AS f, count(DISTINCT base) AS n, max(floors) - min(floors) AS spread,
-           mode(btype) AS btype
-    FROM dt GROUP BY ALL
-),
-cand AS (
-    SELECT d.county, d.town, d.base, g1.f AS floors, g1.n, g1.spread, g1.btype, '同棟（建物圖）' AS method
-    FROM door d JOIN g1 USING (bldg_uid)
-    UNION ALL
-    SELECT d.county, d.town, d.base, g2.f, g2.n, g2.spread, g2.btype, '同點位門牌'
-    FROM door d JOIN g2 USING (county, x, y)
-)
-SELECT * FROM cand
-QUALIFY row_number() OVER (PARTITION BY county, town, base ORDER BY spread, n DESC) = 1;
-
+{SAME_BLDG_SQL}
 CREATE OR REPLACE TABLE roads AS
 WITH d AS (
     SELECT DISTINCT county, town, base FROM addresses WHERE town IS NOT NULL
