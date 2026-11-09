@@ -5,6 +5,8 @@
   較小的外框比較高的不算（裙樓上的塔樓）
 - floors_conflict（2）：網站顯示的樓層和其他來源差 2 層以上（例：顯示使照 1 層、OSM 7 層）
 - osm_mislabel（1）：顯示的樓層有實價支持，只有 OSM 或建物圖不同（網站沒錯，OSM 標錯）
+- permit_other（1）：顯示的樓層有實價與 OSM 支持，只有使照不同（一張使照包好幾棟、記最高那棟，
+  或後來增建的小使照；網站沒錯）
 - floors_unknown（2）：第 1、2 級卻查不到樓層
 - year_suspect（2）：使照或建照年比棟內實價的建築完成年晚 YEAR_GAP 年以上（後來改建、增建的執照被當成興建年）
 - height_ratio（1）：OSM 高度 ÷ 樓層 不在 RATIO_MIN–RATIO_MAX 公尺（樓層或高度有一個錯）
@@ -39,7 +41,8 @@ REPORT_DIR = ROOT / "data" / "reports"
 ROTATION_FILE = ROOT / "data" / "state" / "audit_rotation.json"
 POPULARITY_FILE = ROOT / "data" / "state" / "popularity.json"
 SEVERITY = {"overlap_drawn": 3, "floors_conflict": 2, "floors_unknown": 2, "year_suspect": 2,
-            "height_ratio": 1, "permit_small": 1, "stale_check": 1, "osm_mislabel": 1}
+            "height_ratio": 1, "permit_small": 1, "stale_check": 1, "osm_mislabel": 1,
+            "permit_other": 1}
 CONFLICT_GAP, CONFLICT_HIGH = 2, 5
 YEAR_GAP = 5
 RATIO_MIN, RATIO_MAX = 2.5, 7.0
@@ -196,6 +199,9 @@ def check(r: dict, today: dt.date, overlap_with: str | None) -> list[tuple[str, 
         others = [v for k, v in vals.items() if k not in ("OSM", "建物圖")]
         if shown is not None and vals.get("實價") == shown and all(v == shown for v in others):
             issues.append(("osm_mislabel", text))
+        elif (shown is not None and vals.get("實價") == shown and "OSM" in vals and abs(vals["OSM"] - shown) <= 1
+              and all(abs(v - shown) <= 1 for k, v in vals.items() if k != "使照")):
+            issues.append(("permit_other", text))
         else:
             issues.append(("floors_conflict", text))
     if tier in (1, 2) and r.get("floors") is None and r.get("uid") not in MODELS:

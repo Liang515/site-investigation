@@ -139,6 +139,19 @@ def mark_small_permits(con, b: gpd.GeoDataFrame):
     print(f"  使照建築面積不到 OSM 外框 {SMALL_PERMIT:.0%}（不套用）：{n:,} 門牌")
 
 
+def assign_doors(doors: pd.DataFrame, b: gpd.GeoDataFrame) -> pd.DataFrame:
+    """門牌（county, town, base, lon, lat）落在哪棟 OSM 建物。落在好幾個外框裡（園區或裙樓的大外框裡
+    還有塔樓外框）時算最內層的那棟，否則塔樓的實價樓層會套到整個大外框。"""
+    pts = gpd.GeoDataFrame(doors, geometry=gpd.points_from_xy(doors.lon, doors.lat), crs=4326)
+    j = gpd.sjoin(pts, b[["uid", "geometry"]], predicate="within")
+    with warnings.catch_warnings():  # 經緯度面積只用來比大小
+        warnings.simplefilter("ignore", UserWarning)
+        j["area"] = b.geometry.area.loc[j.index_right].to_numpy()
+    j = j.sort_values("area", kind="stable")
+    j = j[~j.index.duplicated()].sort_index()
+    return pd.DataFrame({"county": j.county, "town": j.town, "base": j.base, "osm_uid": j.uid})
+
+
 def main():
     t = time.time()
     con = connect(write=True)
@@ -148,10 +161,7 @@ def main():
     doors = con.execute("""
         SELECT county, town, base, any_value(lon) AS lon, any_value(lat) AS lat
         FROM addresses WHERE lon IS NOT NULL AND town IS NOT NULL GROUP BY 1, 2, 3""").df()
-    pts = gpd.GeoDataFrame(doors, geometry=gpd.points_from_xy(doors.lon, doors.lat), crs=4326)
-    j = gpd.sjoin(pts, b[["uid", "geometry"]], predicate="within")
-    j = j[~j.index.duplicated()]
-    d_df = pd.DataFrame({"county": j.county, "town": j.town, "base": j.base, "osm_uid": j.uid})
+    d_df = assign_doors(doors, b)
     con.execute("CREATE OR REPLACE TABLE door_osm AS SELECT * FROM d_df")
     print(f"  門牌落在 OSM 建物內 {len(d_df):,} / {len(doors):,}")
 

@@ -21,6 +21,11 @@ def test_floors_conflict_and_ratio():
     # 顯示使照 1 層、OSM 7 層：要查
     assert codes({"uid": "osm:8", "tier": 1, "floors": 1, "f_permit": 1, "f_osm": 7}) == ["floors_conflict"]
     assert codes({"uid": "osm:2", "tier": 3, "floors": 7, "f_trade": 7, "f_osm": 8}) == []  # 差一層不算
+    # 實價與 OSM 一致，只有使照不同（一張使照包好幾棟、或增建小使照）：網站沒錯
+    assert codes({"uid": "osm:9", "tier": 1, "floors": 23, "f_trade": 23, "f_permit": 28, "f_osm": 23}) == ["permit_other"]
+    assert codes({"uid": "osm:10", "tier": 1, "floors": 26, "f_trade": 26, "f_permit": 2, "f_osm": 25}) == ["permit_other"]
+    # 沒有 OSM 可佐證：照樣要查
+    assert codes({"uid": "osm:11", "tier": 1, "floors": 25, "f_trade": 25, "f_permit": 10}) == ["floors_conflict"]
 
 
 def test_unknown_year_and_small_permit():
@@ -93,3 +98,12 @@ def test_unknown_osm_covered_by_many_small_outlines():
               enumerate([(-7e-5, -7e-5), (7e-5, -7e-5), (-7e-5, 7e-5), (7e-5, 7e-5)])]
     city, drop = resolve_overlaps([("osm:big", None, None, None, _sq(0, 0, 30))], smalls, set(), set(), "臺北市建照")
     assert drop == {0} and len(city) == 4
+
+
+def test_unknown_osm_inside_known_osm():
+    # 樓層未知的 OSM 外框落在有樓層的 OSM 建物裡（重複外框、大樓裡的小構造）：不畫；
+    # 反過來，樓層未知的大外框裡有一棟有樓層的小建物：照畫
+    osm = [("osm:mall", 8, None, None, _sq(0, 0, 40)), ("osm:dome", None, None, None, _sq(0, 0, 10)),
+           ("osm:site", None, None, None, _sq(1e-3, 0, 40)), ("osm:shop", 2, None, None, _sq(1e-3, 0, 10))]
+    _, drop = resolve_overlaps(osm, [], set(), set(), "臺北市建照")
+    assert drop == {1}
