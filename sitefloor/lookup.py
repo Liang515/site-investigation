@@ -205,7 +205,11 @@ def _na(x) -> bool:
 def _resolve(r, covered: set[str]) -> dict:
     """合併圖資與實價兩條線索，決定最終欄位、信心與說明。"""
     has_addr, has_trade = not _na(r.lvl), not _na(r.tlvl)
-    if not has_addr and not has_trade:
+    # 門牌點位資料沒有、自己也沒有實價的門牌，同巷鄰居一致時仍可推估：宜蘭、南投、嘉義市的點位資料幾乎沒收，
+    # 其他縣市也有舊門牌不在點位裡（留一驗證 2026-11-09：這類門牌同巷推估完全相符 92%，和一般門牌相同）。
+    # 沒寫鄉鎮市區時鄰居可能跨區，不推估
+    nb_only = not has_addr and not has_trade and not _na(r.nb_floors) and isinstance(r.town_q, str) and r.town_q
+    if not has_addr and not has_trade and not nb_only:
         if r.county_q and r.county_q not in covered:
             return dict(confidence="無", note=f"{r.county_q}尚未建置")
         if not str(r.base).endswith("號"):
@@ -224,10 +228,10 @@ def _resolve(r, covered: set[str]) -> dict:
         year=next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year if b_attr else None) if not _na(x)), None),
         year_kind="竣工年（人工校正）" if not _na(r.c_year) else "建築完成年" if not _na(r.t_year) else (
             "竣工年（使照）" if not _na(r.p_year) else None if (not b_attr or _na(r.b_year)) else r.b_year_kind),
-        level=LEVEL_NAME.get(min(x for x in (r.lvl, r.tlvl) if not _na(x))),
+        level=LEVEL_NAME.get(min((x for x in (r.lvl, r.tlvl) if not _na(x)), default=2)),
     )
     b, t = r.b_floors, r.t_floors
-    notes = []
+    notes = ["門牌點位資料沒有此門牌，請確認門牌存在"] if nb_only else []
     if not _na(t) and r.t_nfloors > 1:
         notes.append("實價登錄紀錄的總樓層不一致，取眾數")
     same_ok = not _na(r.s_floors) and r.s_spread == 0
