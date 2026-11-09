@@ -24,7 +24,8 @@ LANDMARK_CATS = ["百貨／購物中心", "飯店", "樂園", "電影院", "展�
                  "交通（車站／航廈）", "醫院", "公家機關"]
 
 MALL_NAME = re.compile("百貨|購物|商場|廣場|outlet|Outlet|三越|SOGO|遠百|微風|京站|環球|大魯閣|高島屋")
-STORE_NAME = re.compile("家樂福|好市多|Costco|COSTCO|大潤發|IKEA|宜家|愛買|特力屋|全聯")
+STORE_NAME = re.compile("家樂福|好市多|Costco|COSTCO|大潤發|IKEA|宜家|愛買|特力|全聯|萬家福|小北|寶雅|[Pp]oya|五金|"
+                        "生活百貨|百貨超市|生活館|B&Q|hoi")  # 名稱有「百貨」但不是百貨公司的賣場，先於 MALL_NAME 判斷
 HOTEL_NAME = re.compile("飯店|酒店|[Hh]otel|HOTEL")
 PARK_NAME = re.compile("樂園|遊樂園|主題園區")
 CINEMA_NAME = re.compile("影城|電影院|戲院|[Cc]inema")
@@ -39,6 +40,8 @@ def _tag(tags: pd.Series, k: str) -> pd.Series:
 
 def category(name, building, shop, amenity, leisure, aeroway, railway, tourism=None) -> str:
     b, s, a, n, t = str(building), str(shop), str(amenity), str(name or ""), str(tourism)
+    if STORE_NAME.search(n):
+        return "量販／賣場"
     if s in ("mall", "department_store") or (b == "retail" and MALL_NAME.search(n)):
         return "百貨／購物中心"
     if b == "hotel" or t == "hotel" or HOTEL_NAME.search(n):
