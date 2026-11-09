@@ -1,7 +1,9 @@
+import geopandas as gpd
 import pandas as pd
+from shapely.geometry import box
 
 from sitefloor.gaps import category
-from sitefloor.osm import _num, _tag, underground
+from sitefloor.osm import _num, _tag, assign_doors, underground
 
 
 def test_tag():
@@ -57,3 +59,13 @@ def test_curated_buildings_geojson():
     assert gdf.uid.is_unique
     assert gdf.geometry.is_valid.all()
     assert (gdf.levels >= 1).all()
+
+
+def test_assign_doors_innermost():
+    # 園區大外框裡有塔樓外框：塔樓裡的門牌算塔樓，只在大外框裡的算大外框
+    b = gpd.GeoDataFrame({"uid": ["osm:mall", "osm:tower"]},
+                         geometry=[box(0, 0, 10, 10), box(1, 1, 3, 3)], crs=4326)
+    doors = pd.DataFrame({"county": ["X", "X"], "town": ["Y", "Y"], "base": ["1號", "2號"],
+                          "lon": [2.0, 8.0], "lat": [2.0, 8.0]})
+    got = assign_doors(doors, b)
+    assert dict(zip(got.base, got.osm_uid)) == {"1號": "osm:tower", "2號": "osm:mall"}

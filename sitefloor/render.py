@@ -74,6 +74,15 @@ def resolve_overlaps(osm: list[tuple], city_rows: list[tuple], modeled: set[str]
     # 樓層未知的 OSM 建物若大半被要畫的市府外框蓋住，不畫（市府外框有樓層）。
     # 用所有重疊外框的面積合計：一個 OSM 大外框常蓋住好幾個建物圖小外框
     unknown = [i for i, o in enumerate(osm) if o[1] is None and o[0] not in modeled]
+    # 也不畫大半落在有樓層 OSM 建物裡的（OSM 重複畫的外框、大樓裡另外畫的小構造）
+    shown = [k for k in known if k not in drop_osm]
+    if unknown and shown:
+        otree = shapely.STRtree([osm[k][4] for k in shown])
+        for i in unknown:
+            g = osm[i][4]
+            if g.area and any(_inter_area(g, osm[shown[int(j)]][4]) / g.area >= 0.5
+                              for j in otree.query(g, predicate="intersects")):
+                drop_osm.add(i)
     if unknown and city:
         ctree = shapely.STRtree([c[2] for c in city])
         for i in unknown:
