@@ -23,6 +23,10 @@ def test_num():
 def test_gap_category():
     assert category("大葉高島屋", "retail", None, None, None, None, None) == "百貨／購物中心"
     assert category("好市多北投店", "retail", "wholesale", None, None, None, None) == "量販／賣場"
+    assert category("南門市場", "yes", None, None, None, None, None) == "市場"
+    assert category("板橋果菜批發市場", "retail", None, None, None, None, None) == "市場"
+    assert category(None, "retail", None, "marketplace", None, None, None) == "市場"
+    assert category("宜濠超級市場", "yes", None, None, None, None, None) == "其他／未分類"  # 超級市場不算
     assert category("天母棒球場", "stadium", None, None, "stadium", None, None) == "運動場館"
     assert category("臺南火車站", "train_station", None, None, None, None, "station") == "交通（車站／航廈）"
     assert category(None, "apartments", None, None, None, None, None) == "住宅"
