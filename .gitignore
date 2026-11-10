@@ -7,3 +7,5 @@ __pycache__/
 .vercel
 # Vercel 拉下來的環境變數（含 Upstash 金鑰）
 .env*
+# 本機用的筆記與腳本（含電腦名稱等，不公開）
+local/
