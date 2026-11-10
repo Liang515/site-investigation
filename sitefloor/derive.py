@@ -4,6 +4,7 @@
 - trade_doors：door_trade 拆出「路巷弄前綴＋號＋之號」，給同巷推估用
 - same_bldg：同棟推估。同一建物多邊形（臺中、臺北），或座標完全相同的門牌（多為主號＋之號），
   取其中有實價門牌的總樓層眾數
+- trade_pts：有實價門牌的座標與總樓層，切成格點，給「附近 100 公尺實價」推估用
 - roads：每個鄉鎮市區的路街（門牌去掉巷弄、號），給模糊搜尋比對路名（規則同 suggest.split_base）
 - btype：各表都帶實價的建物型態眾數，查詢時用來辨認工廠／倉庫（推估準確率較低）
 
@@ -46,6 +47,19 @@ SELECT * FROM cand
 QUALIFY row_number() OVER (PARTITION BY county, town, base ORDER BY spread, n DESC) = 1;
 """
 
+# 附近實價推估的格點（度）：0.0011 度在臺灣全境（北至北緯 26.4 度）東西南北都超過 100 m，
+# 查詢只要找自己和周圍 8 格。座標存單精度（約 1 m，部署檔小 2/3）
+NEAR_GRID = 0.0011
+# 附近實價推估（scripts/validate_phase1.py 留一驗證時用拿掉樣本的 door_trade 重算）
+TRADE_PTS_SQL = f"""
+CREATE OR REPLACE TABLE trade_pts AS
+SELECT t.county, floor(p.lat / {NEAR_GRID})::INTEGER AS gy, floor(p.lon / {NEAR_GRID})::INTEGER AS gx,
+       p.lon::FLOAT AS lon, p.lat::FLOAT AS lat, t.floors
+FROM door_trade t JOIN (
+    SELECT county, town, base, any_value(lon) AS lon, any_value(lat) AS lat FROM addresses
+    WHERE lon IS NOT NULL GROUP BY ALL) p USING (county, town, base);
+"""
+
 SQL = f"""
 -- 總樓層取眾數；平手時優先「有記載所在樓層」的紀錄（整棟出租的紀錄常把
 -- 總樓層記錯），再取最近一筆成交、再取較高（DuckDB 的 mode() 平手時每次結果不同）
@@ -75,6 +89,7 @@ FROM door_trade
 WHERE regexp_matches(base, '{DOOR_RE}') AND length(regexp_extract(base, '{DOOR_RE}', 2)) <= 5;
 
 {SAME_BLDG_SQL}
+{TRADE_PTS_SQL}
 CREATE OR REPLACE TABLE roads AS
 WITH d AS (
     SELECT DISTINCT county, town, base FROM addresses WHERE town IS NOT NULL
@@ -95,5 +110,5 @@ GROUP BY 1, 2, 3;
 if __name__ == "__main__":
     con = connect(write=True)
     con.execute(SQL)
-    for t in ("door_trade", "trade_doors", "same_bldg", "roads"):
+    for t in ("door_trade", "trade_doors", "same_bldg", "trade_pts", "roads"):
         print(t, f"{con.execute(f'SELECT count(*) FROM {t}').fetchall()[0][0]:,}")

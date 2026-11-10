@@ -1,7 +1,7 @@
 """Phase 1 全國驗證：用網站實際的查詢邏輯（lookup_many）做留一驗證，量各縣市、各信心等級、各來源的準確率。
 
 做法：每縣市從有實價的門牌抽 PER_COUNTY 個當答案（door_trade 的總樓層），在記憶體資料庫裡把這些門牌的
-實價全部拿掉（trades、door_trade、trade_doors），同棟推估表（same_bldg、same_osm）用拿掉後的資料重算，
+實價全部拿掉（trades、door_trade、trade_doors），推估表（same_bldg、same_osm、trade_pts）用拿掉後的資料重算，
 人工校正清空，再查一次這些門牌，比對回傳的樓層和答案。主號的實價（之號門牌）、同巷鄰居、使照、圖資照常使用。
 另外從全部門牌（不限有沒有實價）抽樣，量正式網站的涵蓋率（各信心等級的比例）。
 
@@ -18,7 +18,7 @@ import duckdb
 import pandas as pd
 
 from sitefloor.db import DB_PATH
-from sitefloor.derive import SAME_BLDG_SQL
+from sitefloor.derive import SAME_BLDG_SQL, TRADE_PTS_SQL
 from sitefloor.lookup import lookup_many
 from sitefloor.osm import SAME_OSM_SQL
 
@@ -48,10 +48,11 @@ def connect_loo() -> tuple[duckdb.DuckDBPyConnection, pd.DataFrame]:
         CREATE TABLE door_trade AS SELECT * FROM src.door_trade ANTI JOIN s USING (county, town, base);
         DROP VIEW trade_doors;
         CREATE TABLE trade_doors AS SELECT * FROM src.trade_doors ANTI JOIN s USING (county, town, base);
-        DROP VIEW same_bldg; DROP VIEW same_osm; DROP VIEW corrections;
+        DROP VIEW same_bldg; DROP VIEW same_osm; DROP VIEW trade_pts; DROP VIEW corrections;
         CREATE TABLE corrections AS SELECT * FROM src.corrections WHERE false;""")
     con.execute(SAME_BLDG_SQL)
     con.execute(SAME_OSM_SQL)
+    con.execute(TRADE_PTS_SQL)
     return con, con.execute("SELECT * FROM s").df()
 
 

@@ -26,6 +26,7 @@ TABLES = {
     "door_trade": (None, "county, town, base"),
     "trade_doors": (None, "county, town, prefix, num"),
     "same_bldg": (None, "base, county, town"),
+    "trade_pts": (None, "county, gy, gx"),
     "roads": (None, "county, town, road"),
     "coverage": (None, "county"),
     "permits": (None, "base, county, town"),

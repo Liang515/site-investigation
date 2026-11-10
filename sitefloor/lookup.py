@@ -11,7 +11,7 @@ import pandas as pd
 
 from sitefloor import landmarks
 from sitefloor.address import parse
-from sitefloor.derive import DOOR_RE
+from sitefloor.derive import DOOR_RE, NEAR_GRID
 
 LEVEL_NAME = {1: "完整地址（含樓層）", 2: "門牌號", 3: "主號推估"}
 
@@ -105,6 +105,29 @@ FROM qq JOIN trade_doors d
 GROUP BY qq.idx
 HAVING count(*) >= {NB_MIN} AND max(d.floors) - min(d.floors) <= {NB_SPREAD}
 """
+
+# 附近實價：門牌點 NEAR_M 公尺內最近 NEAR_K 個有實價的門牌（至少 NEAR_MIN 個），取總樓層眾數。
+# 留一驗證（2026-11-10，現行邏輯查不到的 9,226 門牌，3/4 是透天）：全部一致 完全相符 91%、差一層內 97% → 中；
+# 眾數占 70–99% 完全相符 64%、差一層內 83% → 低；不到 70% 只有 4 成，不推估
+NEAR_M, NEAR_K, NEAR_MIN, NEAR_SHARE = 100, 7, 3, 0.7
+_NEAR_SQL = f"""
+WITH g AS (
+    SELECT idx, county, lon, lat, floor(lat / {NEAR_GRID})::INTEGER AS gy, floor(lon / {NEAR_GRID})::INTEGER AS gx
+    FROM qp
+),
+k AS (
+    SELECT g.idx, p.floors,
+           111320 * sqrt(power(p.lat - g.lat, 2) + power((p.lon - g.lon) * cos(radians(g.lat)), 2)) AS d
+    FROM g JOIN trade_pts p
+      ON p.county = g.county AND p.gy BETWEEN g.gy - 1 AND g.gy + 1 AND p.gx BETWEEN g.gx - 1 AND g.gx + 1
+    WHERE d <= {NEAR_M}
+    QUALIFY row_number() OVER (PARTITION BY g.idx ORDER BY d, p.floors) <= {NEAR_K}
+),
+m AS (SELECT idx, floors, count(*) AS c, min(d) AS dmin, sum(count(*)) OVER (PARTITION BY idx) AS n FROM k GROUP BY idx, floors)
+SELECT idx, floors AS ar_floors, c AS ar_k, n AS ar_n FROM m WHERE n >= {NEAR_MIN}
+QUALIFY row_number() OVER (PARTITION BY idx ORDER BY c DESC, dmin, floors DESC) = 1
+"""
+
 
 def _is_factory(*btypes) -> bool:
     return any(not _na(b) and re.search(FACTORY_PAT, str(b)) for b in btypes)
@@ -238,6 +261,7 @@ def _resolve(r, covered: set[str]) -> dict:
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
     #   人工校正 > 自己的實價 > 同棟／同點位一致（94–98%）> OSM 同棟一致（97%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
     #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
+    #   > 附近 100 公尺實價（以上都沒有的門牌，多為透天：一致 91%、七成以上 64%；2026-11-10）
     tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
     if not _na(r.c_floors):
         floors, src, conf = r.c_floors, "人工校正", "高"
@@ -295,6 +319,14 @@ def _resolve(r, covered: set[str]) -> dict:
             notes.append(f"門牌點不在建物內，取 {r.dist_m:.0f}m 內最近建物")
         notes.append("僅建物圖資：臺中建物圖對實價完全相符約 5 成、差一層內約 9 成，高樓常被低估"
                      if not str(r.b_source).startswith(TP_PERMIT_SOURCE) else "門牌點不在臺北建照外框內，準確度較低")
+    elif not _na(r.ar_floors) and r.ar_k / r.ar_n >= NEAR_SHARE:
+        floors, src = r.ar_floors, f"推估：附近 {NEAR_M} 公尺實價"
+        k, n = int(r.ar_k), int(r.ar_n)
+        conf = "中" if k == n else "低"
+        notes.append(f"本門牌無實價，取附近 {NEAR_M} 公尺內最近 {n} 個有實價的門牌，"
+                     + (f"都是 {int(floors)} 層" if k == n else f"其中 {k} 個是 {int(floors)} 層")
+                     + "（對實價驗證完全相符約 "
+                     + ("9 成）" if k == n else "6 成、差一層內約 8 成）"))
     else:
         floors, src = None, None
         conf = "無"
@@ -317,12 +349,19 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     permit = _optional(con, _PERMIT_SQL, ["idx", "p_floors", "p_below", "p_structure", "p_year", "p_no", "p_source",
                                           "p_exact"])
     con.unregister("q")
+    near = pd.DataFrame(columns=["idx", "ar_floors", "ar_k", "ar_n"])
+    pts = hit.loc[hit.lon.notna() & hit.county.notna(), ["idx", "county", "lon", "lat"]]
+    if len(pts):
+        con.register("qp", pts)
+        near = _optional(con, _NEAR_SQL, list(near.columns))
+        con.unregister("qp")
     covered = {c for (c,) in con.execute(
         "SELECT county FROM addresses UNION SELECT county FROM trades").fetchall()}
     df = (q.merge(hit, on="idx", how="left", suffixes=("_q", ""))
           .merge(trade, on="idx", how="left").merge(same, on="idx", how="left").merge(nb, on="idx", how="left")
           .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left")
-          .merge(same_osm, on="idx", how="left").merge(corr, on="idx", how="left"))
+          .merge(same_osm, on="idx", how="left").merge(corr, on="idx", how="left")
+          .merge(near, on="idx", how="left"))
     df["unit_floor"] = df.floor
     resolved = pd.DataFrame([_resolve(r, covered) for r in df.itertuples()], index=df.index)
     for c in ("county", "town"):
