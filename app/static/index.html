@@ -779,7 +779,7 @@ fetch("/api/stats").then(r => r.json()).then(rows => {
     `<tr><td></td><td class="n hint">門牌號</td><td class="n hint">實價</td><td class="n hint">高＋中</td><td class="n hint">任一</td></tr>`
     + rows.map(s => `<tr><td>${esc(s.county)}</td><td class="n">${s.addresses.toLocaleString()}</td>`
       + `<td class="n">${pct(s.by_trade)}</td><td class="n">${pct(s.high_mid)}</td><td class="n">${pct(s.any_floor)}</td></tr>`).join("")
-    + `<tr><td colspan="5" class="hint">實價＝該門牌自己有實價登錄；高＋中＝含同棟、同巷推估；任一＝再含低信心（建物圖、不一致的同棟）</td></tr>`;
+    + `<tr><td colspan="5" class="hint">實價＝該門牌自己有實價登錄；高＋中＝含同棟、同巷、附近一致的推估；任一＝再含低信心（建物圖、不一致的同棟、附近七成以上一致）</td></tr>`;
 });
 </script>
 </body>

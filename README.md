@@ -52,7 +52,7 @@ uv run uvicorn app.server:app --port 8765   # 開 http://localhost:8765
 uv run python -m sitefloor.build taichung taipei   # 建物圖、門牌點位 → data/db/sitefloor.duckdb
 uv run python -m sitefloor.build osm_addr road_towns  # 沒有門牌點位的縣市改用 OSM 地址；嘉義市用道路判斷行政區
 uv run python -m sitefloor.trades plvr             # 實價登錄 → trades
-uv run python -m sitefloor.derive                  # 推估用的衍生表（同棟、同巷）
+uv run python -m sitefloor.derive                  # 推估用的衍生表（同棟、同巷、附近實價）
 uv run python -m sitefloor.permits                 # 使用執照（data/raw/permits/，來源見 sitefloor/permits.py）
 uv run python -m sitefloor.osm                     # OpenStreetMap 建物（data/raw/osm/taiwan-latest.osm.pbf，Geofabrik 下載）
 uv run python -m sitefloor.coverage                # 各縣市涵蓋率（網頁統計表）
@@ -96,14 +96,14 @@ uv run pytest -q
 sitefloor/address.py   地址正規化（全形、台/臺、段號、樓層、之號、舊縣市名）
 sitefloor/build.py     各來源 → DuckDB（buildings, addresses）
 sitefloor/trades.py    實價資料 → trades 表（全國實價登錄季檔／本期、臺北市週報）
-sitefloor/derive.py    推估用的衍生表：door_trade、trade_doors（同巷）、same_bldg（同棟）
+sitefloor/derive.py    推估用的衍生表：door_trade、trade_doors（同巷）、same_bldg（同棟）、trade_pts（附近實價）
 sitefloor/permits.py   使用執照（臺北、新北、新竹市、臺南公寓大廈）→ permits
 sitefloor/osm.py       OpenStreetMap 建物 → osm_buildings、door_osm
 sitefloor/gaps.py      樓層缺口盤點（依建物類型統計、輸出 data/reports/gaps.md 與 missing_landmarks.csv）
 sitefloor/suggest.py   模糊搜尋（路名比對用 derive 產生的 roads 表）
 sitefloor/coverage.py  各縣市涵蓋率 → coverage 表
 sitefloor/landmarks.py 地標名稱 → 門牌
-sitefloor/lookup.py    單筆/批次查詢：實價、同棟、同巷、建物圖依信心排序合併
+sitefloor/lookup.py    單筆/批次查詢：實價、同棟、同巷、建物圖、附近實價依信心排序合併
 app/server.py          FastAPI；app/static/index.html 地圖介面
 docs/                  盤點報告
 data/raw/              原始資料（不進版控）

@@ -1,17 +1,29 @@
 """各縣市涵蓋率（預先算好存成 coverage 表，網頁統計直接讀）。
 
-單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致（市府外框／同點位／OSM 外框）→ 使用執照 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖。
+單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致（市府外框／同點位／OSM 外框）→ 使用執照 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖
+→ 附近 100 公尺實價（一致＝中、七成以上＝低；只對前面都沒有的門牌算）。
 工廠／倉庫的推估信心各降一級（同 lookup.py）。
 用法：uv run python -m sitefloor.coverage   （建庫、匯入實價、derive 之後跑）
 """
 from sitefloor.db import connect
-from sitefloor.derive import DOOR_RE
-from sitefloor.lookup import FACTORY_PAT, NB_MIN, NB_SPREAD, NB_WINDOW, PERMIT_HIGH
+from sitefloor.derive import DOOR_RE, NEAR_GRID
+from sitefloor.lookup import (
+    FACTORY_PAT,
+    NB_MIN,
+    NB_SPREAD,
+    NB_WINDOW,
+    NEAR_K,
+    NEAR_M,
+    NEAR_MIN,
+    NEAR_SHARE,
+    PERMIT_HIGH,
+)
 
 SQL = f"""
-CREATE OR REPLACE TABLE coverage AS
+CREATE OR REPLACE TEMP TABLE cov_flags AS
 WITH a AS (
     SELECT county, town, base, any_value(bldg_uid) AS bldg_uid, bool_or(match = 'within') AS within,
+           any_value(lon) AS lon, any_value(lat) AS lat,
            regexp_extract(base, '{DOOR_RE}', 1) AS prefix,
            TRY_CAST(regexp_extract(base, '{DOOR_RE}', 2) AS INTEGER) AS num
     FROM addresses GROUP BY 1, 2, 3
@@ -25,7 +37,7 @@ nb AS (
     HAVING count(*) >= {NB_MIN} AND max(d.floors) - min(d.floors) <= {NB_SPREAD}
 ),
 flags AS (
-    SELECT a.county,
+    SELECT a.county, a.lon, a.lat,
            (t.base IS NOT NULL) AS own,
            (s.spread = 0 OR so.spread = 0) AS same_ok,
            ((s.spread = 0 AND NOT regexp_matches(coalesce(s.btype, '') || '/' || coalesce(b.btype, ''), '{FACTORY_PAT}'))
@@ -48,13 +60,35 @@ flags AS (
     LEFT JOIN door_osm o USING (county, town, base)
     LEFT JOIN osm_buildings ob ON ob.uid = o.osm_uid
 )
+SELECT *, row_number() OVER () AS i FROM flags;
+
+-- 附近實價（規則同 lookup._NEAR_SQL）：只算前面都推估不出來、有座標的門牌
+CREATE OR REPLACE TEMP TABLE cov_near AS
+WITH g AS (
+    SELECT i, county, lon, lat, floor(lat / {NEAR_GRID})::INTEGER AS gy, floor(lon / {NEAR_GRID})::INTEGER AS gx
+    FROM cov_flags
+    WHERE lon IS NOT NULL AND NOT (own OR coalesce(same_ok, false) OR permit OR near_any OR osm OR same_any OR map)
+),
+k AS (
+    SELECT g.i, p.floors,
+           111320 * sqrt(power(p.lat - g.lat, 2) + power((p.lon - g.lon) * cos(radians(g.lat)), 2)) AS d
+    FROM g JOIN trade_pts p
+      ON p.county = g.county AND p.gy BETWEEN g.gy - 1 AND g.gy + 1 AND p.gx BETWEEN g.gx - 1 AND g.gx + 1
+    WHERE d <= {NEAR_M}
+    QUALIFY row_number() OVER (PARTITION BY g.i ORDER BY d, p.floors) <= {NEAR_K}
+),
+m AS (SELECT i, count(*) AS c, sum(count(*)) OVER (PARTITION BY i) AS n FROM k GROUP BY i, floors)
+SELECT i, max(c) = max(n) AS near_mid FROM m WHERE n >= {NEAR_MIN} GROUP BY i HAVING max(c) / max(n) >= {NEAR_SHARE};
+
+CREATE OR REPLACE TABLE coverage AS
 SELECT county, count(*) AS doors,
        avg(own::int) AS by_trade,
        avg((own OR coalesce(same_high, false) OR permit_high)::int) AS high,
-       avg((own OR coalesce(same_ok, false) OR permit OR tp_map OR near)::int) AS high_mid,
-       avg((own OR coalesce(same_ok, false) OR permit OR near_any OR osm OR same_any OR map)::int) AS any_floor,
+       avg((own OR coalesce(same_ok, false) OR permit OR tp_map OR near OR coalesce(near_mid, false))::int) AS high_mid,
+       avg((own OR coalesce(same_ok, false) OR permit OR near_any OR osm OR same_any OR map
+            OR near_mid IS NOT NULL)::int) AS any_floor,
        avg(map::int) AS by_map
-FROM flags GROUP BY 1
+FROM cov_flags LEFT JOIN cov_near USING (i) GROUP BY 1
 """
 
 if __name__ == "__main__":
