@@ -75,3 +75,14 @@ def test_assign_doors_innermost():
                           "lon": [2.0, 8.0], "lat": [2.0, 8.0]})
     got = assign_doors(doors, b)
     assert dict(zip(got.base, got.osm_uid)) == {"1號": "osm:tower", "2號": "osm:mall"}
+
+
+def test_round_wkb():
+    import shapely
+
+    from sitefloor.export import round_wkb
+
+    sq = shapely.box(121.5000004, 25.0000006, 121.5001, 25.0001)
+    got = round_wkb([shapely.to_wkb(sq), None], 6)
+    assert got[1] is None
+    assert shapely.from_wkb(got[0]).bounds == (121.5, 25.000001, 121.5001, 25.0001)
