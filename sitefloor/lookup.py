@@ -128,6 +128,28 @@ SELECT idx, floors AS ar_floors, c AS ar_k, n AS ar_n FROM m WHERE n >= {NEAR_MI
 QUALIFY row_number() OVER (PARTITION BY idx ORDER BY c DESC, dmin, floors DESC) = 1
 """
 
+# 同路：同前綴（路街巷弄）、不分單雙號、±ROAD_WINDOW 號內最近 NEAR_K 個有實價的門牌（至少 NEAR_MIN 個），全部一致才用。
+# 不需要座標，給門牌點位資料沒收的縣市用（宜蘭、南投、嘉義市）。
+# 留一驗證（2026-11-12，同巷、附近 100 公尺都查不到的 9,307 門牌）：可推估 12%，完全相符 82%、差一層內 92% → 低；
+# 宜蘭、南投、嘉義市可推估約 2 成。不一致的只有 46%，不推估
+ROAD_WINDOW = 40
+_ROAD_SQL = f"""
+WITH qq AS (
+    SELECT idx, county, town, base,
+           regexp_extract(base, '{DOOR_RE}', 1) AS prefix,
+           TRY_CAST(regexp_extract(base, '{DOOR_RE}', 2) AS INTEGER) AS num
+    FROM q WHERE town <> '' AND regexp_matches(base, '{DOOR_RE}')
+),
+k AS (
+    SELECT qq.idx, d.floors FROM qq JOIN trade_doors d
+      ON d.county = qq.county AND d.town = qq.town AND d.prefix = qq.prefix
+     AND abs(d.num - qq.num) <= {ROAD_WINDOW} AND d.base <> qq.base
+    QUALIFY row_number() OVER (PARTITION BY qq.idx ORDER BY abs(d.num - qq.num), d.num, d.base) <= {NEAR_K}
+)
+SELECT idx, any_value(floors) AS rd_floors, count(*) AS rd_n FROM k
+GROUP BY idx HAVING count(*) >= {NEAR_MIN} AND min(floors) = max(floors)
+"""
+
 
 def _is_factory(*btypes) -> bool:
     return any(not _na(b) and re.search(FACTORY_PAT, str(b)) for b in btypes)
@@ -228,10 +250,11 @@ def _na(x) -> bool:
 def _resolve(r, covered: set[str]) -> dict:
     """合併圖資與實價兩條線索，決定最終欄位、信心與說明。"""
     has_addr, has_trade = not _na(r.lvl), not _na(r.tlvl)
-    # 門牌點位資料沒有、自己也沒有實價的門牌，同巷鄰居一致時仍可推估：宜蘭、南投、嘉義市的點位資料幾乎沒收，
+    # 門牌點位資料沒有、自己也沒有實價的門牌，同巷或同路鄰居一致時仍可推估：宜蘭、南投、嘉義市的點位資料幾乎沒收，
     # 其他縣市也有舊門牌不在點位裡（留一驗證 2026-11-09：這類門牌同巷推估完全相符 92%，和一般門牌相同）。
     # 沒寫鄉鎮市區時鄰居可能跨區，不推估
-    nb_only = not has_addr and not has_trade and not _na(r.nb_floors) and isinstance(r.town_q, str) and r.town_q
+    nb_only = (not has_addr and not has_trade and not (_na(r.nb_floors) and _na(r.rd_floors))
+               and isinstance(r.town_q, str) and r.town_q)
     if not has_addr and not has_trade and not nb_only:
         if r.county_q and r.county_q not in covered:
             return dict(confidence="無", note=f"{r.county_q}尚未建置")
@@ -261,7 +284,7 @@ def _resolve(r, covered: set[str]) -> dict:
     # 依實測準確率排序（2026-11-04 驗證，見 scripts/validate*.py）：
     #   人工校正 > 自己的實價 > 同棟／同點位一致（94–98%）> OSM 同棟一致（97%）> 使用執照（92–96%）> 臺北建照套繪圖、門牌點在外框內（96%）> 同巷（93%）
     #   > OSM 樓層（72%）> 同棟不一致（62%）> 其他建物圖（臺中 53%）
-    #   > 附近 100 公尺實價（以上都沒有的門牌，多為透天：一致 91%、七成以上 64%；2026-11-10）
+    #   > 附近 100 公尺實價（以上都沒有的門牌，多為透天：一致 91%、七成以上 64%；2026-11-10）> 同路 ±40 號一致（82%）
     tp_ok = (not _na(b) and str(r.b_source).startswith(TP_PERMIT_SOURCE) and r.mrank == 0 and r.lvl in (1, 2))
     if not _na(r.c_floors):
         floors, src, conf = r.c_floors, "人工校正", "高"
@@ -327,6 +350,10 @@ def _resolve(r, covered: set[str]) -> dict:
                      + (f"都是 {int(floors)} 層" if k == n else f"其中 {k} 個是 {int(floors)} 層")
                      + "（對實價驗證完全相符約 "
                      + ("9 成）" if k == n else "6 成、差一層內約 8 成）"))
+    elif not _na(r.rd_floors):
+        floors, src, conf = r.rd_floors, "推估：同路門牌", "低"
+        notes.append(f"本門牌無實價，取同一條路（巷弄）±{ROAD_WINDOW} 號內最近 {int(r.rd_n)} 個有實價的門牌，都是 {int(floors)} 層"
+                     "（對實價驗證完全相符約 8 成）")
     else:
         floors, src = None, None
         conf = "無"
@@ -343,6 +370,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
     trade = con.execute(_TRADE_SQL).df()
     same = con.execute(_SAME_SQL).df()
     nb = con.execute(_NB_SQL).df()
+    road = con.execute(_ROAD_SQL).df()
     osm = _optional(con, _OSM_SQL, ["idx", "osm_uid", "o_floors", "o_name"])
     corr = _optional(con, _CORR_SQL, ["idx", "c_floors", "c_below", "c_year", "c_source"])
     same_osm = _optional(con, _SAME_OSM_SQL, ["idx", "so_floors", "so_n", "so_spread", "so_btype"])
@@ -361,7 +389,7 @@ def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFram
           .merge(trade, on="idx", how="left").merge(same, on="idx", how="left").merge(nb, on="idx", how="left")
           .merge(osm, on="idx", how="left").merge(permit, on="idx", how="left")
           .merge(same_osm, on="idx", how="left").merge(corr, on="idx", how="left")
-          .merge(near, on="idx", how="left"))
+          .merge(near, on="idx", how="left").merge(road, on="idx", how="left"))
     df["unit_floor"] = df.floor
     resolved = pd.DataFrame([_resolve(r, covered) for r in df.itertuples()], index=df.index)
     for c in ("county", "town"):

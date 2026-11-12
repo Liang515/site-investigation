@@ -80,3 +80,35 @@ def test_near_sql():
     con.register("qp", pd.DataFrame({"idx": [0, 1], "county": ["屏東縣", "臺東縣"], "lon": [lon, lon], "lat": [lat, lat]}))
     got = con.execute(_NEAR_SQL).fetchall()
     assert got == [(0, 3, 3, 4)]  # 100 m 內 4 個，3 個是 3 層；別的縣市不算
+
+
+def test_resolve_same_road():
+    from sitefloor.lookup import _resolve
+
+    # 門牌點位資料沒有、同巷也推不出來：同路一致時給「低」，並提醒確認門牌存在
+    r = _Row(county_q="宜蘭縣", town_q="羅東鎮", base="中正路50號", rd_floors=3.0, rd_n=5)
+    got = _resolve(r, {"宜蘭縣"})
+    assert (got["floors_above"], got["confidence"], got["source"]) == (3, "低", "推估：同路門牌")
+    assert "門牌點位資料沒有此門牌" in got["note"]
+    # 同巷優先
+    r = _Row(county_q="宜蘭縣", town_q="羅東鎮", base="中正路50號", rd_floors=3.0, rd_n=5, nb_floors=4.0, nb_n=2,
+             nb_factory=False)
+    assert _resolve(r, {"宜蘭縣"})["floors_above"] == 4
+
+
+def test_road_sql():
+    import duckdb
+    import pandas as pd
+
+    from sitefloor.lookup import _ROAD_SQL
+
+    con = duckdb.connect()
+    con.execute("CREATE TABLE trade_doors (county VARCHAR, town VARCHAR, base VARCHAR, floors SMALLINT, prefix VARCHAR, num INTEGER)")
+    rows = [("中正路", n, 3) for n in (2, 9, 30, 41)] + [("中正路", 200, 9), ("中山路", 11, 7)]
+    for prefix, n, f in rows:
+        con.execute("INSERT INTO trade_doors VALUES ('宜蘭縣', '羅東鎮', ?, ?, ?, ?)", [f"{prefix}{n}號", f, prefix, n])
+    q = pd.DataFrame({"idx": [0, 1, 2], "county": ["宜蘭縣"] * 3, "town": ["羅東鎮", "羅東鎮", ""],
+                      "base": ["中正路10號", "中山路10號", "中正路10號"]})
+    con.register("q", q)
+    # 中正路：±40 號內 4 個都是 3 層（200 號太遠）；中山路只有 1 個；沒寫鄉鎮市區不推估
+    assert con.execute(_ROAD_SQL).fetchall() == [(0, 3, 4)]
