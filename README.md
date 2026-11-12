@@ -103,7 +103,7 @@ sitefloor/gaps.py      樓層缺口盤點（依建物類型統計、輸出 data/
 sitefloor/suggest.py   模糊搜尋（路名比對用 derive 產生的 roads 表）
 sitefloor/coverage.py  各縣市涵蓋率 → coverage 表
 sitefloor/landmarks.py 地標名稱 → 門牌
-sitefloor/lookup.py    單筆/批次查詢：實價、同棟、同巷、建物圖、附近實價依信心排序合併
+sitefloor/lookup.py    單筆/批次查詢：實價、同棟、同巷、建物圖、附近實價、同路依信心排序合併
 app/server.py          FastAPI；app/static/index.html 地圖介面
 docs/                  盤點報告
 data/raw/              原始資料（不進版控）

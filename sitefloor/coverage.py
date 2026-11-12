@@ -1,7 +1,7 @@
 """各縣市涵蓋率（預先算好存成 coverage 表，網頁統計直接讀）。
 
 單位是「門牌號」（不含樓層）。依查詢時的優先順序計：自己的實價 → 同棟一致（市府外框／同點位／OSM 外框）→ 使用執照 → 臺北建照（點在框內，中）→ 同巷 → OSM 樓層 → 同棟不一致 → 建物圖
-→ 附近 100 公尺實價（一致＝中、七成以上＝低；只對前面都沒有的門牌算）。
+→ 附近 100 公尺實價（一致＝中、七成以上＝低）→ 同路一致（低）；最後兩項只對前面都沒有的門牌算。
 工廠／倉庫的推估信心各降一級（同 lookup.py）。
 用法：uv run python -m sitefloor.coverage   （建庫、匯入實價、derive 之後跑）
 """
@@ -17,6 +17,7 @@ from sitefloor.lookup import (
     NEAR_MIN,
     NEAR_SHARE,
     PERMIT_HIGH,
+    ROAD_WINDOW,
 )
 
 SQL = f"""
@@ -37,7 +38,7 @@ nb AS (
     HAVING count(*) >= {NB_MIN} AND max(d.floors) - min(d.floors) <= {NB_SPREAD}
 ),
 flags AS (
-    SELECT a.county, a.lon, a.lat,
+    SELECT a.county, a.town, a.prefix, a.num, a.base, a.lon, a.lat,
            (t.base IS NOT NULL) AS own,
            (s.spread = 0 OR so.spread = 0) AS same_ok,
            ((s.spread = 0 AND NOT regexp_matches(coalesce(s.btype, '') || '/' || coalesce(b.btype, ''), '{FACTORY_PAT}'))
@@ -80,15 +81,29 @@ k AS (
 m AS (SELECT i, count(*) AS c, sum(count(*)) OVER (PARTITION BY i) AS n FROM k GROUP BY i, floors)
 SELECT i, max(c) = max(n) AS near_mid FROM m WHERE n >= {NEAR_MIN} GROUP BY i HAVING max(c) / max(n) >= {NEAR_SHARE};
 
+-- 同路（規則同 lookup._ROAD_SQL）：前面都推估不出來、附近也沒有的門牌
+CREATE OR REPLACE TEMP TABLE cov_road AS
+WITH g AS (
+    SELECT f.i, f.county, f.town, f.base, f.prefix, f.num FROM cov_flags f ANTI JOIN cov_near USING (i)
+    WHERE f.num IS NOT NULL AND NOT (own OR coalesce(same_ok, false) OR permit OR near_any OR osm OR same_any OR map)
+),
+k AS (
+    SELECT g.i, d.floors FROM g JOIN trade_doors d
+      ON d.county = g.county AND d.town = g.town AND d.prefix = g.prefix
+     AND abs(d.num - g.num) <= {ROAD_WINDOW} AND d.base <> g.base
+    QUALIFY row_number() OVER (PARTITION BY g.i ORDER BY abs(d.num - g.num), d.num, d.base) <= {NEAR_K}
+)
+SELECT i FROM k GROUP BY i HAVING count(*) >= {NEAR_MIN} AND min(floors) = max(floors);
+
 CREATE OR REPLACE TABLE coverage AS
 SELECT county, count(*) AS doors,
        avg(own::int) AS by_trade,
        avg((own OR coalesce(same_high, false) OR permit_high)::int) AS high,
        avg((own OR coalesce(same_ok, false) OR permit OR tp_map OR near OR coalesce(near_mid, false))::int) AS high_mid,
        avg((own OR coalesce(same_ok, false) OR permit OR near_any OR osm OR same_any OR map
-            OR near_mid IS NOT NULL)::int) AS any_floor,
+            OR near_mid IS NOT NULL OR r.i IS NOT NULL)::int) AS any_floor,
        avg(map::int) AS by_map
-FROM cov_flags LEFT JOIN cov_near USING (i) GROUP BY 1
+FROM cov_flags LEFT JOIN cov_near USING (i) LEFT JOIN cov_road r USING (i) GROUP BY 1
 """
 
 if __name__ == "__main__":
