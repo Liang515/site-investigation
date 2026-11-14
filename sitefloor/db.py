@@ -28,12 +28,17 @@ CREATE TABLE IF NOT EXISTS trades (
     total_floors SMALLINT, structure VARCHAR, btype VARCHAR, built_year SMALLINT,
     trade_date DATE, kind VARCHAR, source VARCHAR, raw_address VARCHAR,
     usage VARCHAR, zoning VARCHAR,  -- 主要用途（住家用、商業用…）、都市土地使用分區
-    unit_price DOUBLE  -- 單價（元／m²；租賃為租金單價）
+    unit_price DOUBLE,  -- 單價（元／m²；租賃為租金單價）
+    total_price DOUBLE, park_price DOUBLE,  -- 總價、車位總價（元；租賃為月租金）
+    note VARCHAR  -- 備註（特殊交易、含增建等）
 );
 -- 舊資料庫補欄位（CREATE TABLE IF NOT EXISTS 不會加新欄位）
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS usage VARCHAR;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS zoning VARCHAR;
 ALTER TABLE trades ADD COLUMN IF NOT EXISTS unit_price DOUBLE;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS total_price DOUBLE;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS park_price DOUBLE;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS note VARCHAR;
 ALTER TABLE buildings ADD COLUMN IF NOT EXISTS permit_no VARCHAR;
 ALTER TABLE buildings ADD COLUMN IF NOT EXISTS annex BOOLEAN;
 """
