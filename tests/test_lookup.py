@@ -112,3 +112,26 @@ def test_road_sql():
     con.register("q", q)
     # 中正路：±40 號內 4 個都是 3 層（200 號太遠）；中山路只有 1 個；沒寫鄉鎮市區不推估
     assert con.execute(_ROAD_SQL).fetchall() == [(0, 3, 4)]
+
+
+def test_trade_records():
+    import datetime as dt
+
+    import duckdb
+
+    from sitefloor.db import SCHEMA
+    from sitefloor.lookup import trade_records
+
+    con = duckdb.connect()
+    con.execute(SCHEMA)
+    rows = [("大安區", dt.date(2025, 3, 1), 5, "買賣", 12_000_000, "實價登錄"),
+            ("大安區", dt.date(2025, 3, 1), 5, "買賣", 12_000_000, "臺北市實價週報"),  # 同一筆，只留實價登錄
+            (None, dt.date(2026, 1, 2), 3, "買賣", 9_000_000, "實價登錄"),  # 缺鄉鎮仍比對
+            ("大安區", dt.date(2026, 2, 1), 4, "租賃", 30_000, "實價登錄"),  # 租賃不列
+            ("中正區", dt.date(2026, 2, 1), 4, "買賣", 1, "實價登錄")]  # 別區同門牌
+    for town, d, f, kind, price, src in rows:
+        con.execute("""INSERT INTO trades (county, town, base, floor, trade_date, kind, total_price, source)
+                       VALUES ('臺北市', ?, '信義路三段1號', ?, ?, ?, ?, ?)""", [town, f, d, kind, price, src])
+    got = trade_records(con, "臺北市", "大安區", "信義路三段1號")
+    assert [(r["trade_date"], r["floor"], r["source"]) for r in got] == [
+        ("2026-01-02", 3, "實價登錄"), ("2025-03-01", 5, "實價登錄")]

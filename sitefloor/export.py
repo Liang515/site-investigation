@@ -24,12 +24,17 @@ FLOAT_COLS = {"lon", "lat", "minlon", "minlat", "maxlon", "maxlat"}
 # 外框座標的小數位數：建物 6 位（約 0.1 m）；災害潛勢圖原始解析度數十公尺，5 位（約 1 m）
 WKB_DECIMALS = {"buildings": 6, "osm_buildings": 6, "osm_parts": 6, "hazard_zones": 5}
 
+# 租賃的價格不放上網站（租金＋門牌會指向現任房客），只留樓層等建物資料
+SALE_ONLY = "CASE WHEN kind <> '租賃' THEN \"{c}\" END"
+EXPR = {"trades": {c: SALE_ONLY.format(c=c) for c in ("total_price", "unit_price", "park_price", "note")}}
+
 # 表 → (欄位, 排序)；欄位 None＝全部
 TABLES = {
     "addresses": (None, "base, county, town"),
     "buildings": (None, "minlon, minlat"),
     "trades": (
-        "county, town, base, floor, total_floors, structure, btype, built_year, trade_date, source",
+        ("county, town, base, floor, total_floors, structure, btype, built_year, trade_date, source, kind, "
+         "total_price, unit_price, park_price, note"),
         "base, county, town",
     ),
     "door_trade": (None, "county, town, base"),
@@ -70,7 +75,9 @@ def main():
         out = SERVE_DIR / t
         names = [c.strip() for c in cols.split(",")] if cols else [
             c for (c,) in con.execute("SELECT column_name FROM duckdb_columns() WHERE table_name = ?", [t]).fetchall()]
-        select = ", ".join(f'"{c}"::FLOAT AS "{c}"' if c in FLOAT_COLS else f'"{c}"' for c in names)
+        expr = EXPR.get(t, {})
+        select = ", ".join(f'{expr[c]} AS "{c}"' if c in expr else f'"{c}"::FLOAT AS "{c}"' if c in FLOAT_COLS
+                           else f'"{c}"' for c in names)
         src = f"(SELECT {select} FROM {t} ORDER BY {order})"
         if t in WKB_DECIMALS:
             tbl = con.sql(src).arrow()

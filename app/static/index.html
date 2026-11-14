@@ -69,6 +69,10 @@
   details summary { cursor: pointer; }
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table.trades tr.th td { color: var(--muted); font-weight: 600; }
+  table.trades td:first-child { white-space: nowrap; }
+  table.trades tr:has(+ .tnote) td { border-bottom: none; }
+  table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; }
   #drop { display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
   #drop:hover { border-color: var(--accent); }
   #drop .hint { display: block; margin-top: 6px; }
@@ -496,6 +500,7 @@ async function doLookup(q) {
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   const cardEl = document.getElementById("result").querySelector(".card");
+  if (r.trades?.length) cardEl.insertAdjacentHTML("beforeend", tradesHtml(r));
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", riskHtml(r));
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", feedbackHtml(r));
   // 手機：結果在地圖下方、選單更下面，給一顆回到選單的按鈕
@@ -605,6 +610,32 @@ function riskHtml(r) {
       <dt>山崩地滑</dt><dd>${hz(r.landslide)}</dd>
       <dt>土石流</dt><dd>${hz(r.debris)}</dd></dl>
     <div class="note">消防分隊、消防栓為直線距離，不是道路距離。淹水為 24 小時累積雨量 500／650mm 情境的模擬淹水深度；活動斷層、山崩地滑為地質敏感區；土石流為潛勢溪流影響範圍。潛勢圖僅供防災參考，不代表實際會發生，也不適用於土地使用管制（水利署、地調所、農業部資料，<a href="/about">來源</a>）。土壤液化為地調所全國圖資（澎湖、金門、連江沒有）。</div>
+  </div>`;
+}
+
+// ── 實價登錄成交紀錄：只列買賣，照原始資料顯示，不做估價；先列最新 TRADES_SHOWN 筆，其餘收合 ──
+const M2_PER_PING = 3.305785, TRADES_SHOWN = 5;
+const wan = x => x == null ? "—" : Math.round(x / 1e4).toLocaleString("zh-TW");
+function tradeRows(ts) {
+  return ts.map(t => {
+    const extra = [t.park_price > 0 ? `含車位 ${wan(t.park_price)} 萬` : "", t.kind === "預售屋" ? "預售屋" : "",
+                   (t.note || "").replace(/[；;\s]+$/, "")].filter(Boolean).join("；");
+    return `<tr><td>${esc(t.trade_date || "—")}</td><td class="n">${t.floor != null ? `${esc(t.floor)} 樓` : "—"}</td>
+      <td class="n">${wan(t.total_price)} 萬</td>
+      <td class="n">${t.unit_price ? `${(t.unit_price * M2_PER_PING / 1e4).toFixed(1)} 萬` : "—"}</td></tr>
+      ${extra ? `<tr class="tnote"><td colspan="4">${esc(extra)}</td></tr>` : ""}`;
+  }).join("");
+}
+function tradesHtml(r) {
+  const head = `<tr class="th"><td>成交日期</td><td class="n">樓層</td><td class="n">總價</td><td class="n">每坪</td></tr>`;
+  const rest = r.trades.slice(TRADES_SHOWN);
+  const main = r.trades_base && r.normalized && !r.normalized.endsWith(r.trades_base)
+    ? `<div class="note">這個門牌沒有自己的成交紀錄，以下是主號 ${esc(r.trades_base)} 的紀錄。</div>` : "";
+  return `<div class="risk"><h3>實價登錄成交紀錄</h3>${main}
+    <table class="trades">${head}${tradeRows(r.trades.slice(0, TRADES_SHOWN))}</table>
+    ${rest.length ? `<details><summary>其餘 ${rest.length} 筆${r.trades.length >= 30 ? "（最多列 30 筆）" : ""}</summary>
+      <table class="trades">${tradeRows(rest)}</table></details>` : ""}
+    <div class="note">內政部實價登錄${r.county === "臺北市" ? "與臺北市實價週報" : ""}的買賣紀錄，新到舊排列，租賃不列。價格照原始申報，總價含車位、沒有調整；親友間交易、含增建等特殊情形見各筆備註。僅供參考，以<a href="https://lvr.land.moi.gov.tw/" target="_blank" rel="noopener">內政部實價登錄</a>公告為準，本站不提供估價。</div>
   </div>`;
 }
 

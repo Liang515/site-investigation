@@ -21,3 +21,21 @@ def test_sane_total():
     assert sane_total(12, "公寓(5樓含以下無電梯)") is None
     assert sane_total(120, None) is None
     assert sane_total(101, "辦公商業大樓") == 101
+
+
+def test_to_trades_prices():
+    import pandas as pd
+
+    from sitefloor.trades import M2_PER_PING, to_trades
+
+    cols = {"county": "臺北市", "address": "a", "town": None, "floor": "f", "total": "t", "btype": "b", "structure": "s",
+            "built": "y", "date": "d", "kind": None, "source": "x", "price": "u", "total_price": "p", "park_price": "pp",
+            "note": "n"}
+    df = pd.DataFrame([{"a": "臺北市大安區信義路三段1號", "f": "五層", "t": "十層", "b": None, "s": None, "y": None,
+                        "d": "1150101", "u": "300,000", "p": "12,000,000", "pp": "0", "n": "親友間交易"}])
+    r = to_trades(df, **cols).iloc[0]
+    assert (r.unit_price, r.total_price, r.park_price, r.note) == (300000, 12000000, 0, "親友間交易")
+    # 實價週報：總價萬元、單價萬元／坪 → 元、元／m²
+    df.loc[0, ["u", "p", "pp"]] = ["99.17", "1200", "-"]
+    r = to_trades(df, **cols, wan=True).iloc[0]
+    assert r.total_price == 12000000 and abs(r.unit_price - 991700 / M2_PER_PING) < 1 and pd.isna(r.park_price)

@@ -483,7 +483,36 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
         if out[k] is not None:
             out[k] = int(out[k])
     # 其餘 numpy 數值轉成 Python 型別（FastAPI 不會序列化 numpy.int32）
-    return {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}
+    out = {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}
+    if not _na(r.tlvl) and out["county"]:
+        base = r.get("base_q", r.base) if r.tlvl == 2 else r.base_main
+        out["trades"] = trade_records(con, out["county"], r.town_q if isinstance(r.town_q, str) else "", base)
+        out["trades_base"] = base
+    return out
+
+
+TRADE_RECORDS_MAX = 30
+# 同一筆買賣可能同時出現在實價登錄與臺北市實價週報：日期、樓層、總價（萬元）相同就只留實價登錄那筆
+_RECORDS_SQL = f"""
+SELECT trade_date, floor, total_floors, btype, kind, total_price, unit_price, park_price, note, source FROM trades
+WHERE county = $county AND base = $base AND ($town = '' OR town IS NULL OR town = $town)
+  AND kind IN ('買賣', '預售屋') AND total_price IS NOT NULL
+QUALIFY row_number() OVER (PARTITION BY trade_date, floor, round(total_price / 1e4)
+                           ORDER BY source = '實價登錄' DESC) = 1
+ORDER BY trade_date DESC NULLS LAST, floor
+LIMIT {TRADE_RECORDS_MAX}
+"""
+
+
+def trade_records(con: duckdb.DuckDBPyConnection, county: str, town: str, base: str) -> list[dict]:
+    """門牌的買賣成交紀錄（新到舊，最多 TRADE_RECORDS_MAX 筆）。租賃不列：租金＋門牌會指向現任房客。"""
+    if "total_price" not in {c for (c,) in con.execute(
+            "SELECT column_name FROM duckdb_columns() WHERE table_name = 'trades'").fetchall()}:
+        return []  # 舊資料庫或部署檔還沒有價格欄位
+    df = con.execute(_RECORDS_SQL, {"county": county, "town": town, "base": base}).df()
+    df["trade_date"] = df.trade_date.astype(str).where(df.trade_date.notna(), None)
+    return [{k: (None if _na(v) else v.item() if hasattr(v, "item") else v) for k, v in rec.items()}
+            for rec in df.to_dict("records")]
 
 
 # 同一棟建物有多個門牌時，災害潛勢取最嚴重的（在範圍內優先；淹水取最深、液化取最高）
