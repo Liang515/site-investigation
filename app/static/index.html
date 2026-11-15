@@ -302,6 +302,7 @@ if (MAP_OK) {
                                                 showAccuracyCircle: true });
   map.addControl(geo);
   // 內建會縮放到整個誤差圈（定位不準時拉得很遠，看不到 3D 建物）：固定放大到能畫出建物的層級
+  geo.on("geolocate", () => navigator.sendBeacon?.("/api/event", "geolocate"));  // 只記次數，不送位置
   geo.on("geolocate", e => map.easeTo({ center: [e.coords.longitude, e.coords.latitude], zoom: 17 }));
   // 權限被拒時 MapLibre 會停用按鈕，點了沒反應；保持可點，點了顯示原因
   const geoBtn = map.getContainer().querySelector(".maplibregl-ctrl-geolocate");
@@ -488,11 +489,11 @@ document.getElementById("f").addEventListener("submit", e => {
   const q = document.getElementById("q").value.trim();
   lastSubmitted = q; clearTimeout(suggTimer); suggSeq++;  // 取消還在路上的建議請求
   hideSugg();
-  if (q) doLookup(q);
+  if (q) doLookup(q, "type");
 });
 
-async function doLookup(q) {
-  const resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}`);
+async function doLookup(q, via) {  // via：查詢入口，只用於統計各功能的使用次數
+  const resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}${via ? `&via=${via}` : ""}`);
   if (!resp.ok) {  // 例：查詢太頻繁（429）
     const err = await resp.json().catch(() => ({}));
     document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
@@ -561,7 +562,7 @@ function chooseSugg(text, kind) {
   qEl.value = text; syncClear();
   hideSugg();
   if (kind === "road") { qEl.focus(); updateSugg(); return; }  // 選了路，接著打門牌號
-  doLookup(text);
+  doLookup(text, "suggest");
 }
 const qClear = document.getElementById("qClear");
 const syncClear = () => { qClear.hidden = !qEl.value; };
@@ -772,7 +773,7 @@ tilesEl.addEventListener("click", e => {
     document.getElementById("q").value = q; syncClear();
     tilesEl.querySelectorAll(".tile").forEach(t => t.style.outline = "");
     b.style.outline = "2px solid var(--accent)";
-    doLookup(q);
+    doLookup(q, "pick");
     return;
   }
   pick[pickLevel] = x.name;
@@ -804,7 +805,7 @@ loadPick();
 // 方柱（沒有建物外框、用實價登錄樓層畫的門牌）點了直接查該門牌
 map.on("click", "bldg", e => {
   const p = e.features[0].properties;
-  if (p.pillar) { document.getElementById("q").value = p.addr; syncClear(); doLookup(p.addr); }
+  if (p.pillar) { document.getElementById("q").value = p.addr; syncClear(); doLookup(p.addr, "pillar"); }
   else showBuilding(p.uid);
 });
 map.on("mouseenter", "bldg", () => map.getCanvas().style.cursor = "pointer");

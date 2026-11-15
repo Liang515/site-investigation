@@ -154,6 +154,8 @@ data/raw/              原始資料（不進版控）
 - 每週一 09:00 自動執行：`zsh scripts/install_schedule.sh`（移除：加 `remove`）；紀錄在 `data/logs/update.log`。
 - 手機推播（ntfy）：`--setup-notify` 建立隨機頻道（存在 `data/state/notify.json`，不進版控），手機 ntfy App 訂閱該頻道；`--test-notify` 測試。
 
+**使用統計**（`sitefloor/usage.py`）：每天各功能的使用次數存在 Upstash（只有日期與次數，不含地址、IP）。每週一 09:00 由 Vercel Cron 呼叫 `/api/cron/weekly`，把上週摘要推播到 ntfy（部署環境變數 `NTFY_TOPIC`；可另設 `CRON_SECRET` 驗證排程請求）。本機查看：`uv run python -m sitefloor.usage [天數]`，加 `--send` 立即推播。
+
 ## 授權
 
 - 程式碼：MIT（見 `LICENSE`）。
