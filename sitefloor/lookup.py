@@ -14,6 +14,8 @@ from sitefloor.address import parse
 from sitefloor.derive import DOOR_RE, NEAR_GRID
 
 LEVEL_NAME = {1: "完整地址（含樓層）", 2: "門牌號", 3: "主號推估"}
+# 鄰居類推估（同巷、附近、同路）的準確率是拿有實價的門牌驗證的；改用使照驗證近年新建物時低很多（docs/permit-validation.md）
+NEW_BLDG_NOTE = "近年新建的房子常比周圍的舊房子高，可能低估（以使用執照驗證 2001 年後的新建物，完全相符只有 3–5 成）"
 
 _MATCH = """(q.county = '' OR {t}.county = q.county) AND (q.town = '' OR {t}.town = q.town)"""
 # 實價紀錄可能缺鄉鎮（同縣市多區都有此門牌、無法補），此時只比縣市＋門牌
@@ -324,6 +326,7 @@ def _resolve(r, covered: set[str]) -> dict:
     elif not _na(r.nb_floors):
         floors, src, conf = r.nb_floors, "推估：同巷鄰近門牌", "中"
         notes.append(f"本門牌無實價，取同側 ±{NB_WINDOW} 號內 {int(r.nb_n)} 個門牌的實價")
+        notes.append(NEW_BLDG_NOTE)
         if (not _na(r.nb_factory) and bool(r.nb_factory)) or _is_factory(r.b_btype):
             conf = "低"
             notes.append("工廠／倉庫的同巷推估準確率約 6–8 成，信心降一級")
@@ -350,10 +353,12 @@ def _resolve(r, covered: set[str]) -> dict:
                      + (f"都是 {int(floors)} 層" if k == n else f"其中 {k} 個是 {int(floors)} 層")
                      + "（對實價驗證完全相符約 "
                      + ("9 成）" if k == n else "6 成、差一層內約 8 成）"))
+        notes.append(NEW_BLDG_NOTE)
     elif not _na(r.rd_floors):
         floors, src, conf = r.rd_floors, "推估：同路門牌", "低"
         notes.append(f"本門牌無實價，取同一條路（巷弄）±{ROAD_WINDOW} 號內最近 {int(r.rd_n)} 個有實價的門牌，都是 {int(floors)} 層"
                      "（對實價驗證完全相符約 8 成）")
+        notes.append(NEW_BLDG_NOTE)
     else:
         floors, src = None, None
         conf = "無"
