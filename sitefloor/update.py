@@ -1,7 +1,8 @@
 """定期更新：偵測各資料來源有沒有新版 → 只下載有變的 → 重跑受影響的步驟 → 產出異動報告 → 通知。
 
 - 有新版就自動下載並重建：實價登錄（本期、新的季檔）、臺北市實價週報、OpenStreetMap、使用執照。
-- 只偵測、不自動重建（要手動處理，報告裡會列出）：各縣市門牌點位、臺中／臺北建物圖。
+- 只有門牌點位的縣市（fetch_addr.DATASETS）：門牌有新版就自動下載 → 重建該縣市門牌 → 之後全部重跑。
+- 只偵測、不自動重建（要手動處理，報告裡會列出）：臺中／臺北的門牌與建物圖（兩者一起比對，要手動建）。
 - 異動報告：比對更新前後的實價樓層、使照、OSM 建物、涵蓋率 → data/reports/<日期>.md
 - 每週都跑正確性檢查（audit.py：第 1 級、每月第一週加第 2 級、第 3／4 級依縣市輪流）→ data/reports/audit_queue.csv
 - 不會自動部署：看過報告後自己跑 `scripts/deploy.sh`。
@@ -33,6 +34,8 @@ import duckdb
 import pandas as pd
 
 from sitefloor.db import connect
+from sitefloor.fetch_addr import DATASETS as ADDR_DATASETS
+from sitefloor.fetch_addr import fetch as fetch_addr
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_FILE = ROOT / "data" / "state" / "sources.json"
@@ -70,7 +73,7 @@ PERMITS = {
     "tn_apt.csv": (120168, "https://data.tainan.gov.tw/File/ResourceCsvDownload/c6c8ee63-c0dc-4721-a43a-043139e4fc0e"),
 }
 TP_WEEKLY_DS = 145630
-# 只偵測（data.gov.tw 詮釋資料更新時間）：門牌點位、建物圖
+# data.gov.tw 詮釋資料更新時間：門牌點位、建物圖。ADDR_DATASETS 的縣市有新版就自動重建，其餘只偵測
 WATCH_ONLY = {
     "臺中市建物圖": 158889,
     "臺北市建照套繪圖": 151936,
@@ -93,9 +96,12 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "tiers", "export",
+PIPELINE = ["addr", "trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "tiers", "export",
             "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）；tiers 用到 osm、trades、permits
 NEEDS = {
+    # 門牌點位：實價補鄉鎮、同棟、附近、OSM 對門牌、災害潛勢都用到，trades 之後全部重跑
+    "addr": {"addr", "trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "export",
+             "smoke"},
     "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "export", "smoke"},
     "curated": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
     "osm": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
@@ -204,11 +210,29 @@ def check_sources(state: dict, force: bool) -> tuple[dict, set, list[str], list[
     for name, ds in WATCH_ONLY.items():
         tok = datagov_modified(ds)
         key = f"watch:{ds}"
+        county = name.removesuffix("門牌")
         if tok and state.get(key) and state[key] != tok:
+            if county in ADDR_DATASETS and ADDR_DATASETS[county] == ds:
+                notes.append(f"{name}有新版（{tok}）")
+                steps.add("addr")
+                new[key] = ("fetch", tok)
+                continue
             manual.append(f"{name}（data.gov.tw #{ds}）更新於 {tok}")
         if tok:
             new[key] = tok
     return new, steps, notes, manual
+
+
+def addr_county(key: str) -> str:
+    """watch:<資料集編號> → 縣市（只有門牌點位的縣市）。"""
+    ds = int(key.split(":", 1)[1])
+    return next(c for c, d in ADDR_DATASETS.items() if d == ds)
+
+
+def addr_counties(new: dict) -> list[str]:
+    """這次要重建門牌的縣市（有新版、標記為下載的門牌資料集）。"""
+    return [addr_county(k) for k, v in new.items()
+            if k.startswith("watch:") and isinstance(v, tuple) and v[0] == "fetch"]
 
 
 def fetch_changed(new: dict) -> dict:
@@ -230,12 +254,15 @@ def fetch_changed(new: dict) -> dict:
         elif key.startswith("permit:"):
             name = key.split(":", 1)[1]
             download(PERMITS[name][1], RAW / "permits" / name)
+        elif key.startswith("watch:"):
+            fetch_addr(addr_county(key))
         out[key] = tok
     return out
 
 
 # ── 快照與異動 ──
 SNAP = {
+    "addresses": "SELECT county, count(*) AS n FROM addresses GROUP BY 1",
     "door_trade": "SELECT county, town, base, floors, n FROM door_trade",
     "permits": "SELECT county, town, base, floors_above, source, permit_no FROM permits",
     "osm": "SELECT uid, name, levels, height FROM osm_buildings",
@@ -259,6 +286,14 @@ def diff_report(con) -> tuple[list[str], int]:
     def prev(name):
         p = PREV_DIR / f"{name}.parquet"
         return f"read_parquet('{p}')" if p.exists() else None
+
+    if p := prev("addresses"):
+        rows = con.execute(f"""
+            SELECT county, coalesce(o.n, 0), coalesce(n.n, 0)
+            FROM (SELECT county, count(*) AS n FROM addresses GROUP BY 1) n FULL JOIN {p} o USING (county)
+            WHERE coalesce(o.n, 0) <> coalesce(n.n, 0) ORDER BY 1""").fetchall()
+        if rows:
+            lines += ["## 門牌點位", *[f"- {c}：{a:,} → {b:,}（{b - a:+,}）" for c, a, b in rows], ""]
 
     if p := prev("door_trade"):
         new_doors = con.execute(
@@ -325,8 +360,11 @@ def run_audit(log: list[str]) -> str:
             "（data/reports/audit_queue.csv）")
 
 
-def run_step(step: str, log: list[str]):
-    args = {"trades": ["sitefloor.trades", "plvr", "taipei_weekly"],
+def run_step(step: str, log: list[str], counties: list[str] | None = None):
+    if step == "addr" and not counties:  # sitefloor.build 不帶縣市會重建全部縣市
+        return
+    args = {"addr": ["sitefloor.build", *(counties or [])],
+            "trades": ["sitefloor.trades", "plvr", "taipei_weekly"],
             "audit": ["sitefloor.audit", "--scope", "auto"]}.get(step, [f"sitefloor.{step}"])
     r = subprocess.run([sys.executable, "-m", *args], cwd=ROOT, capture_output=True, text=True, check=False)
     out = "\n".join(line for line in (r.stdout + r.stderr).splitlines() if "%▕" not in line and "Warning" not in line)
@@ -469,10 +507,11 @@ def main(argv: list[str]):
     log: list[str] = []
     try:
         snapshot(connect())
+        counties = addr_counties(new)
         saved = fetch_changed(new)
         for s in run:
             print(f"[{s}]")
-            run_step(s, log)
+            run_step(s, log, counties)
         lines, n_changed = diff_report(connect())
         audit_line = run_audit(log)
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)

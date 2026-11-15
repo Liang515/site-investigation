@@ -52,3 +52,58 @@ def test_self_update(monkeypatch, tmp_path):
     execs.clear()
     update.self_update([])
     assert execs == [] and "未 commit" in os.environ[update.PULL_ENV]
+
+
+def test_addr_auto_rebuild(monkeypatch, tmp_path):
+    """只有門牌點位的縣市（新北）有新版：自動下載、重建；臺北門牌（和建物圖一起建）仍列為手動。"""
+    from sitefloor import update
+
+    monkeypatch.setattr(update, "head_token", lambda url, tries=2: "same")
+    monkeypatch.setattr(update, "new_seasons", lambda: [])
+    monkeypatch.setattr(update, "ROOT", tmp_path)  # 沒有人工校正表
+    ver = {ds: "v1" for ds in update.WATCH_ONLY.values()}
+    state = {"plvr_current": "same", "osm": "same", **{f"watch:{ds}": v for ds, v in ver.items()}}
+    state.update({f"permit:{n}": "v1" for n in update.PERMITS}, tp_weekly="v1")
+    ver[update.WATCH_ONLY["新北市門牌"]] = ver[update.WATCH_ONLY["臺北市門牌"]] = "v2"
+    monkeypatch.setattr(update, "datagov_modified", lambda ds: ver.get(ds, "v1"))
+
+    new, steps, notes, manual = update.check_sources(state, force=False)
+    assert steps == {"addr"} and update.addr_counties(new) == ["新北市"]
+    assert any("新北市門牌" in n for n in notes) and any("臺北市門牌" in m for m in manual)
+    run = [s for s in update.PIPELINE if any(s in update.NEEDS[k] for k in steps)]
+    assert run[:2] == ["addr", "trades"] and run[-2:] == ["export", "smoke"]
+
+    fetched = []
+    monkeypatch.setattr(update, "fetch_addr", fetched.append)
+    saved = update.fetch_changed(new)
+    assert fetched == ["新北市"] and saved[f"watch:{update.WATCH_ONLY['新北市門牌']}"] == "v2"
+    # 沒有縣市要重建時不跑 sitefloor.build（不帶縣市會重建全部）
+    called = []
+    monkeypatch.setattr(update.subprocess, "run", lambda *a, **k: called.append(a))
+    update.run_step("addr", [], [])
+    assert called == []
+
+
+def test_fetch_addr_replaces_only_on_success(monkeypatch, tmp_path):
+    import json
+
+    import pytest
+
+    from sitefloor import fetch_addr
+
+    monkeypatch.setattr(fetch_addr, "OUT", tmp_path)
+    (tmp_path / "新北市").mkdir()
+    (tmp_path / "新北市" / "00.csv").write_text("old")
+    meta = {"result": {"distribution": [
+        {"resourceFormat": "CSV", "resourceDescription": "114年門牌", "resourceDownloadUrl": "https://x/114.csv"},
+        {"resourceFormat": "CSV", "resourceDescription": "115年門牌", "resourceDownloadUrl": "https://x/115.csv"},
+        {"resourceFormat": "JSON", "resourceDescription": "115年門牌", "resourceDownloadUrl": "https://x/115.json"}]}}
+    files = {"https://x/115.csv": b"new"}
+    monkeypatch.setattr(fetch_addr, "get", lambda url, timeout=600: json.dumps(meta).encode() if "api" in url
+                        else files[url])
+    fetch_addr.fetch("新北市")  # 只取最新年度的 CSV
+    assert [p.read_text() for p in (tmp_path / "新北市").iterdir()] == ["new"]
+    files["https://x/115.csv"] = b""  # 下載到空檔：丟例外，舊檔不動
+    with pytest.raises(RuntimeError):
+        fetch_addr.fetch("新北市")
+    assert (tmp_path / "新北市" / "00.csv").read_text() == "new"

@@ -91,7 +91,7 @@ uv run pytest -q
 
 臺北市實價週報：`uv run python -m sitefloor.trades taipei_weekly`（每次另存一份快照到 `data/raw/tp_weekly/`，累積後去重；要每週跑才會累積）。
 
-門牌點位下載：`uv run python scripts/fetch_addr.py [縣市…]`（只取最新版本）。
+門牌點位下載：`uv run python -m sitefloor.fetch_addr [縣市…]`（只取最新版本；每週更新偵測到新版時會自動下載重建）。
 
 ## 結構
 
