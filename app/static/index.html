@@ -493,7 +493,8 @@ async function doLookup(q) {
     ? `<div class="note">${esc(r.county)}沒有開放門牌座標資料，地圖無法定位到這個門牌（樓層資料來自實價登錄）。</div>` : "";
   // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
   const uid = r.osm_uid || r.bldg_uid;
-  const bldg = uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
+  const bldg = r.building !== undefined ? r.building  // 伺服器已一起回傳；舊版伺服器才另外查
+    : uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
   if (r.lon != null) {
     map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
     map.flyTo(viewOf(r, bldg));
