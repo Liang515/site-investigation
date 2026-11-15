@@ -141,7 +141,7 @@ data/raw/              原始資料（不進版控）
 
 ## 定期更新
 
-`uv run python -m sitefloor.update` 檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `scripts/deploy.sh`。
+`uv run python -m sitefloor.update` 先 `git pull --ff-only` 抓 GitHub 上的新程式（有新程式就 `uv sync` 後重新執行；本機有未 commit 的修改時跳過，通知裡會提醒；`--no-pull` 不抓），再檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `scripts/deploy.sh`。
 
 | 來源 | 偵測方式 | 有新版時 |
 |---|---|---|

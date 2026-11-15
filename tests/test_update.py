@@ -10,3 +10,45 @@ def test_pipeline_covers_needs():
     for steps in NEEDS.values():
         assert steps <= set(PIPELINE)
     assert "export" in NEEDS["osm"]  # 任何更新都要重新匯出部署用 Parquet
+
+
+def _git(cwd, *args):
+    import subprocess
+    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True,
+                   env={"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+                        "GIT_COMMITTER_EMAIL": "t@t", "PATH": __import__("os").environ["PATH"], "HOME": str(cwd)})
+
+
+def test_self_update(monkeypatch, tmp_path):
+    """有新 commit：pull 後用新程式重新執行；本機有未 commit 修改：不動程式、只記下提醒；沒有新程式：什麼都不做。"""
+    import os
+
+    from sitefloor import update
+
+    origin, mini, dev = tmp_path / "origin.git", tmp_path / "mini", tmp_path / "dev"
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    _git(tmp_path, "clone", "-q", str(origin), str(dev))
+    (dev / "a.txt").write_text("1")
+    _git(dev, "add", "."), _git(dev, "commit", "-qm", "1"), _git(dev, "push", "-q", "origin", "HEAD:main")
+    _git(tmp_path, "clone", "-q", str(origin), str(mini))
+    monkeypatch.setattr(update, "ROOT", mini)
+    monkeypatch.setattr(update.shutil, "which", lambda x: "/usr/bin/git" if x == "git" else None)  # 不跑 uv sync
+    execs = []
+    monkeypatch.setattr(update.os, "execv", lambda exe, args: execs.append(args))
+    monkeypatch.setattr(update.os, "chdir", lambda p: None)
+    monkeypatch.delenv(update.PULL_ENV, raising=False)
+
+    update.self_update([])  # 沒有新程式
+    assert execs == [] and update.PULL_ENV not in os.environ
+
+    (dev / "a.txt").write_text("2")
+    _git(dev, "commit", "-qam", "2"), _git(dev, "push", "-q", "origin", "HEAD:main")
+    update.self_update(["--force"])
+    assert (mini / "a.txt").read_text() == "2"
+    assert execs and execs[0][-2:] == ["--force", "--no-pull"]
+    assert "1 個 commit" in os.environ[update.PULL_ENV]
+
+    (mini / "a.txt").write_text("local edit")
+    execs.clear()
+    update.self_update([])
+    assert execs == [] and "未 commit" in os.environ[update.PULL_ENV]

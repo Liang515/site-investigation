@@ -7,7 +7,8 @@
 - 不會自動部署：看過報告後自己跑 `scripts/deploy.sh`。
 
 用法：
-  uv run python -m sitefloor.update            # 檢查並更新
+  uv run python -m sitefloor.update            # 先 git pull 新程式，再檢查並更新
+  uv run python -m sitefloor.update --no-pull  # 不抓新程式
   uv run python -m sitefloor.update --check    # 只檢查哪些來源有新版，不下載
   uv run python -m sitefloor.update --force    # 不管有沒有新版，全部重跑
   uv run python -m sitefloor.update --setup-notify   # 建立 ntfy 手機推播頻道（data/state/notify.json）
@@ -17,7 +18,9 @@
 
 import datetime as dt
 import json
+import os
 import re
+import shutil
 import ssl
 import subprocess
 import sys
@@ -337,8 +340,47 @@ NOTIFY_FILE = (
 )  # {"ntfy_topic": "...", "ntfy_server": "https://ntfy.sh"}；不進版控
 
 
+PULL_ENV = "SITEFLOOR_PULL_NOTE"  # 自動更新程式的結果，重新執行後附在通知裡
+
+
+def self_update(argv: list[str]) -> None:
+    """更新資料前先抓 GitHub 上的新程式（git pull --ff-only）；有新程式就 uv sync，再用新程式重新執行。
+    程式有未 commit 的修改、或無法快轉時不動程式，只在通知裡提醒。"""
+
+    def git(*a: str) -> subprocess.CompletedProcess:
+        return subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, check=False)
+
+    if not (ROOT / ".git").exists() or not shutil.which("git"):
+        return
+    if git("status", "--porcelain", "--untracked-files=no").stdout.strip():
+        note = "程式有未 commit 的修改，這次沒有自動更新程式"
+    else:
+        before = git("rev-parse", "HEAD").stdout.strip()
+        r = git("pull", "--ff-only", "--quiet")
+        after = git("rev-parse", "HEAD").stdout.strip()
+        if r.returncode != 0:
+            note = f"自動更新程式失敗：{(r.stderr or r.stdout).strip()[:200]}"
+        elif after == before:
+            return
+        else:
+            n = git("rev-list", "--count", f"{before}..{after}").stdout.strip()
+            note = f"程式已自動更新（{n} 個 commit：{before[:7]} → {after[:7]}）"
+            if uv := shutil.which("uv"):
+                sync = subprocess.run([uv, "sync", "--quiet"], cwd=ROOT, capture_output=True, text=True, check=False)
+                if sync.returncode != 0:
+                    note += f"；uv sync 失敗：{sync.stderr.strip()[:200]}"
+            print(note)
+            os.environ[PULL_ENV] = note
+            os.chdir(ROOT)  # 新程式從頭執行（記憶體裡的還是舊程式）
+            os.execv(sys.executable, [sys.executable, "-m", "sitefloor.update", *argv, "--no-pull"])
+    print(note)
+    os.environ[PULL_ENV] = note
+
+
 def notify(title: str, msg: str, priority: int = 3):
     """通知：macOS 通知（本機）＋ ntfy 手機推播（有設定 notify.json 時）。"""
+    if note := os.environ.get(PULL_ENV):  # 這次有自動更新程式（或沒更新成功）也一併告知
+        msg = f"{msg}\n{note}"
     if sys.platform == "darwin":
         # AppleScript 字串只認 \\ 與 \" 跳脫，不認 \\uXXXX，所以不能用 json.dumps
         def q(x: str) -> str:
@@ -385,6 +427,8 @@ def main(argv: list[str]):
     if "--test-notify" in argv:
         return notify("建物查詢平台：測試", "收到這則就代表推播設定成功")
     force, check_only = "--force" in argv, "--check" in argv
+    if not check_only and "--no-pull" not in argv:
+        self_update(argv)
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     new, steps, notes, manual = check_sources(state, force)
     first_run = not state
