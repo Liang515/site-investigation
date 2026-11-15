@@ -17,7 +17,10 @@ def _fake_redis(monkeypatch):
             elif c[0] == "HGETALL":
                 out.append([x for k, v in store.get(c[1], {}).items() for x in (k, str(v))])
             elif c[0] == "SET":
-                out.append(None if c[1] in store else store.setdefault(c[1], "OK"))
+                store[c[1]] = c[2]
+                out.append("OK")
+            elif c[0] == "EXISTS":
+                out.append(int(c[1] in store))
             else:
                 out.append(1)
         return out
@@ -51,11 +54,14 @@ def test_record_and_summary(monkeypatch):
     assert "信心：高 50%、無 50%" in text and "查不到最多：宜蘭縣 1" in text
 
 
-def test_mark_sent_once_per_week(monkeypatch):
+def test_sent_once_per_week(monkeypatch):
     _fake_redis(monkeypatch)
     end = dt.date(2026, 11, 16)
-    assert usage.mark_sent(end) is True
-    assert usage.mark_sent(end) is False
+    assert usage.already_sent(end) is False
+    usage.mark_sent(end)
+    assert usage.already_sent(end) is True
+    monkeypatch.setattr(usage, "config", lambda: None)
+    assert usage.already_sent(end) is True  # 沒有設定 Upstash：無從記錄，不送
 
 
 def test_record_without_config_is_noop(monkeypatch):
