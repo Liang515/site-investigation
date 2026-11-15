@@ -35,6 +35,7 @@ def test_resolve_neighbors_without_address_point():
     got = _resolve(r, {"宜蘭縣"})
     assert got["floors_above"] == 4 and got["confidence"] == "中"
     assert "門牌點位資料沒有此門牌" in got["note"]
+    assert "可能低估" in got["note"]  # 鄰居類推估都提醒新建物可能低估
     # 沒寫鄉鎮市區：鄰居可能來自不同區，不推估
     r = _Row(county_q="宜蘭縣", town_q="", base="中正路10號", nb_floors=4.0, nb_n=3, nb_factory=False)
     assert _resolve(r, {"宜蘭縣"})["confidence"] == "無"
@@ -50,7 +51,7 @@ def test_resolve_nearby_trades():
     # 附近實價全部一致：中
     got = _resolve(_Row(**base, ar_floors=3.0, ar_k=5, ar_n=5), {"屏東縣"})
     assert (got["floors_above"], got["confidence"]) == (3, "中")
-    assert "都是 3 層" in got["note"]
+    assert "都是 3 層" in got["note"] and "可能低估" in got["note"]
     # 七成以上：低
     got = _resolve(_Row(**base, ar_floors=2.0, ar_k=5, ar_n=7), {"屏東縣"})
     assert (got["floors_above"], got["confidence"]) == (2, "低")
@@ -89,6 +90,7 @@ def test_resolve_same_road():
     r = _Row(county_q="宜蘭縣", town_q="羅東鎮", base="中正路50號", rd_floors=3.0, rd_n=5)
     got = _resolve(r, {"宜蘭縣"})
     assert (got["floors_above"], got["confidence"], got["source"]) == (3, "低", "推估：同路門牌")
+    assert "可能低估" in got["note"]
     assert "門牌點位資料沒有此門牌" in got["note"]
     # 同巷優先
     r = _Row(county_q="宜蘭縣", town_q="羅東鎮", base="中正路50號", rd_floors=3.0, rd_n=5, nb_floors=4.0, nb_n=2,
