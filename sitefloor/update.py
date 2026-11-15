@@ -4,7 +4,7 @@
 - 只偵測、不自動重建（要手動處理，報告裡會列出）：各縣市門牌點位、臺中／臺北建物圖。
 - 異動報告：比對更新前後的實價樓層、使照、OSM 建物、涵蓋率 → data/reports/<日期>.md
 - 每週都跑正確性檢查（audit.py：第 1 級、每月第一週加第 2 級、第 3／4 級依縣市輪流）→ data/reports/audit_queue.csv
-- 不會自動部署：看過報告後自己跑 `vercel deploy --prod --yes`。
+- 不會自動部署：看過報告後自己跑 `scripts/deploy.sh`。
 
 用法：
   uv run python -m sitefloor.update            # 檢查並更新
@@ -449,7 +449,7 @@ def main(argv: list[str]):
             "## 下一步",
             "看過異動沒問題後部署：",
             "```",
-            "cd ~/Documents/site-investigation && vercel deploy --prod --yes",
+            "scripts/deploy.sh",
             "```",
             "",
             "## 執行紀錄",
@@ -462,7 +462,7 @@ def main(argv: list[str]):
         if manual:
             summary.append(f"另有 {len(manual)} 項要手動更新")
         summary.append(audit_line)
-        summary.append(f"報告：data/reports/{today}.md；確認後執行 vercel deploy --prod --yes")
+        summary.append(f"報告：data/reports/{today}.md；確認後執行 scripts/deploy.sh")
         notify("建物查詢平台：資料已更新", "\n".join(summary))
     except Exception as e:
         report.write_text(f"# {today} 資料更新失敗\n\n{e}\n\n```\n{traceback.format_exc()}\n```\n\n" + "\n".join(log))
