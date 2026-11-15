@@ -212,7 +212,7 @@ def api_lookup(q: str):
     popularity.incr(uid)  # 只記建物被查次數
     # 建物資料一起回傳，網頁不用等查詢結果回來再發第二個請求
     try:
-        r["building"] = _building(uid) if uid else None
+        r["building"] = _building(uid, risk=False) if uid else None  # 卡片用不到整棟的風險資訊與成交紀錄
     except HTTPException:
         r["building"] = None
     return r
@@ -455,14 +455,14 @@ def _floors_from_doors(full_addrs: list[str]) -> dict | None:
             "note": f"這棟建物本身沒有樓層資料，改用棟內門牌查詢（{n}/{len(full_addrs)} 個門牌）"}
 
 
-def _osm_part(uid: str) -> dict:
+def _osm_part(uid: str, risk: bool = True) -> dict:
     """OSM 分棟（building:part）：樓層用分棟自己的（人工校正優先），門牌與風險資訊用所在建物的。"""
     cur = _cur()
     r = cur.execute("SELECT parent_uid, levels FROM osm_parts WHERE uid = ?", [uid]).fetchone()
     if not r:
         raise HTTPException(404)
     parent, levels = r
-    out = _osm_building(parent)
+    out = _osm_building(parent, risk)
     fix = cur.execute("SELECT floors_above, floors_below, year, source, note FROM corrections WHERE osm_uid = ?",
                       [uid]).fetchone()
     pname = out.get("name") or ""
@@ -477,14 +477,14 @@ def _osm_part(uid: str) -> dict:
     return out
 
 
-def _osm_building(uid: str) -> dict:
+def _osm_building(uid: str, risk: bool = True) -> dict:
     cur = _cur()
     r = cur.execute("""SELECT uid, name, building, levels, trade_floors, height,
                        (minlon + maxlon) / 2, (minlat + maxlat) / 2, curated_floors, permit_floors
                        FROM osm_buildings WHERE uid = ?""", [uid]).fetchone()
     if not r:
         if cur.execute("SELECT count(*) FROM osm_parts WHERE uid = ?", [uid]).fetchone()[0]:
-            return _osm_part(uid)
+            return _osm_part(uid, risk)
         raise HTTPException(404)
     u, name, _btype, levels, tf, h, lon, lat, cf, pf = r
     addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
@@ -513,7 +513,7 @@ def _osm_building(uid: str) -> dict:
         if d := _floors_from_doors(full):
             out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
             out["note"] = "；".join(x for x in [d["note"], name] if x)
-    return _with_risk(out)
+    return _with_risk(out) if risk else out
 
 
 @app.get("/api/building/{uid}")
@@ -522,9 +522,10 @@ def api_building(uid: str):
     return _building(uid)
 
 
-def _building(uid: str) -> dict:
+def _building(uid: str, risk: bool = True) -> dict:
+    """建物資料；risk＝一併算建物風險資訊與棟內成交紀錄（點地圖建物時要，查地址時卡片用門牌自己的）。"""
     if uid.startswith(OSM_TABLE):
-        return _osm_building(uid)
+        return _osm_building(uid, risk)
     cur = _cur()
     b = cur.execute("""SELECT uid, county, source, floors_above, floors_below, structure, btype,
                        year, year_kind, lon, lat FROM buildings WHERE uid = ?""", [uid]).df()
@@ -542,7 +543,7 @@ def _building(uid: str) -> dict:
         out["note"] = (f"同一張建照拆出來的附屬小外框；套繪圖記的 {out['floors_above']} 層是整張建照的最高樓層，"
                        "不是這塊的樓層")
         out["floors_above"] = None
-        return _with_risk(out)
+        return _with_risk(out) if risk else out
     if out.get("floors_above") is None:
         full = [c + t + b for c, t, b in cur.execute(
             "SELECT DISTINCT county, town, base FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 2, 3 LIMIT 30",
@@ -550,7 +551,7 @@ def _building(uid: str) -> dict:
         if d := _floors_from_doors(full):
             out.update({k: d[k] for k in ("floors_above", "floors_below", "source")})
             out["note"] = d["note"]
-    return _with_risk(out)
+    return _with_risk(out) if risk else out
 
 
 # ── 用選的查地址：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號 ──

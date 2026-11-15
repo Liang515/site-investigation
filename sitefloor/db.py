@@ -60,7 +60,10 @@ def connect(write: bool = False) -> duckdb.DuckDBPyConnection:
 
 def _connect_parquet() -> duckdb.DuckDBPyConnection:
     """記憶體 DuckDB，每張表是指向 data/serve/<表>/*.parquet 的 view（唯讀環境：暫存目錄改到 /tmp）。"""
-    con = duckdb.connect(config={"temp_directory": "/tmp/duckdb", "home_directory": "/tmp"})
+    # 部署檔唯讀、不會變：Parquet 中繼資料與讀過的區塊都留在記憶體，不再每次驗證檔案（雲端讀檔比本機慢很多）
+    con = duckdb.connect(config={"temp_directory": "/tmp/duckdb", "home_directory": "/tmp",
+                                 "parquet_metadata_cache": True, "cache_local_files": True,
+                                 "validate_external_file_cache": "NO_VALIDATION", "memory_limit": "1500MB"})
     tables = sorted(p for p in SERVE_DIR.iterdir() if p.is_dir()) if SERVE_DIR.exists() else []
     if not tables:
         raise FileNotFoundError(f"找不到部署用 Parquet：{SERVE_DIR}（先跑 python -m sitefloor.export）")
