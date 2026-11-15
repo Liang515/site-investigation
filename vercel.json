@@ -11,6 +11,9 @@
       "memory": 2048
     }
   },
+  "crons": [
+    { "path": "/api/cron/weekly", "schedule": "0 1 * * 1" }
+  ],
   "git": {
     "deploymentEnabled": false
   }

@@ -19,7 +19,7 @@ import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from sitefloor import feedback, lookup as lookup_mod, popularity
+from sitefloor import feedback, lookup as lookup_mod, popularity, usage
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many, trade_records
 from sitefloor.models import MODELS, REPLACED_PARTS
@@ -38,6 +38,8 @@ app = FastAPI(title="建物查詢平台")
 RATE_LIMITS = {  # 路徑前綴：(次數, 秒)；依序比對，越特定的放越前面
     "/api/batch": (5, 3600),
     "/api/feedback": (5, 3600),
+    "/api/event": (20, 3600),
+    "/api/cron/": (5, 3600),
     "/api/": (120, 60),
 }
 BATCH_MAX_BYTES = 4 * 1024 * 1024  # Vercel 函式的請求上限是 4.5 MB
@@ -200,16 +202,47 @@ async def api_feedback(request: Request):
     return {"ok": True}
 
 
+@app.post("/api/event", status_code=204)
+async def api_event(request: Request):
+    """只發生在瀏覽器的動作（例：定位）：只收 usage.EVENTS 裡的名稱，只加次數。"""
+    name = (await request.body()).decode(errors="ignore").strip()
+    if name not in usage.EVENTS:
+        raise HTTPException(400, "未知的事件")
+    usage.record({f"ev:{name}": 1})
+
+
+@app.get("/api/cron/weekly")
+def api_cron_weekly(request: Request):
+    """每週一由 Vercel Cron 呼叫（vercel.json）：上週使用統計推播到 ntfy。一週只送一次。
+    有設 CRON_SECRET 時 Vercel 會帶 Authorization: Bearer <secret>；沒設時只接受 Vercel Cron 的 User-Agent。"""
+    secret = os.environ.get("CRON_SECRET")
+    ok = (request.headers.get("authorization") == f"Bearer {secret}" if secret
+          else request.headers.get("user-agent", "").startswith("vercel-cron"))
+    if not ok:
+        raise HTTPException(401)
+    cfg = _feedback_config()
+    if not cfg["ntfy_topic"]:
+        raise HTTPException(503, "沒有設定推播頻道")
+    end = usage.today()
+    if not usage.mark_sent(end):
+        return {"sent": False, "reason": "本週已送過或沒有設定 Upstash"}
+    text = usage.summary(end)
+    _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：上週使用統計",
+                                    "message": text, "tags": ["bar_chart"]})
+    return {"sent": True}
+
+
 @app.get("/about")
 def about():
     return FileResponse(STATIC / "about.html")
 
 
 @app.get("/api/lookup")
-def api_lookup(q: str):
+def api_lookup(q: str, via: str | None = None):
     r = lookup(_cur(), q)
     uid = r.get("osm_uid") or r.get("bldg_uid")
     popularity.incr(uid)  # 只記建物被查次數
+    usage.record(usage.lookup_fields(r, via))  # 每天各項次數（不記地址）
     # 建物資料一起回傳，網頁不用等查詢結果回來再發第二個請求
     try:
         r["building"] = _building(uid, risk=False) if uid else None  # 卡片用不到整棟的風險資訊與成交紀錄
@@ -523,6 +556,7 @@ def _osm_building(uid: str, risk: bool = True) -> dict:
 @app.get("/api/building/{uid}")
 def api_building(uid: str):
     popularity.incr(uid)
+    usage.record({"building": 1})
     return _building(uid)
 
 
@@ -669,6 +703,7 @@ async def api_batch(file: UploadFile, column: str | None = None):
     if col not in df.columns:
         raise HTTPException(400, f"找不到欄位：{col}")
     res = lookup_many(_cur(), df[col].fillna("").tolist())
+    usage.record({"batch": 1, "batch_rows": len(df)})
     add = res[[k for k in COLUMNS if k != "input"]].rename(columns=COLUMNS)
     out = pd.concat([df.reset_index(drop=True), add], axis=1)
     buf = io.BytesIO()
