@@ -70,9 +70,9 @@
   td { padding: 4px 0; border-bottom: 1px solid var(--line); }
   td.n { text-align: right; font-variant-numeric: tabular-nums; }
   table.trades tr.th td { color: var(--muted); font-weight: 600; }
-  table.trades td:first-child { white-space: nowrap; }
+  table.trades tr:not(.tnote) td:first-child { white-space: nowrap; }  /* 只有日期欄不換行；備註可能很長 */
   table.trades tr:has(+ .tnote) td { border-bottom: none; }
-  table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; }
+  table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; overflow-wrap: anywhere; }
   #drop { display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
   #drop:hover { border-color: var(--accent); }
   #drop .hint { display: block; margin-top: 6px; }
