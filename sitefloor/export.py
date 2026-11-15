@@ -42,6 +42,7 @@ TABLES = {
     "same_bldg": (None, "base, county, town"),
     "trade_pts": (None, "county, gy, gx"),
     "roads": (None, "county, town, road"),
+    "pillars": (None, "lat, lon"),
     "coverage": (None, "county"),
     "permits": (None, "base, county, town"),
     "osm_buildings": (None, "minlon, minlat"),
@@ -63,6 +64,8 @@ def round_wkb(wkbs: list, decimals: int) -> list:
 
 def main():
     con = connect()
+    # 多執行緒寫檔會打亂 row group 的順序（每塊的值域互相重疊，查詢就無法跳過不相關的區塊）；單執行緒才照 ORDER BY 寫出
+    con.execute("SET threads = 1")
     have = {t for (t,) in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
     if SERVE_DIR.exists():
         shutil.rmtree(SERVE_DIR)
