@@ -227,9 +227,11 @@ def api_cron_weekly(request: Request):
     if not usage.mark_sent(end):
         return {"sent": False, "reason": "本週已送過或沒有設定 Upstash"}
     text = usage.summary(end)
-    _post_json(cfg["ntfy_server"], {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：上週使用統計",
-                                    "message": text, "tags": ["bar_chart"]})
-    return {"sent": True}
+    msg = {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：上週使用統計", "message": text, "tags": ["bar_chart"]}
+    if email := os.environ.get("NOTIFY_EMAIL"):  # 另由 ntfy 代寄 Email（信箱只放在部署環境變數）
+        msg["email"] = email
+    _post_json(cfg["ntfy_server"], msg)
+    return {"sent": True, "email": bool(email)}
 
 
 @app.get("/about")
