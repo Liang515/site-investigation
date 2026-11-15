@@ -107,12 +107,19 @@ def summary(end: dt.date, days: int = 7) -> str:
     return "\n".join(lines)
 
 
-def mark_sent(end: dt.date) -> bool:
-    """這週的摘要還沒送過就記下並回 True（排程重送或被重複呼叫時，一週只推一次）。"""
+def already_sent(end: dt.date) -> bool:
+    """這週的摘要已經送過（或沒有設定 Upstash，無從記錄）就回 True：排程重送或被重複呼叫時，一週只推一次。"""
     cfg = config()
     if not cfg:
-        return False
-    return _pipeline(cfg, [["SET", SENT_PREFIX + end.isoformat(), "1", "NX", "EX", str(30 * 86400)]])[0] == "OK"
+        return True
+    return _pipeline(cfg, [["EXISTS", SENT_PREFIX + end.isoformat()]])[0] == 1
+
+
+def mark_sent(end: dt.date) -> None:
+    """記下這週的摘要已經送出。"""
+    cfg = config()
+    if cfg:
+        _pipeline(cfg, [["SET", SENT_PREFIX + end.isoformat(), "1", "EX", str(30 * 86400)]])
 
 
 if __name__ == "__main__":

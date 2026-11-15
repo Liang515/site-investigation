@@ -3,6 +3,7 @@ import io
 import json
 import math
 import os
+import urllib.error
 import urllib.request
 import re
 import sys
@@ -224,13 +225,27 @@ def api_cron_weekly(request: Request):
     if not cfg["ntfy_topic"]:
         raise HTTPException(503, "沒有設定推播頻道")
     end = usage.today()
-    if not usage.mark_sent(end):
+    if usage.already_sent(end):
         return {"sent": False, "reason": "本週已送過或沒有設定 Upstash"}
     text = usage.summary(end)
     msg = {"topic": cfg["ntfy_topic"], "title": "建物查詢平台：上週使用統計", "message": text, "tags": ["bar_chart"]}
-    if email := os.environ.get("NOTIFY_EMAIL"):  # 另由 ntfy 代寄 Email（信箱只放在部署環境變數）
+    email = os.environ.get("NOTIFY_EMAIL")  # 另由 ntfy 代寄 Email（信箱只放在部署環境變數；ntfy 要帳號權杖才能寄）
+    if email:
         msg["email"] = email
-    _post_json(cfg["ntfy_server"], msg)
+    if token := os.environ.get("NTFY_TOKEN"):
+        headers = {"Authorization": f"Bearer {token}"}
+    else:
+        headers = None
+    try:
+        _post_json(cfg["ntfy_server"], msg, headers)
+    except urllib.error.HTTPError as e:
+        if "email" not in msg:
+            raise
+        print("[cron] ntfy 拒絕代寄 Email，改送一般推播：", e.read().decode(errors="ignore")[:200])
+        del msg["email"]
+        email = None
+        _post_json(cfg["ntfy_server"], msg, headers)
+    usage.mark_sent(end)  # 送出成功才記下，失敗時下次排程或手動重試還會再送
     return {"sent": True, "email": bool(email)}
 
 
