@@ -117,6 +117,19 @@ NO_TRADE_FLOORS = ("roof", "carport", "parking", "stadium", "construction", "rui
 
 
 # OSM 同棟推估（scripts/validate_phase1.py 留一驗證時用拿掉樣本的 door_trade 重算）
+# 地圖方柱候選：沒有市府建物外框、有實價總樓層的門牌（所在 OSM 建物已知樓層的不算，那棟會畫出來）。
+# 地圖依畫面範圍查，事先算好並依緯度排序，查詢只需讀一小段（直接從 addresses 篩要讀整張表）
+PILLARS_SQL = """
+CREATE OR REPLACE TABLE pillars AS
+SELECT a.county || a.town || a.base AS addr, avg(a.lon) AS lon, avg(a.lat) AS lat, any_value(t.floors) AS floors
+FROM addresses a JOIN door_trade t USING (county, town, base)
+WHERE a.bldg_uid IS NULL AND a.lon IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM door_osm o JOIN osm_buildings ob ON ob.uid = o.osm_uid
+    WHERE o.county = a.county AND o.town = a.town AND o.base = a.base
+      AND coalesce(ob.curated_floors, ob.trade_floors, ob.permit_floors, ob.levels) IS NOT NULL)
+GROUP BY a.county, a.town, a.base
+"""
+
 SAME_OSM_SQL = f"""
 CREATE OR REPLACE TABLE same_osm AS
 SELECT o.county, o.town, o.base, g.floors, g.n, g.spread, g.btype
@@ -251,6 +264,9 @@ def main():
     con.execute(SAME_OSM_SQL)
     n = con.execute("SELECT count(*), count(*) FILTER (WHERE spread = 0) FROM same_osm").fetchone()
     print(f"  same_osm {n[0]:,}（棟內樓層一致 {n[1]:,}）")
+
+    con.execute(PILLARS_SQL)
+    print(f"  pillars {con.execute('SELECT count(*) FROM pillars').fetchone()[0]:,}（地圖方柱候選門牌）")
 
 
 if __name__ == "__main__":

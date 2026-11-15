@@ -333,12 +333,16 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     in_osm = """AND NOT EXISTS (SELECT 1 FROM door_osm o JOIN osm_buildings ob ON ob.uid = o.osm_uid
         WHERE o.county = a.county AND o.town = a.town AND o.base = a.base
           AND coalesce(ob.curated_floors, ob.trade_floors, ob.permit_floors, ob.levels) IS NOT NULL)"""
-    pts = _cur().execute(f"""
-        SELECT a.county || a.town || a.base, avg(a.lon), avg(a.lat), any_value(t.floors)
-        FROM addresses a JOIN door_trade t USING (county, town, base)
-        WHERE a.bldg_uid IS NULL AND a.lon BETWEEN ? AND ? AND a.lat BETWEEN ? AND ? {in_osm if has_osm else ""}
-        GROUP BY a.county, a.town, a.base LIMIT {MAX_BUILDINGS}
-    """, [x0, x1, y0, y1]).fetchall()
+    if _has_table("pillars"):  # 建庫時已算好（osm.PILLARS_SQL）
+        pts = _cur().execute(f"""SELECT addr, lon, lat, floors FROM pillars
+            WHERE lon BETWEEN ? AND ? AND lat BETWEEN ? AND ? LIMIT {MAX_BUILDINGS}""", [x0, x1, y0, y1]).fetchall()
+    else:
+        pts = _cur().execute(f"""
+            SELECT a.county || a.town || a.base, avg(a.lon), avg(a.lat), any_value(t.floors)
+            FROM addresses a JOIN door_trade t USING (county, town, base)
+            WHERE a.bldg_uid IS NULL AND a.lon BETWEEN ? AND ? AND a.lat BETWEEN ? AND ? {in_osm if has_osm else ""}
+            GROUP BY a.county, a.town, a.base LIMIT {MAX_BUILDINGS}
+        """, [x0, x1, y0, y1]).fetchall()
     half = PILLAR_M / 2 / 111320
     drawn = [(o[4], o[1]) for i, o in enumerate(osm) if i not in drop_osm and o[1] is not None] + \
             [(g, f) for _, f, g in city if f is not None]

@@ -456,11 +456,13 @@ def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
         df = _add_usage(con, df)
         con.unregister("rk")
         return df
+    # 門牌與主號拆成兩列再用「等於」join（IN 兩個欄位時 DuckDB 無法用門牌跳過不相關的資料區塊，整張表都要讀）
     hit = con.execute("""
-        SELECT k.i, r.* EXCLUDE (county, town, base) FROM rk k
-        JOIN door_risk r ON r.county = k.county AND r.town = k.town
-             AND r.base IN (k.base, k.base_main)
-        QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY (r.base = k.base) DESC) = 1""").df()
+        WITH k AS (SELECT i, county, town, base AS b, 0 AS pri FROM rk
+                   UNION ALL SELECT i, county, town, base_main, 1 FROM rk WHERE base_main <> base)
+        SELECT k.i, r.* EXCLUDE (county, town, base) FROM k
+        JOIN door_risk r ON r.county = k.county AND r.town = k.town AND r.base = k.b
+        QUALIFY row_number() OVER (PARTITION BY k.i ORDER BY k.pri) = 1""").df()
     df = df.drop(columns=[c for c in hit.columns if c in df and c != "i"]).join(hit.set_index("i"))
     df = _add_usage(con, df)
     con.unregister("rk")
