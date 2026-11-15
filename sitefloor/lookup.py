@@ -486,30 +486,38 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
     out = {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}
     if not _na(r.tlvl) and out["county"]:
         base = r.get("base_q", r.base) if r.tlvl == 2 else r.base_main
-        out["trades"] = trade_records(con, out["county"], r.town_q if isinstance(r.town_q, str) else "", base)
+        town = r.town_q if isinstance(r.town_q, str) else ""
+        out["trades"] = trade_records(con, pd.DataFrame({"county": [out["county"]], "town": [town], "base": [base]}))
         out["trades_base"] = base
     return out
 
 
 TRADE_RECORDS_MAX = 30
-# 同一筆買賣可能同時出現在實價登錄與臺北市實價週報：日期、樓層、總價（萬元）相同就只留實價登錄那筆
+# 同一筆買賣可能同時出現在實價登錄與臺北市實價週報：門牌、日期、樓層、總價（萬元）相同就只留實價登錄那筆
 _RECORDS_SQL = f"""
-SELECT trade_date, floor, total_floors, btype, kind, total_price, unit_price, park_price, note, source FROM trades
-WHERE county = $county AND base = $base AND ($town = '' OR town IS NULL OR town = $town)
-  AND kind IN ('買賣', '預售屋') AND total_price IS NOT NULL
-QUALIFY row_number() OVER (PARTITION BY trade_date, floor, round(total_price / 1e4)
-                           ORDER BY source = '實價登錄' DESC) = 1
-ORDER BY trade_date DESC NULLS LAST, floor
+SELECT t.base, t.trade_date, t.floor, t.total_floors, t.btype, t.kind, t.total_price, t.unit_price, t.park_price,
+       t.note, t.source
+FROM (SELECT DISTINCT county, coalesce(town, '') AS town, base FROM tr) d
+JOIN trades t ON t.county = d.county AND t.base = d.base AND (d.town = '' OR t.town IS NULL OR t.town = d.town)
+WHERE t.kind IN ('買賣', '預售屋') AND t.total_price IS NOT NULL
+QUALIFY row_number() OVER (PARTITION BY t.base, t.trade_date, t.floor, round(t.total_price / 1e4)
+                           ORDER BY t.source = '實價登錄' DESC) = 1
+ORDER BY t.trade_date DESC NULLS LAST, t.base, t.floor
 LIMIT {TRADE_RECORDS_MAX}
 """
 
 
-def trade_records(con: duckdb.DuckDBPyConnection, county: str, town: str, base: str) -> list[dict]:
-    """門牌的買賣成交紀錄（新到舊，最多 TRADE_RECORDS_MAX 筆）。租賃不列：租金＋門牌會指向現任房客。"""
-    if "total_price" not in {c for (c,) in con.execute(
+def trade_records(con: duckdb.DuckDBPyConnection, doors: pd.DataFrame) -> list[dict]:
+    """門牌（doors：county, town, base；town 可空白）的買賣成交紀錄，新到舊、最多 TRADE_RECORDS_MAX 筆。
+    租賃不列：租金＋門牌會指向現任房客。"""
+    if doors.empty or "total_price" not in {c for (c,) in con.execute(
             "SELECT column_name FROM duckdb_columns() WHERE table_name = 'trades'").fetchall()}:
         return []  # 舊資料庫或部署檔還沒有價格欄位
-    df = con.execute(_RECORDS_SQL, {"county": county, "town": town, "base": base}).df()
+    con.register("tr", doors[["county", "town", "base"]])
+    try:
+        df = con.execute(_RECORDS_SQL).df()
+    finally:
+        con.unregister("tr")
     df["trade_date"] = df.trade_date.astype(str).where(df.trade_date.notna(), None)
     return [{k: (None if _na(v) else v.item() if hasattr(v, "item") else v) for k, v in rec.items()}
             for rec in df.to_dict("records")]

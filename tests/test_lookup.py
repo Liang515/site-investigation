@@ -118,6 +118,7 @@ def test_trade_records():
     import datetime as dt
 
     import duckdb
+    import pandas as pd
 
     from sitefloor.db import SCHEMA
     from sitefloor.lookup import trade_records
@@ -132,6 +133,13 @@ def test_trade_records():
     for town, d, f, kind, price, src in rows:
         con.execute("""INSERT INTO trades (county, town, base, floor, trade_date, kind, total_price, source)
                        VALUES ('臺北市', ?, '信義路三段1號', ?, ?, ?, ?, ?)""", [town, f, d, kind, price, src])
-    got = trade_records(con, "臺北市", "大安區", "信義路三段1號")
+    one = pd.DataFrame({"county": ["臺北市"], "town": ["大安區"], "base": ["信義路三段1號"]})
+    got = trade_records(con, one)
     assert [(r["trade_date"], r["floor"], r["source"]) for r in got] == [
         ("2026-01-02", 3, "實價登錄"), ("2025-03-01", 5, "實價登錄")]
+    # 一棟多個門牌：合在一起新到舊；沒有門牌時回空
+    con.execute("""INSERT INTO trades (county, town, base, floor, trade_date, kind, total_price, source)
+                   VALUES ('臺北市', '大安區', '信義路三段1之1號', 2, '2025-06-01', '買賣', 8000000, '實價登錄')""")
+    two = pd.concat([one, one.assign(base="信義路三段1之1號")])
+    assert [r["base"] for r in trade_records(con, two)] == ["信義路三段1號", "信義路三段1之1號", "信義路三段1號"]
+    assert trade_records(con, one.iloc[:0]) == []

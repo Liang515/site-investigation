@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from sitefloor import feedback, popularity
 from sitefloor.db import connect
-from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many
+from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many, trade_records
 from sitefloor.models import MODELS, REPLACED_PARTS
 from sitefloor.render import FLOOR_M, extrude_height, part_extent, resolve_overlaps
 from sitefloor.suggest import Suggester, split_base
@@ -376,6 +376,8 @@ def _with_risk(out: dict) -> dict:
     out.update(building_risk(_cur(), doors))
     if note:
         out["risk_note"] = note
+    else:  # 棟內門牌的成交紀錄（借用最近門牌時不列，那不是這棟的）
+        out["trades"] = trade_records(_cur(), doors.fillna({"town": ""}))
     return out
 
 
