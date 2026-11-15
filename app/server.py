@@ -5,8 +5,10 @@ import math
 import os
 import urllib.request
 import re
+import sys
 import time
 from collections import defaultdict, deque
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
@@ -17,7 +19,7 @@ import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from sitefloor import feedback, popularity
+from sitefloor import feedback, lookup as lookup_mod, popularity
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many, trade_records
 from sitefloor.models import MODELS, REPLACED_PARTS
@@ -70,9 +72,53 @@ async def rate_limit(request: Request, call_next):
 con = connect()
 
 
+# ── 量測：每個請求各段 SQL 的耗時放進 Server-Timing 標頭（瀏覽器開發者工具的 Timing 分頁看得到） ──
+# 查詢用的 SQL 以 lookup.py 裡的常數名稱標示（_TRADE_SQL → trade、_SQL → addr），其他以呼叫它的函式名稱標示
+_SQL_NAMES = {id(v): (k.removesuffix("_SQL").strip("_").lower() or "addr")
+              for k, v in vars(lookup_mod).items() if k.endswith("_SQL") and isinstance(v, str)}
+_timings: ContextVar[dict | None] = ContextVar("timings", default=None)
+
+
+def _timed(name: str, ms: float) -> None:
+    t = _timings.get()
+    if t is not None:
+        t[name] = t.get(name, 0.0) + ms
+
+
+class _TimedCursor:
+    """DuckDB cursor 加上計時；其他方法照原樣轉給 cursor。"""
+
+    def __init__(self, cur: duckdb.DuckDBPyConnection):
+        self._cur = cur
+
+    def execute(self, sql, *args, **kwargs):
+        t = time.perf_counter()
+        try:
+            return self._cur.execute(sql, *args, **kwargs)
+        finally:
+            name = _SQL_NAMES.get(id(sql)) or sys._getframe(1).f_code.co_name.strip("_")
+            _timed(name, (time.perf_counter() - t) * 1000)
+
+    def __getattr__(self, name):
+        return getattr(self._cur, name)
+
+
+@app.middleware("http")
+async def server_timing(request: Request, call_next):
+    if not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    timings: dict[str, float] = {}
+    _timings.set(timings)
+    t = time.perf_counter()
+    resp = await call_next(request)
+    timings["total"] = (time.perf_counter() - t) * 1000
+    resp.headers["Server-Timing"] = ", ".join(f"{k};dur={v:.1f}" for k, v in timings.items())
+    return resp
+
+
 def _cur():
     # DuckDB 連線不可跨執行緒共用，每個請求開 cursor
-    return con.cursor()
+    return _TimedCursor(con.cursor())
 
 
 @app.get("/")
@@ -162,7 +208,13 @@ def about():
 @app.get("/api/lookup")
 def api_lookup(q: str):
     r = lookup(_cur(), q)
-    popularity.incr(r.get("osm_uid") or r.get("bldg_uid"))  # 只記建物被查次數
+    uid = r.get("osm_uid") or r.get("bldg_uid")
+    popularity.incr(uid)  # 只記建物被查次數
+    # 建物資料一起回傳，網頁不用等查詢結果回來再發第二個請求
+    try:
+        r["building"] = _building(uid) if uid else None
+    except HTTPException:
+        r["building"] = None
     return r
 
 
@@ -467,6 +519,10 @@ def _osm_building(uid: str) -> dict:
 @app.get("/api/building/{uid}")
 def api_building(uid: str):
     popularity.incr(uid)
+    return _building(uid)
+
+
+def _building(uid: str) -> dict:
     if uid.startswith(OSM_TABLE):
         return _osm_building(uid)
     cur = _cur()
