@@ -145,3 +145,10 @@ def test_trade_records():
     two = pd.concat([one, one.assign(base="信義路三段1之1號")])
     assert [r["base"] for r in trade_records(con, two)] == ["信義路三段1號", "信義路三段1之1號", "信義路三段1號"]
     assert trade_records(con, one.iloc[:0]) == []
+    # 價格圖用：建物型態分組、特殊交易標記（和區域統計同一套規則）
+    con.execute("""INSERT INTO trades (county, town, base, floor, trade_date, kind, total_price, source, btype, note)
+                   VALUES ('臺北市', '大安區', '信義路三段1號', 7, '2026-03-01', '買賣', 5000000, '實價登錄',
+                           '華廈(10層含以下有電梯)', '親友、員工或其他特殊關係間之交易。')""")
+    top = trade_records(con, one)[0]
+    assert (top["grp"], top["special"]) == ("華廈", True)
+    assert trade_records(con, one)[1]["special"] is False

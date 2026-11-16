@@ -9,7 +9,7 @@ import re
 import duckdb
 import pandas as pd
 
-from sitefloor import landmarks, names
+from sitefloor import landmarks, names, stats
 from sitefloor.address import parse
 from sitefloor.derive import DOOR_RE, NEAR_GRID
 
@@ -506,11 +506,13 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
     return out
 
 
-TRADE_RECORDS_MAX = 30
+TRADE_RECORDS_MAX = 300  # 價格圖要用到歷年紀錄；表格只先列最新幾筆
 # 同一筆買賣可能同時出現在實價登錄與臺北市實價週報：門牌、日期、樓層、總價（萬元）相同就只留實價登錄那筆
 _RECORDS_SQL = f"""
 SELECT t.base, t.trade_date, t.floor, t.total_floors, t.btype, t.kind, t.total_price, t.unit_price, t.park_price,
-       t.note, t.source
+       t.note, t.source,
+       {stats.GROUP.replace("btype", "t.btype")} AS grp,  -- 價格圖：和區域統計同一套建物型態與特殊交易規則
+       regexp_matches(coalesce(t.note, ''), '{stats.SPECIAL}') AS special
 FROM (SELECT DISTINCT county, coalesce(town, '') AS town, base FROM tr) d
 JOIN trades t ON t.county = d.county AND t.base = d.base AND (d.town = '' OR t.town IS NULL OR t.town = d.town)
 WHERE t.kind IN ('買賣', '預售屋') AND t.total_price IS NOT NULL
