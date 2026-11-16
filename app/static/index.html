@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5f7fa">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
@@ -129,15 +130,18 @@
     html, body { height: auto; }
     /* 手機：標題 → 地圖 → 查詢結果 → 選地址／輸入地址 → 其他 */
     #app { display: flex; flex-direction: column; height: auto; }
-    aside, aside > section:first-of-type { display: contents; }
+    aside, aside > section:first-of-type, aside > div:first-child { display: contents; }
     aside > * { padding: 0 16px; }
-    aside > div:first-child { order: 1; padding-top: 12px; padding-bottom: 10px; }
-    #map { order: 2; height: 45vh; }
-    #result { order: 3; padding: 0 16px; margin-top: 12px !important; }
+    /* 標題列固定在頂端（不透明底色）：iOS 26 遇到固定標題列就不會把頂端的內容淡化模糊 */
+    h1.brand { order: 1; position: sticky; top: 0; z-index: 10; background: var(--bg);
+      padding: 12px 16px 8px; }
+    .sub { order: 2; margin-top: 0; padding: 0 16px 10px; }
+    #map { order: 3; height: 45vh; }
+    #result { order: 4; padding: 0 16px; margin-top: 12px !important; }
     #result:empty { display: none; }
-    .tabs { order: 4; margin: 16px 16px 12px; }
-    #pickBox, #typeBox { order: 5; padding: 0 16px; }
-    aside > section:not(:first-of-type) { order: 6; padding-top: 24px; }
+    .tabs { order: 5; margin: 16px 16px 12px; }
+    #pickBox, #typeBox { order: 6; padding: 0 16px; }
+    aside > section:not(:first-of-type) { order: 7; padding-top: 24px; }
     aside > section:last-of-type { padding-bottom: 24px; }
     .crumbs button { padding: 6px 12px; }
     .desk-only { display: none; }
