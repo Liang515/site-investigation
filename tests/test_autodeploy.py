@@ -1,0 +1,72 @@
+from sitefloor import autodeploy, update
+
+
+def test_rebuild_steps():
+    rs = autodeploy.rebuild_steps
+    assert rs(None) == ["names", "stats", "export"]  # 不知道上次部署哪個 commit：重建便宜的那幾步
+    assert rs([]) == []
+    assert rs(["app/static/index.html", "README.md"]) == []  # 只改網頁：直接部署
+    assert rs(["sitefloor/stats.py"]) == ["stats", "export"]
+    assert rs(["curated/building_names.csv"]) == ["names", "export"]
+    got = rs(["curated/floor_corrections.csv", "curated/building_names.csv"])
+    assert got[0] == "curated" and "osm" in got and "names" not in got and got[-1] == "export"  # osm 會一起建名稱表
+    assert "smoke" not in got  # deploy.sh 會跑部署前檢查
+    assert rs(["sitefloor/osm.py"]) == []  # 其他建庫程式：等每週更新重建
+
+
+def _setup(monkeypatch, tmp_path, now="c2", files=None):
+    monkeypatch.setattr(autodeploy, "STATE", tmp_path / "deployed.json")
+    monkeypatch.setattr(autodeploy, "LOCK", tmp_path / "pipeline.lock")
+    monkeypatch.setattr(autodeploy, "SERVE_DIR", tmp_path)
+    monkeypatch.setattr(autodeploy, "pull", lambda argv: None)
+    monkeypatch.setattr(autodeploy, "head", lambda: now)
+    monkeypatch.setattr(autodeploy, "changed_files", lambda old, new: files if old else None)
+    monkeypatch.setattr(autodeploy, "subjects", lambda old, new: [f"{new} 改了東西"])
+    calls = {"steps": [], "deploys": 0, "notes": []}
+    monkeypatch.setattr(update, "run_step", lambda s, log, counties=None: calls["steps"].append(s))
+    monkeypatch.setattr(update, "notify", lambda title, msg, priority=3: calls["notes"].append(title))
+    return calls
+
+
+def test_deploys_new_commit_once(monkeypatch, tmp_path):
+    calls = _setup(monkeypatch, tmp_path, files=["sitefloor/stats.py"])
+    autodeploy.save_state(commit="c1")
+
+    def ok():
+        calls["deploys"] += 1
+        return True, "部署前檢查：通過"
+
+    monkeypatch.setattr(autodeploy, "deploy", ok)
+    assert autodeploy.main([]) == 0
+    assert calls["steps"] == ["stats", "export"] and calls["deploys"] == 1
+    assert autodeploy.load_state()["commit"] == "c2" and calls["notes"] == ["建物查詢平台：已部署"]
+    assert autodeploy.main([]) == 0 and calls["deploys"] == 1  # 同一個 commit 不再部署
+    assert autodeploy.main(["--force"]) == 0 and calls["deploys"] == 2
+
+
+def test_failed_deploy_notifies_once(monkeypatch, tmp_path):
+    calls = _setup(monkeypatch, tmp_path, files=["app/static/index.html"])
+    autodeploy.save_state(commit="c1")
+    monkeypatch.setattr(autodeploy, "deploy", lambda: (False, "部署前檢查：失敗"))
+    assert autodeploy.main([]) == 1
+    st = autodeploy.load_state()
+    assert st["commit"] == "c1" and st["failed"] == "c2"
+    assert autodeploy.main([]) == 0  # 同一個失敗的 commit 不重試、不重複通知
+    assert calls["notes"] == ["建物查詢平台：自動部署失敗"] and calls["steps"] == []
+
+
+def test_skips_when_locked(monkeypatch, tmp_path):
+    calls = _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(autodeploy, "deploy", lambda: (True, ""))
+    with autodeploy.pipeline_lock(wait=False) as got:
+        assert got
+        assert autodeploy.main([]) == 0  # 每週更新正在跑：略過
+    assert calls["notes"] == []
+
+
+def test_blocked_pull_notifies_once(monkeypatch, tmp_path):
+    calls = _setup(monkeypatch, tmp_path)
+    monkeypatch.setattr(autodeploy, "pull", lambda argv: "這台電腦的程式有未 commit 的修改")
+    assert autodeploy.main([]) == 1
+    assert autodeploy.main([]) == 1
+    assert calls["notes"] == ["建物查詢平台：無法自動部署"]
