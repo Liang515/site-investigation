@@ -695,6 +695,7 @@ async function tradeChart(cardEl, r) {
   }
   if (!box.isConnected) return;  // 等資料時使用者已經查了別的地址
   box.hidden = false;
+  navigator.sendBeacon?.("/api/event", "trend");  // 使用統計：只記次數
   const areaAt = y => area.find(([x]) => new Date(x).getUTCFullYear() === y)?.[1];
   const pctTxt = v => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
   let sum = "";

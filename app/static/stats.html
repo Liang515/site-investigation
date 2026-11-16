@@ -150,6 +150,7 @@ async function load() {
     return;
   }
   data = await r.json();
+  if (!load.sent) { load.sent = true; navigator.sendBeacon?.("/api/event", "stats"); }  // 使用統計：開啟一次記一次，換區域不算
   syncUrl();
   document.title = `${areaName(data.county, data.town)} 區域統計 — 建物查詢平台`;
   renderArea(); renderPrice(); renderDist(); renderRisk();
