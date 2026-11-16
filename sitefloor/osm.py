@@ -268,6 +268,9 @@ def main():
     con.execute(PILLARS_SQL)
     print(f"  pillars {con.execute('SELECT count(*) FROM pillars').fetchone()[0]:,}（地圖方柱候選門牌）")
 
+    from sitefloor import names  # 名稱搜尋：代表門牌要用 door_osm
+    print(f"  bldg_names {names.build(con):,}（建物／建案名稱搜尋）")
+
 
 if __name__ == "__main__":
     main()

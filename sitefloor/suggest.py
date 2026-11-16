@@ -11,7 +11,7 @@ import duckdb
 from rapidfuzz import process
 from rapidfuzz.distance import Levenshtein
 
-from sitefloor import landmarks
+from sitefloor import landmarks, names
 from sitefloor.address import COUNTIES, TOWNS, clean, parse
 from sitefloor.derive import SUGGEST_DOOR, SUGGEST_LANE
 
@@ -19,6 +19,7 @@ from sitefloor.derive import SUGGEST_DOOR, SUGGEST_LANE
 DOOR = re.compile(SUGGEST_DOOR)
 LANE = re.compile(SUGGEST_LANE)
 FUZZY_MIN_DOORS = 3
+KIND_ORDER = {"landmark": 0, "name": 1}  # 建議清單排序：地標、建物名稱，再來才是道路與門牌
 _QUERY = re.compile(r"^(.*?)(\d+)(?:之(\d+))?號?$")  # 使用者輸入：號可省略
 
 
@@ -116,22 +117,28 @@ class Suggester:
         out: list[dict] = []
         key = landmarks.key(text)
         if len(key) >= 2:
-            for addr, names in landmarks.LANDMARKS:
-                hit = next((n for n in names if key in landmarks.key(n)), None)
+            for addr, aliases in landmarks.LANDMARKS:
+                hit = next((n for n in aliases if key in landmarks.key(n)), None)
                 if hit:
                     out.append({"text": hit, "addr": addr, "kind": "landmark", "has": None, "hint": f"地標 → {addr}"})
+            # 建物／建案名稱（OSM、預售建案、人工別名）：沒有門牌號碼的輸入才找，同名的好幾棟都列出讓使用者挑
+            if not re.search(r"\d", text):
+                for x in names.search(con, text):
+                    out.append({"text": x["name"], "addr": x["addr"], "kind": "name", "has": None,
+                                "hint": f"{names.SOURCE_LABEL[x['source']]} → {x['addr']}"})
         for variant, fix in variants(text):
             out += self._one(con, variant, fix)
         # 去重（同一門牌保留最直接的解讀）；有完全相符的門牌時，其他「號碼最接近」的就不列
-        out.sort(key=lambda x: (x["kind"] != "landmark", not x.get("exact", False), len(x.get("hint") or "")))
+        out.sort(key=lambda x: (KIND_ORDER.get(x["kind"], 9), not x.get("exact", False), len(x.get("hint") or "")))
         seen, uniq = set(), []
         for x in out:
-            if x["text"] not in seen:
-                seen.add(x["text"])
+            k = (x["text"], x.get("addr"))  # 同名的不同建物都要留
+            if k not in seen:
+                seen.add(k)
                 uniq.append(x)
         if any(x.get("exact") for x in uniq):
             uniq = [x for x in uniq if x["kind"] != "door" or x.get("exact")]
-        uniq.sort(key=lambda x: (x["kind"] != "landmark", not x.get("exact", False)))
+        uniq.sort(key=lambda x: (KIND_ORDER.get(x["kind"], 9), not x.get("exact", False)))
         return uniq[:limit]
 
     def _one(self, con, text: str, fix: str) -> list[dict]:

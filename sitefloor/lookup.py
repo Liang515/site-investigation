@@ -9,7 +9,7 @@ import re
 import duckdb
 import pandas as pd
 
-from sitefloor import landmarks
+from sitefloor import landmarks, names
 from sitefloor.address import parse
 from sitefloor.derive import DOOR_RE, NEAR_GRID
 
@@ -482,7 +482,11 @@ def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
 
 
 def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
-    r = lookup_many(con, [text]).iloc[0]
+    # 建物／建案名稱（不在地標清單、沒有門牌號碼）：名稱完全相符而且只對到一個門牌時，改查那個門牌
+    named = None
+    if text and not re.search(r"\d", text) and not landmarks.resolve(text):
+        named = names.resolve(con, text)
+    r = lookup_many(con, [named[1] if named else text]).iloc[0]
     out = {k: (None if _na(r[k]) else r[k]) for k in COLUMNS}
     out["bldg_uid"] = None if _na(r.bldg_uid) else r.bldg_uid
     out["osm_uid"] = None if _na(r.osm_uid) else r.osm_uid
@@ -491,6 +495,9 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
             out[k] = int(out[k])
     # 其餘 numpy 數值轉成 Python 型別（FastAPI 不會序列化 numpy.int32）
     out = {k: (v.item() if hasattr(v, "item") else v) for k, v in out.items()}
+    if named:
+        out["input"] = text
+        out["note"] = "；".join(x for x in (f"「{named[0]}」→ {named[1]}", out.get("note")) if x)
     if not _na(r.tlvl) and out["county"]:
         base = r.get("base_q", r.base) if r.tlvl == 2 else r.base_main
         town = r.town_q if isinstance(r.town_q, str) else ""
