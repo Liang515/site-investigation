@@ -280,6 +280,14 @@ def api_suggest(q: str, limit: int = 8):
     return sg.suggest(_cur(), q, min(limit, 20)) if sg else []
 
 
+@app.get("/api/version")
+@lru_cache(maxsize=1)
+def api_version():
+    """部署的資料版本（最新一筆成交日期）：部署前檢查用來比對，避免拿舊資料蓋掉正式站。"""
+    d = _cur().execute("SELECT max(trade_date) FILTER (WHERE trade_date <= current_date) FROM trades").fetchone()[0]
+    return {"latest_trade": d.isoformat() if d else None}
+
+
 @app.get("/api/stats")
 def api_stats():
     # coverage 表由 `python -m sitefloor.coverage` 預先算好
