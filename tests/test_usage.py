@@ -47,10 +47,12 @@ def test_record_and_summary(monkeypatch):
     usage.record(usage.lookup_fields({"county": "宜蘭縣", "confidence": "無"}, "pick"))
     usage.record({"building": 1})
     usage.record({"ev:geolocate": 1})
+    usage.record({"ev:stats": 1})
+    usage.record({"ev:stats": 1})
     assert store["usage:2026-11-10"]["lookup"] == 2
     text = usage.summary(dt.date(2026, 11, 16))
     assert "11/09–11/15" in text and "查地址 2 次" in text
-    assert "點地圖建物 1" in text and "定位 1" in text
+    assert "點地圖建物 1" in text and "定位 1" in text and "統計頁 2" in text and "價格圖 0" in text
     assert "信心：高 50%、無 50%" in text and "查不到最多：宜蘭縣 1" in text
 
 

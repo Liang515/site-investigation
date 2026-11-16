@@ -4,7 +4,7 @@
 欄位：
 - lookup、lookup:via:<入口>、lookup:county:<縣市>、lookup:conf:<信心>、none:<縣市>（查不到樓層）
 - building（點地圖建物）、batch、batch_rows（整批查詢次數與筆數）
-- ev:<事件>（只發生在瀏覽器的動作，例：定位；EVENTS 以外的名稱不收）
+- ev:<事件>（只發生在瀏覽器的動作：定位、開啟統計頁、查詢結果畫出價格圖；EVENTS 以外的名稱不收）
 網站：record() 背景送出、逾時就略過，不影響查詢。每週一由 Vercel Cron 呼叫 /api/cron/weekly 推播上週摘要。
 本機查看：uv run python -m sitefloor.usage [天數]    立即推播：uv run python -m sitefloor.usage --send
 """
@@ -23,7 +23,7 @@ SENT_PREFIX = "usage-sent:"
 KEEP_DAYS = 400
 TZ = dt.timezone(dt.timedelta(hours=8))
 VIA = {"type": "輸入地址", "suggest": "建議清單", "pick": "選擇地址", "pillar": "點地圖方柱"}
-EVENTS = {"geolocate": "定位"}
+EVENTS = {"geolocate": "定位", "stats": "統計頁", "trend": "價格圖"}
 CONF = ["高", "中", "低", "待確認", "無"]
 
 
