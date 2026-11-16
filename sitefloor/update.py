@@ -5,7 +5,7 @@
 - 只偵測、不自動重建（要手動處理，報告裡會列出）：臺中／臺北的門牌與建物圖（兩者一起比對，要手動建）。
 - 異動報告：比對更新前後的實價樓層、使照、OSM 建物、涵蓋率 → data/reports/<日期>.md
 - 每週都跑正確性檢查（audit.py：第 1 級、每月第一週加第 2 級、第 3／4 級依縣市輪流）→ data/reports/audit_queue.csv
-- 不會自動部署：看過報告後自己跑 `scripts/deploy.sh`。
+- 更新成功（部署前檢查通過）就自動部署並推播結果（autodeploy.py）；部署失敗會推播，可修好後手動跑 `scripts/deploy.sh`。
 
 用法：
   uv run python -m sitefloor.update            # 先 git pull 新程式，再檢查並更新
@@ -469,6 +469,13 @@ def main(argv: list[str]):
     force, check_only = "--force" in argv, "--check" in argv
     if not check_only and "--no-pull" not in argv:
         self_update(argv)
+    from sitefloor.autodeploy import pipeline_lock
+
+    with pipeline_lock(wait=True):  # 自動部署正在重建或部署時等它做完
+        run_update(force, check_only)
+
+
+def run_update(force: bool, check_only: bool):
     state = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
     new, steps, notes, manual = check_sources(state, force)
     first_run = not state
@@ -530,11 +537,14 @@ def main(argv: list[str]):
         ]
         if manual:
             body += ["## 要手動更新（只偵測、未自動重建）", *[f"- {m}" for m in manual], ""]
+        from sitefloor.autodeploy import deploy_and_record
+
+        deployed, tail = deploy_and_record()
         body += [
-            "## 下一步",
-            "看過異動沒問題後部署：",
+            "## 部署",
+            "已自動部署。" if deployed else "**部署失敗**，修好後執行 `scripts/deploy.sh`：",
             "```",
-            "scripts/deploy.sh",
+            tail,
             "```",
             "",
             "## 執行紀錄",
@@ -547,8 +557,11 @@ def main(argv: list[str]):
         if manual:
             summary.append(f"另有 {len(manual)} 項要手動更新")
         summary.append(audit_line)
-        summary.append(f"報告：data/reports/{today}.md；確認後執行 scripts/deploy.sh")
-        notify("建物查詢平台：資料已更新", "\n".join(summary))
+        summary.append(f"報告：data/reports/{today}.md")
+        if deployed:
+            notify("建物查詢平台：資料已更新並部署", "\n".join(summary))
+        else:
+            notify("建物查詢平台：資料已更新，但部署失敗", "\n".join([tail[-600:], *summary]), priority=4)
     except Exception as e:
         report.write_text(f"# {today} 資料更新失敗\n\n{e}\n\n```\n{traceback.format_exc()}\n```\n\n" + "\n".join(log))
         notify("建物查詢平台：更新失敗", f"{e}\n報告：data/reports/{today}.md", priority=4)

@@ -143,7 +143,7 @@ data/raw/              原始資料（不進版控）
 
 ## 定期更新
 
-`uv run python -m sitefloor.update` 先 `git pull --ff-only` 抓 GitHub 上的新程式（有新程式就 `uv sync` 後重新執行；本機有未 commit 的修改時跳過，通知裡會提醒；`--no-pull` 不抓），再檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），最後用 macOS 通知。**不會自動部署**，看過報告再 `scripts/deploy.sh`。
+`uv run python -m sitefloor.update` 先 `git pull --ff-only` 抓 GitHub 上的新程式（有新程式就 `uv sync` 後重新執行；本機有未 commit 的修改時跳過，通知裡會提醒；`--no-pull` 不抓），再檢查各資料來源有沒有新版，只下載有變的、只重跑受影響的步驟，再比對更新前後產出異動報告（`data/reports/<日期>.md`：第一次有樓層的門牌、樓層改變的門牌清單、使照與 OSM 的變更、涵蓋率變化），部署前檢查通過就自動部署（`sitefloor.autodeploy`），最後用 macOS 通知與手機推播告知結果；部署失敗時修好再手動 `scripts/deploy.sh`。
 
 | 來源 | 偵測方式 | 有新版時 |
 |---|---|---|
@@ -153,7 +153,7 @@ data/raw/              原始資料（不進版控）
 | 各縣市門牌點位、臺中／臺北建物圖 | data.gov.tw 資料集更新時間 | 只在報告列出，要手動更新 |
 
 - `--check` 只檢查不下載；`--force` 全部重跑。版本紀錄在 `data/state/sources.json`。
-- 每週一 09:00 自動執行：`zsh scripts/install_schedule.sh`（移除：加 `remove`）；紀錄在 `data/logs/update.log`。
+- 排程（裝在存放最新資料的那台電腦，要先 `vercel login`）：`zsh scripts/install_schedule.sh`（移除：加 `remove`）。每週一 09:00 資料更新（紀錄 `data/logs/update.log`）；每 30 分鐘 `sitefloor.autodeploy` 檢查 GitHub 有沒有新程式，有就 pull、依改到的檔案重建資料（名稱別名、統計、人工校正等；其他建庫程式的改動等每週更新重建）、部署並推播（紀錄 `data/logs/autodeploy.log`；上次部署的 commit 記在 `data/state/deployed.json`，同一個 commit 失敗只通知一次）。兩個排程共用一把鎖，不會同時寫資料庫。
 - 手機推播（ntfy）：`--setup-notify` 建立隨機頻道（存在 `data/state/notify.json`，不進版控），手機 ntfy App 訂閱該頻道；`--test-notify` 測試。
 
 **使用統計**（`sitefloor/usage.py`）：每天各功能的使用次數存在 Upstash（只有日期與次數，不含地址、IP）。每週一 09:00 由 Vercel Cron 呼叫 `/api/cron/weekly`，把上週摘要推播到 ntfy（部署環境變數 `NTFY_TOPIC`；設了 `NOTIFY_EMAIL` 時 ntfy 會另寄一封 Email；可另設 `CRON_SECRET` 驗證排程請求）。本機查看：`uv run python -m sitefloor.usage [天數]`，加 `--send` 立即推播。
@@ -168,5 +168,5 @@ data/raw/              原始資料（不進版控）
 
 - 每個 IP 每分鐘最多 120 次 API 請求、每小時 5 次整批查詢；整批檔案上限 4 MB、2,000 筆（`app/server.py` 的 `RATE_LIMITS` 等常數）。
 - Vercel 上傳單一檔案上限 100 MB，所以不上傳 1.1 GB 的資料庫，改上傳 `sitefloor.export` 產生的 Parquet（約 340 MB，每檔 80 MB 左右）。部署環境（`VERCEL` 環境變數，或本機設 `SITEFLOOR_PARQUET=1` 測試）由 `db.connect()` 直接讀 Parquet，查詢速度與資料庫檔相近。
-- 部署：更新資料後先跑 `sitefloor.export`，再在專案根目錄執行 `scripts/deploy.sh`（從本機上傳，資料不在 git 裡）：先跑部署前檢查，部署後只保留最新 2 個部署版本——Vercel 免費方案 Function Storage 上限 10 GB，每個版本約 400–500 MB，舊版本不刪會超量。
+- 部署：平常由上面的排程自動部署，只要 push 程式即可；手動部署時更新資料後先跑 `sitefloor.export`，再在專案根目錄執行 `scripts/deploy.sh`（從本機上傳，資料不在 git 裡）：先跑部署前檢查，部署後只保留最新 2 個部署版本——Vercel 免費方案 Function Storage 上限 10 GB，每個版本約 400–500 MB，舊版本不刪會超量。
 - GitHub 推送**不會**自動部署（`vercel.json` 的 `git.deploymentEnabled: false`）：GitHub 上沒有資料檔，從 git 建出來的版本會壞掉並蓋掉正式網站。
