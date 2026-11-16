@@ -20,7 +20,7 @@ import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from sitefloor import feedback, lookup as lookup_mod, popularity, usage
+from sitefloor import feedback, lookup as lookup_mod, popularity, stats, usage
 from sitefloor.db import connect
 from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many, trade_records
 from sitefloor.models import MODELS, REPLACED_PARTS
@@ -252,6 +252,91 @@ def api_cron_weekly(request: Request):
 @app.get("/about")
 def about():
     return FileResponse(STATIC / "about.html")
+
+
+@app.get("/charts.js", include_in_schema=False)
+def charts_js():
+    return FileResponse(STATIC / "charts.js", media_type="text/javascript",
+                        headers={"Cache-Control": "public, max-age=3600"})
+
+
+@app.get("/stats")
+def stats_page():
+    return FileResponse(STATIC / "stats.html")
+
+
+@lru_cache(maxsize=512)
+def _dashboard(county: str, town: str) -> dict | None:
+    cur = _cur()
+    area = (county or stats.NATION, town if county else "")
+    found = cur.execute("SELECT * FROM stats_risk WHERE county = ? AND town = ?", list(area)).df()
+    if found.empty:
+        return None
+    parent = None if area[0] == stats.NATION else (area[0], "") if area[1] else (stats.NATION, "")
+    keys = [area] + ([parent] if parent else [])
+    where = " OR ".join("(county = ? AND town = ?)" for _ in keys)
+    args = [x for k in keys for x in k]
+    price = cur.execute(f"SELECT county, town, grp, per, t, n, p25, p50, p75 FROM stats_price WHERE {where} "
+                        "ORDER BY t", args).fetchall()
+
+    def series(key, full):
+        out: dict = {}
+        for c, tw, g, per, t, n, p25, p50, p75 in price:
+            if (c, tw) == key:
+                out.setdefault(g, {}).setdefault(per, []).append(
+                    [t.isoformat(), n, p25, p50, p75] if full else [t.isoformat(), n, p50])
+        return out
+
+    bldg: dict = {}
+    for dim, bucket, n in cur.execute("SELECT dim, bucket, n FROM stats_bldg WHERE county = ? AND town = ?",
+                                      list(area)).fetchall():
+        bldg.setdefault(dim, {})[bucket] = n
+    risk_rows = cur.execute(f"SELECT * FROM stats_risk WHERE {where}", args).df()
+    cov = {(k, c) for k, c in cur.execute("SELECT kind, county FROM risk_coverage").fetchall()}
+    county_doors = dict(cur.execute(
+        "SELECT county, doors FROM stats_risk WHERE town = '' AND county <> ?", [stats.NATION]).fetchall())
+
+    def risk(key):
+        """各項門牌數，加上算比例的分母 base：有這種圖資的縣市的門牌數（沒有圖資＝不知道，不是 0）。"""
+        r = risk_rows[(risk_rows.county == key[0]) & (risk_rows.town == key[1])]
+        if r.empty:
+            return None
+        d = {k: (None if pd.isna(v) else int(v)) for k, v in r.iloc[0].drop(["county", "town"]).items()}
+        base = {}
+        for col, kind in stats.RISK_KINDS.items():
+            if key[0] == stats.NATION:
+                base[col] = sum(n for c, n in county_doors.items() if (kind, c) in cov) or None
+            else:
+                base[col] = d["doors"] if (kind, key[0]) in cov else None
+            if base[col] is None:
+                d[col] = None
+        d["base"] = base
+        return d
+
+    latest = cur.execute("SELECT max(trade_date) FILTER (WHERE trade_date <= current_date) FROM trades").fetchall()[0][0]
+    rank = {c: i for i, c in enumerate(COUNTY_ORDER)}
+    towns = [t for (t,) in cur.execute("SELECT town FROM stats_risk WHERE county = ? AND town <> '' ORDER BY doors DESC",
+                                       [area[0]]).fetchall()] if area[0] != stats.NATION else []
+    return {
+        "county": area[0], "town": area[1], "parent": list(parent) if parent else None,
+        "counties": sorted(county_doors, key=lambda c: rank.get(c, 99)), "towns": towns,
+        "latest_trade": latest.isoformat() if latest else None,
+        "groups": stats.GROUPS, "buckets": stats.BUCKETS, "fire_far_m": stats.FIRE_FAR_M,
+        "price": series(area, True), "parent_price": series(parent, False) if parent else None,
+        "bldg": {dim: [[b, bldg.get(dim, {}).get(b, 0)] for b in order] for dim, order in stats.BUCKETS.items()},
+        "risk": risk(area), "parent_risk": risk(parent) if parent else None,
+    }
+
+
+@app.get("/api/dashboard")
+def api_dashboard(county: str = "", town: str = ""):
+    """統計頁：一個區域（全國／縣市／鄉鎮）的房價走勢、建物分布、災害潛勢比例，附上一層區域做比較。"""
+    if not _has_table("stats_price"):
+        raise HTTPException(503, "統計資料尚未建立")
+    out = _dashboard(county, town)
+    if out is None:
+        raise HTTPException(404, "找不到這個區域")
+    return JSONResponse(out, headers={"Cache-Control": "public, max-age=3600"})
 
 
 @app.get("/api/lookup")

@@ -54,6 +54,9 @@ TABLES = {
     "door_risk": (None, "base, county, town"),
     "risk_coverage": (None, "kind, county"),
     "hazard_zones": (None, "kind, minlon, minlat"),
+    "stats_price": (None, "county, town, grp, per, t"),
+    "stats_bldg": (None, "county, town, dim"),
+    "stats_risk": (None, "county, town"),
 }
 
 
