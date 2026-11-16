@@ -573,6 +573,9 @@ def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
 def _with_risk(out: dict) -> dict:
     doors, note = _building_doors(out["uid"], out.get("lon"), out.get("lat"))
     out.update(building_risk(_cur(), doors))
+    towns = doors.town.dropna() if "town" in doors else pd.Series(dtype=object)
+    if not out.get("town") and len(towns):  # 價格圖比較同鄉鎮行情用
+        out["town"] = towns.mode().iloc[0]
     if note:
         out["risk_note"] = note
     else:  # 棟內門牌的成交紀錄（借用最近門牌時不列，那不是這棟的）

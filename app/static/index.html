@@ -73,6 +73,7 @@
   table.trades tr.th td { color: var(--muted); font-weight: 600; }
   table.trades tr:not(.tnote) td:first-child { white-space: nowrap; }  /* 只有日期欄不換行；備註可能很長 */
   table.trades tr:has(+ .tnote) td { border-bottom: none; }
+  .tchart { margin: 6px 0 12px; } .tchart .tsum { font-size: 13px; margin-bottom: 4px; } .tchart .tplot { margin: 8px 0 2px; }
   table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; overflow-wrap: anywhere; }
   #drop { display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
   #drop:hover { border-color: var(--accent); }
@@ -461,7 +462,7 @@ async function showBuilding(uid) {
   const first = (b.addresses || [])[0];
   const addr = first ? `${b.county || ""}${first}` : (b.name || `地圖建物 ${uid}`);
   const cardEl = document.getElementById("result").querySelector(".card");
-  if (b.trades?.length) cardEl.insertAdjacentHTML("beforeend", tradesHtml(b));
+  if (b.trades?.length) { cardEl.insertAdjacentHTML("beforeend", tradesHtml(b)); tradeChart(cardEl, b); }
   cardEl.insertAdjacentHTML("beforeend", riskHtml(b));
   cardEl.insertAdjacentHTML("beforeend", feedbackHtml({ normalized: addr, floors_above: b.floors_above }, uid));
   cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
@@ -524,7 +525,7 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   const cardEl = document.getElementById("result").querySelector(".card");
-  if (r.trades?.length) cardEl.insertAdjacentHTML("beforeend", tradesHtml(r));
+  if (r.trades?.length) { cardEl.insertAdjacentHTML("beforeend", tradesHtml(r)); tradeChart(cardEl, r); }
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", riskHtml(r));
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", feedbackHtml(r));
   // 手機：結果在地圖下方、選單更下面，給一顆回到選單的按鈕
@@ -659,11 +660,64 @@ function tradesHtml(r) {
   const main = r.trades_base && r.normalized && !r.normalized.endsWith(r.trades_base)
     ? `<div class="note">這個門牌沒有自己的成交紀錄，以下是主號 ${esc(r.trades_base)} 的紀錄。</div>` : "";
   return `<div class="risk"><h3>實價登錄成交紀錄</h3>${main}
+    <div class="tchart" hidden><div class="tsum"></div><div class="tplot"></div><div class="note tcap"></div></div>
     <table class="trades">${head}${tradeRows(r.trades.slice(0, TRADES_SHOWN), showBase)}</table>
-    ${rest.length ? `<details><summary>其餘 ${rest.length} 筆${r.trades.length >= 30 ? "（最多列 30 筆）" : ""}</summary>
+    ${rest.length ? `<details><summary>其餘 ${rest.length} 筆${r.trades.length >= 300 ? "（最多列 300 筆）" : ""}</summary>
       <table class="trades">${tradeRows(rest, showBase)}</table></details>` : ""}
     <div class="note">內政部實價登錄${r.county === "臺北市" ? "與臺北市實價週報" : ""}的買賣紀錄，新到舊排列，租賃不列。價格照原始申報，總價含車位、沒有調整；親友間交易、含增建等特殊情形見各筆備註。僅供參考，以<a href="https://lvr.land.moi.gov.tw/" target="_blank" rel="noopener">內政部實價登錄</a>公告為準，本站不提供估價。</div>
   </div>`;
+}
+
+// ── 單價走勢圖：每筆買賣一個點＋逐年中位數，背景是同鄉鎮同型態的中位數（區域統計）；排除特殊交易 ──
+const MIN_TREND = 3, TREND_FROM = 2013;  // 至少幾筆才畫圖；摘要從這年起算（和區域統計 sitefloor/stats.py START_YEAR 一致）
+const median = a => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+const wanPing = v => `${(v / 1e4).toFixed(v >= 1e6 ? 0 : 1)} 萬`;
+async function tradeChart(cardEl, r) {
+  const box = cardEl.querySelector(".tchart");
+  const ok = (r.trades || []).filter(t => t.unit_price > 0 && !t.special && t.grp && t.trade_date);
+  if (!box || ok.length < MIN_TREND) return;
+  let charts;
+  try { charts = await import("/charts.js?v=1"); } catch { return; }
+  const grp = Object.entries(ok.reduce((a, t) => (a[t.grp] = (a[t.grp] || 0) + 1, a), {})).sort((a, b) => b[1] - a[1])[0][0];
+  const pts = ok.filter(t => t.grp === grp).map(t => [charts.ms(t.trade_date), t.unit_price * M2_PER_PING]);
+  const byYear = {};
+  for (const [x, v] of pts) (byYear[new Date(x).getUTCFullYear()] ||= []).push(v);
+  const years = Object.keys(byYear).map(Number).filter(y => byYear[y].length >= 2).sort();
+  const own = years.map(y => [Date.UTC(y, 6, 1), median(byYear[y])]);  // 年中位數畫在年中
+  // 同鄉鎮同型態的行情（區域統計），只取這棟有成交的期間前後
+  let area = [], areaName = "", d = null;
+  if (r.county && r.town) {
+    try { d = await (await fetch(`/api/dashboard?county=${encodeURIComponent(r.county)}&town=${encodeURIComponent(r.town)}`)).json(); } catch { d = null; }
+    const y0 = new Date(Math.min(...pts.map(p => p[0]))).getUTCFullYear() - 1;
+    area = (d?.price?.[grp]?.Y || []).filter(row => row[1] >= 5 && +row[0].slice(0, 4) >= y0)
+      .map(row => [Date.UTC(+row[0].slice(0, 4), 6, 1), row[3]]);
+    areaName = `${r.town}${grp}`;
+  }
+  if (!box.isConnected) return;  // 等資料時使用者已經查了別的地址
+  box.hidden = false;
+  const areaAt = y => area.find(([x]) => new Date(x).getUTCFullYear() === y)?.[1];
+  const pctTxt = v => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
+  let sum = "";
+  const sy = years.filter(y => y >= TREND_FROM);  // 更早的紀錄照畫，但不拿來算漲幅（沒有同期行情可比）
+  if (sy.length >= 2 && sy.at(-1) - sy[0] >= 3) {
+    const [a, b] = [sy[0], sy.at(-1)], va = median(byYear[a]), vb = median(byYear[b]);
+    const aa = areaAt(a), ab = areaAt(b);
+    sum = `${a} 年每坪約 ${wanPing(va)} → ${b} 年 ${wanPing(vb)}（${pctTxt(vb / va - 1)}）`
+      + (aa && ab ? `；同期${esc(areaName)} ${pctTxt(ab / aa - 1)}` : "");
+  }
+  if (years.length && areaAt(years.at(-1))) {
+    const y = years.at(-1), diff = median(byYear[y]) / areaAt(y) - 1;
+    sum += `${sum ? "。" : ""}${y} 年比${esc(areaName)}中位數${diff >= 0 ? "高" : "低"} ${Math.abs(Math.round(diff * 100))}%`;
+  }
+  box.querySelector(".tsum").innerHTML = sum ? `<b>${sum}</b>` : `<span class="note">成交筆數少，還看不出趨勢</span>`;
+  charts.lineChart(box.querySelector(".tplot"), [
+    ...(area.length ? [{ name: areaName, color: "#94a3b8", dash: "5 4", width: 1.5, points: area }] : []),
+    { name: "每筆成交", color: "#2563eb", dots: true, points: pts },
+    ...(own.length ? [{ name: "這棟（年中位數）", color: "#2563eb", points: own }] : []),
+  ], { height: 170, yFmt: v => `${Math.round(v / 1e4)}萬`, tipFmt: v => `${wanPing(v)}/坪`, label: "這棟的每坪單價" });
+  const link = r.county ? `<a href="/stats?county=${encodeURIComponent(r.county)}${r.town ? `&town=${encodeURIComponent(r.town)}` : ""}&grp=${encodeURIComponent(grp)}">${esc(r.town || r.county)}行情 →</a>` : "";
+  box.querySelector(".tcap").innerHTML = `每坪單價（萬元）。點＝每筆${esc(grp)}買賣，實線＝這棟逐年中位數（該年 2 筆以上）`
+    + (area.length ? `，虛線＝${esc(areaName)}中位數` : "") + `。已排除親友間、含增建等特殊交易；單價受樓層、坪數、屋況影響，只是粗略趨勢，不是估價。${link}`;
 }
 
 // ── 問題回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
