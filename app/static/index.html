@@ -541,7 +541,8 @@ const qEl = document.getElementById("q"), suggEl = document.getElementById("sugg
 let suggItems = [], suggOn = -1, suggTimer, suggSeq = 0;
 function sgHtml(x, i) {
   const dot = x.has ? `<span class="dot">●</span> ` : "";
-  return `<button type="button" class="sg" data-text="${esc(x.text)}" data-kind="${esc(x.kind)}">${dot}${esc(x.text)}`
+  // 建物名稱：顯示名稱，選了查它的代表門牌（同名的好幾棟各自不同）
+  return `<button type="button" class="sg" data-text="${esc(x.kind === "name" ? x.addr : x.text)}" data-kind="${esc(x.kind)}">${dot}${esc(x.text)}`
     + `${x.hint ? `<small>${esc(x.hint)}</small>` : ""}</button>`;
 }
 function hideSugg() { suggEl.hidden = true; suggOn = -1; }
@@ -580,7 +581,8 @@ qEl.addEventListener("keydown", e => {
     suggEl.querySelectorAll(".sg").forEach((b, i) => b.classList.toggle("on", i === suggOn));
   } else if (e.key === "Enter" && suggOn >= 0) {
     e.preventDefault();
-    chooseSugg(suggItems[suggOn].text, suggItems[suggOn].kind);
+    const it = suggItems[suggOn];
+    chooseSugg(it.kind === "name" ? it.addr : it.text, it.kind);
   } else if (e.key === "Escape") hideSugg();
 });
 qEl.addEventListener("blur", () => setTimeout(hideSugg, 150));

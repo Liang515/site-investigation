@@ -43,6 +43,7 @@ TABLES = {
     "trade_pts": (None, "county, gy, gx"),
     "roads": (None, "county, town, road"),
     "pillars": (None, "lat, lon"),
+    "bldg_names": (None, "key"),
     "coverage": (None, "county"),
     "permits": (None, "base, county, town"),
     "osm_buildings": (None, "minlon, minlat"),

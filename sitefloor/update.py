@@ -190,10 +190,11 @@ def check_sources(state: dict, force: bool) -> tuple[dict, set, list[str], list[
         notes.append(f"臺北市實價週報有新資料（{tok}）")
         steps.add("trades")
         new["tp_weekly"] = tok
-    corr = ROOT / "curated" / "floor_corrections.csv"
-    tok = str(corr.stat().st_mtime_ns) + ":" + str(corr.stat().st_size) if corr.exists() else None
+    # 人工校正樓層表、建物名稱別名表（osm 步驟重建名稱表）
+    files = [ROOT / "curated" / f for f in ("floor_corrections.csv", "building_names.csv")]
+    tok = ";".join(f"{f.stat().st_mtime_ns}:{f.stat().st_size}" for f in files if f.exists()) or None
     if changed("curated", tok):
-        notes.append("人工校正樓層表有更新")
+        notes.append("人工校正樓層表或建物名稱別名有更新")
         steps.add("curated")
         new["curated"] = tok
     tok = head_token(OSM_PBF)
