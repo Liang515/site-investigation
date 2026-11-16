@@ -43,6 +43,7 @@ def prod_version() -> str | None:
 
 def main() -> int:
     os.environ["SITEFLOOR_PARQUET"] = "1"
+    from sitefloor import names
     from sitefloor.db import SERVE_DIR, connect
     from sitefloor.lookup import lookup, lookup_many
     from sitefloor.suggest import Suggester
@@ -67,6 +68,8 @@ def main() -> int:
     n = con.execute("SELECT count(*) FROM buildings WHERE maxlon >= 121.56 AND minlon <= 121.57").fetchall()[0][0]
     if not n:
         bad.append("地圖建物查不到")
+    if not names.search(con, "台北之星"):
+        bad.append("名稱搜尋查不到（部署檔缺 bldg_names：先跑 python -m sitefloor.names 再 export）")
     # 舊版匯出：缺成交價格、缺地圖方柱表、row group 順序亂掉
     if not lookup(con, "臺北市大安區辛亥路三段3號").get("trades"):
         bad.append("查不到成交紀錄（部署檔缺成交價格欄位，可能是舊版匯出）")
