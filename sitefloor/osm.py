@@ -162,7 +162,7 @@ def mark_small_permits(con, b: gpd.GeoDataFrame):
         WHERE p.county = o.county AND p.town = o.town AND p.base = o.base AND p.bldg_area IS NOT NULL""",
                 [SMALL_PERMIT])
     con.unregister("area")
-    n = con.execute("SELECT count(*) FROM permits WHERE small").fetchone()[0]
+    n = con.execute("SELECT count(*) FROM permits WHERE small").fetchall()[0][0]
     print(f"  使照建築面積不到 OSM 外框 {SMALL_PERMIT:.0%}（不套用）：{n:,} 門牌")
 
 
@@ -209,7 +209,7 @@ def main():
     mark_small_permits(con, b)
     # 棟內門牌的使用執照樓層眾數（permits.py 要先跑；地圖上色和建物卡片用，和地址查詢的使照樓層一致）
     has_permits = con.execute(
-        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'permits'").fetchone()[0]
+        "SELECT count(*) FROM information_schema.tables WHERE table_name = 'permits'").fetchall()[0][0]
     pf = con.execute("""
         SELECT uid, floors AS permit_floors FROM (
             SELECT uid, floors, count(*) AS k FROM (
@@ -226,7 +226,7 @@ def main():
     b = b.merge(pf, on="uid", how="left")
     b.loc[b.building.isin(NO_TRADE_FLOORS), "permit_floors"] = None
     # 人工校正（curated.py）：指定 OSM 建物的樓層
-    has_corr = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'corrections'").fetchone()[0]
+    has_corr = con.execute("SELECT count(*) FROM information_schema.tables WHERE table_name = 'corrections'").fetchall()[0][0]
     cur = (con.execute("SELECT osm_uid AS uid, any_value(floors_above) AS curated_floors, any_value(height_m) AS curated_height "
                        "FROM corrections "
                        "WHERE osm_uid IS NOT NULL GROUP BY 1").df() if has_corr else pd.DataFrame(columns=["uid", "curated_floors", "curated_height"]))
@@ -262,11 +262,11 @@ def main():
     print(f"  osm_parts {len(parts):,}（分棟，落在 {parts.parent_uid.nunique():,} 棟建物裡）")
 
     con.execute(SAME_OSM_SQL)
-    n = con.execute("SELECT count(*), count(*) FILTER (WHERE spread = 0) FROM same_osm").fetchone()
+    n = con.execute("SELECT count(*), count(*) FILTER (WHERE spread = 0) FROM same_osm").fetchall()[0]
     print(f"  same_osm {n[0]:,}（棟內樓層一致 {n[1]:,}）")
 
     con.execute(PILLARS_SQL)
-    print(f"  pillars {con.execute('SELECT count(*) FROM pillars').fetchone()[0]:,}（地圖方柱候選門牌）")
+    print(f"  pillars {con.execute('SELECT count(*) FROM pillars').fetchall()[0][0]:,}（地圖方柱候選門牌）")
 
     from sitefloor import names  # 名稱搜尋：代表門牌要用 door_osm
     print(f"  bldg_names {names.build(con):,}（建物／建案名稱搜尋）")

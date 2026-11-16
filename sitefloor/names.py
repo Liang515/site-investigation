@@ -101,16 +101,15 @@ QUALIFY row_number() OVER (PARTITION BY name_key(name), county, town, base
 
 def build(con: duckdb.DuckDBPyConnection) -> int:
     presale, aliases = _presale(), _aliases()
-    con.register("presale", presale)
-    con.register("aliases", aliases)
-    con.create_function("name_key", landmarks.key, ["VARCHAR"], "VARCHAR", side_effects=False)
+    cur = con.cursor()  # 獨立的游標：呼叫端連線上有沒讀完的結果時，DuckDB 2.0 會拒絕 register
+    cur.register("presale", presale)
+    cur.register("aliases", aliases)
+    cur.create_function("name_key", landmarks.key, ["VARCHAR"], "VARCHAR", side_effects=False)
     try:
-        con.execute(BUILD_SQL)
+        cur.execute(BUILD_SQL)
+        return cur.execute("SELECT count(*) FROM bldg_names").fetchall()[0][0]
     finally:
-        con.remove_function("name_key")
-        con.unregister("presale")
-        con.unregister("aliases")
-    return con.execute("SELECT count(*) FROM bldg_names").fetchall()[0][0]
+        cur.close()
 
 
 def search(con, text: str, limit: int = SUGGEST_MAX) -> list[dict]:
