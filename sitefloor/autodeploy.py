@@ -1,6 +1,6 @@
 """自動部署：GitHub 上有新程式就 pull → 重建受影響的資料 → 部署前檢查 → 部署 → 推播結果。
 
-由排程每 30 分鐘執行一次（scripts/install_schedule.sh），放在存放最新資料的那台電腦上；
+由排程每 5 分鐘執行一次（scripts/install_schedule.sh），放在存放最新資料的那台電腦上；
 每週資料更新（update.py）成功後也呼叫 deploy_and_record() 直接部署。
 - 和上次部署的 commit（data/state/deployed.json）比對，沒有新 commit 就什麼都不做
 - 依改到的檔案決定要重建什麼（rebuild_steps）；改到其他建庫程式時只部署程式，資料等每週更新重建
@@ -159,8 +159,7 @@ def main(argv: list[str]) -> int:
         save_state(blocked=None)
         st, now = load_state(), head()
         if "--force" not in argv and now in (st.get("commit"), st.get("failed")):
-            print(f"沒有新的 commit（{now[:7]}）")
-            return 0
+            return 0  # 沒有新的 commit：不寫紀錄（每 5 分鐘一次，紀錄會被灌滿）
         files = changed_files(st.get("commit"), now)
         steps = rebuild_steps(files)
         if not SERVE_DIR.exists() and "export" not in steps:
