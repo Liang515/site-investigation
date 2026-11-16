@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5f7fa">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
+<link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>區域統計 — 建物查詢平台</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --panel: #ffffff; --ink: #1e293b; --muted: #64748b; --line: #e2e8f0; --soft: #f1f5f9;
+    --accent: #2563eb; --accent-soft: #eff4ff; --parent: #94a3b8; --risk: #dc2626; --up: #b91c1c; --down: #15803d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 960px; margin: 0 auto; padding: 20px 16px 64px; }
+  a { color: var(--accent); }
+  header { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 10px 0; margin: 0 0 8px; }
+  h1 { font-size: 20px; line-height: 28px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 img { border-radius: 7px; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .area { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+  select { font: inherit; font-size: 16px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .seg { display: inline-flex; background: var(--soft); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+  .seg button { font: inherit; font-size: 13px; border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; }
+  .seg button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.08); }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+  .kpi { background: var(--soft); border-radius: 8px; padding: 10px 12px; }
+  .kpi .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 12px; color: var(--muted); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
+  .chart { position: relative; margin-top: 18px; }
+  .dist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 24px; }
+  .dist h3, .risk h3 { font-size: 13px; color: var(--muted); margin: 0 0 6px; font-weight: 600; }
+  .bar { display: grid; grid-template-columns: 104px 1fr 52px; gap: 8px; align-items: center; font-size: 13px; margin: 3px 0; }
+  .bar .track { background: var(--soft); border-radius: 4px; height: 12px; position: relative; overflow: hidden; }
+  .bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+  .bar .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .risk .row { display: grid; grid-template-columns: 180px 1fr 150px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .risk .row:last-child { border-bottom: 0; }
+  .risk .track { background: var(--soft); border-radius: 4px; height: 12px; position: relative; }
+  .risk .fill { position: absolute; inset: 0 auto 0 0; background: var(--risk); opacity: .8; border-radius: 4px; }
+  .risk .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; }
+  .risk .pct { text-align: right; font-variant-numeric: tabular-nums; }
+  .risk .pct small { display: block; color: var(--muted); font-size: 11px; }
+  .na { color: var(--muted); font-size: 12px; }
+  ul.notes { padding-left: 18px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  ul.notes li { margin: 3px 0; }
+  .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  @media (max-width: 640px) {
+    main { padding-top: 8px; }
+    .kpis { grid-template-columns: 1fr 1fr; }
+    .kpis .kpi:last-child { grid-column: span 2; }
+    .dist { grid-template-columns: 1fr; }
+    .risk .row { grid-template-columns: 1fr 96px; }
+    .risk .row .track { grid-column: 1 / -1; grid-row: 2; }
+  }
+</style>
+<script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
+<script defer src="/_vercel/insights/script.js"></script>
+</head>
+<body>
+<main>
+  <header>
+    <h1><a href="/" aria-label="回查詢頁"><img src="/logo.png" alt="" width="28" height="28"></a>區域統計</h1>
+  </header>
+  <p class="muted" style="margin:0"><a href="/">← 回查詢頁</a> · 實價登錄成交、建物與災害潛勢的區域統計。非官方工具，結果僅供參考 · <a href="/about">資料來源與授權</a></p>
+  <div class="area">
+    <select id="county" aria-label="縣市"></select>
+    <select id="town" aria-label="鄉鎮市區"></select>
+    <span class="muted" id="asof"></span>
+  </div>
+
+  <section class="card" id="price">
+    <div class="head">
+      <div><h2>房價走勢</h2><div class="muted">住宅買賣的每坪單價中位數（萬元／坪）</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="seg" id="grp"></div>
+        <div class="seg" id="per"><button data-v="Y" class="on">年</button><button data-v="Q">季</button></div>
+      </div>
+    </div>
+    <div class="kpis" id="kpis"></div>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="priceChart"></div>
+    <h3 class="muted" style="margin:18px 0 0;font-weight:600">成交筆數</h3>
+    <div class="chart" id="volChart" style="margin-top:6px"></div>
+  </section>
+
+  <section class="card">
+    <div class="head"><div><h2>建物</h2><div class="muted">有實價登錄紀錄的門牌（一個門牌號約為一棟），依最近一筆紀錄的建物資料</div></div></div>
+    <div class="dist" id="dist"></div>
+  </section>
+
+  <section class="card risk">
+    <div class="head"><div><h2>災害潛勢</h2><div class="muted" id="riskSub">門牌落在各潛勢範圍內的比例；黑線為比較區域</div></div></div>
+    <div id="risk"></div>
+  </section>
+
+  <section class="card">
+    <h2>計算方式</h2>
+    <ul class="notes">
+      <li>房價：內政部實價登錄的買賣，限住宅大樓、華廈、公寓、透天厝、套房，每坪單價依實價登錄申報欄位（車位另計時已扣除車位）。</li>
+      <li>排除價格不反映一般行情的交易：親友或特殊關係、僅車位、政府標售或協議價購、土地建物分件登記、含增建或未登記建物、頂樓加蓋、瑕疵物件等（依備註欄判斷）。</li>
+      <li>最近一兩季申報還沒到齊，畫成虛線、空心點；當年度未過完的平均也只到資料日期為止。</li>
+      <li>成交少於 5 筆的期間不畫中位數。灰色色帶為 25%–75% 的單價範圍。</li>
+      <li>建物、災害潛勢以「門牌號」計數，不是戶數；某縣市沒有某種圖資時顯示「無圖資」，全國比例只用有圖資的縣市計算。</li>
+      <li>本頁僅為統計描述，不是估價，也不代表任何個別房屋的價值或風險；官方資訊請見內政部不動產資訊平台與各災害潛勢主管機關。</li>
+    </ul>
+  </section>
+</main>
+<script type="module">
+import { lineChart, barChart, ms, wan } from "/charts.js?v=1";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const MIN_N = 5;
+const DIM_NAME = { age: "屋齡", type: "建物型態", structure: "構造", floors: "總樓層" };
+const RISK_ROWS = [
+  ["flood", "淹水潛勢（24 小時 500 mm）"],
+  ["flood_deep", "　其中淹水 0.5 公尺以上"],
+  ["liq_high", "土壤液化 高潛勢"],
+  ["liq_mid", "土壤液化 中潛勢"],
+  ["fault", "活動斷層地質敏感區"],
+  ["landslide", "山崩地滑地質敏感區"],
+  ["debris", "土石流潛勢溪流影響範圍"],
+];
+const params = new URLSearchParams(location.search);
+let state = { county: params.get("county") || "", town: params.get("town") || "", grp: params.get("grp") || "全部", per: "Y" };
+let data = null;
+
+const pct = (a, b) => b ? a / b * 100 : null;
+const fmtPct = v => v == null ? "—" : v < 1 && v > 0 ? `${v.toFixed(1)}%` : `${Math.round(v)}%`;
+const areaName = (c, t) => t || c;
+
+async function load() {
+  const q = new URLSearchParams();
+  if (state.county) q.set("county", state.county);
+  if (state.town) q.set("town", state.town);
+  const r = await fetch(`/api/dashboard?${q}`);
+  if (!r.ok) {
+    if (state.county) { state = { ...state, county: "", town: "" }; return load(); }
+    document.querySelector("main").insertAdjacentHTML("beforeend", `<p class="empty">統計資料暫時無法取得</p>`);
+    return;
+  }
+  data = await r.json();
+  syncUrl();
+  document.title = `${areaName(data.county, data.town)} 區域統計 — 建物查詢平台`;
+  renderArea(); renderPrice(); renderDist(); renderRisk();
+}
+
+function syncUrl() {
+  const q = new URLSearchParams();
+  for (const k of ["county", "town"]) if (state[k]) q.set(k, state[k]);
+  if (state.grp !== "全部") q.set("grp", state.grp);
+  history.replaceState(null, "", `${location.pathname}${q.size ? `?${q}` : ""}`);
+}
+
+function renderArea() {
+  $("county").innerHTML = `<option value="">全國</option>` + data.counties.map(c =>
+    `<option ${c === data.county ? "selected" : ""}>${esc(c)}</option>`).join("");
+  $("town").hidden = !state.county;
+  $("town").innerHTML = `<option value="">全${esc(data.county.slice(-1) === "市" ? "市" : "縣")}</option>` + data.towns.map(t =>
+    `<option ${t === data.town ? "selected" : ""}>${esc(t)}</option>`).join("");
+  $("asof").textContent = data.latest_trade ? `成交資料至 ${data.latest_trade}` : "";
+}
+
+// 資料未齊：期間結束日晚於最新成交日前 30 天（申報有時間差）
+function faintFrom(rows, per) {
+  if (!data.latest_trade) return null;
+  const cutoff = ms(data.latest_trade) - 30 * 864e5;
+  const end = t => { const d = new Date(ms(t)); return per === "Y" ? Date.UTC(d.getUTCFullYear() + 1, 0, 1) : Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 3, 1); };
+  const ok = rows.filter(r => end(r[0]) <= cutoff + 864e5);
+  return ok.length ? ms(ok.at(-1)[0]) : null;
+}
+
+function renderPrice() {
+  $("grp").innerHTML = data.groups.map(g => `<button data-v="${g}" class="${g === state.grp ? "on" : ""}">${g}</button>`).join("");
+  document.querySelectorAll("#per button").forEach(b => b.classList.toggle("on", b.dataset.v === state.per));
+  const rows = data.price[state.grp]?.[state.per] || [];
+  const prow = data.parent_price?.[state.grp]?.[state.per] || [];
+  const name = areaName(data.county, data.town), pname = data.parent ? areaName(...data.parent) : null;
+  const ok = rows.filter(r => r[1] >= MIN_N);
+  if (!ok.length) {
+    $("kpis").innerHTML = ""; $("legend").innerHTML = "";
+    $("priceChart").innerHTML = `<p class="empty">這個區域的${state.grp === "全部" ? "住宅" : state.grp}成交太少，沒有足夠資料</p>`;
+    $("volChart").innerHTML = "";
+    return;
+  }
+  $("priceChart").innerHTML = "";
+  const ff = faintFrom(rows, state.per);
+  const pff = faintFrom(prow, state.per);
+  // KPI：最近一個完整年度
+  const yrows = (data.price[state.grp]?.Y || []).filter(r => r[1] >= MIN_N);
+  const yff = faintFrom(data.price[state.grp]?.Y || [], "Y");
+  const full = yrows.filter(r => yff == null || ms(r[0]) <= yff);
+  const last = full.at(-1), y = last ? +last[0].slice(0, 4) : null;
+  const back = full.find(r => +r[0].slice(0, 4) === y - 5);
+  const pY = (data.parent_price?.[state.grp]?.Y || []);
+  const pLast = pY.find(r => r[0] === last?.[0]), pBack = pY.find(r => back && r[0] === back[0]);
+  const chg = (a, b) => a && b ? (a / b - 1) * 100 : null;
+  const sign = v => v == null ? "—" : `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
+  const c5 = chg(last?.[3], back?.[3]), pc5 = chg(pLast?.[2], pBack?.[2]);
+  const prev = full.at(-2), vol = chg(last?.[1], prev?.[1]);
+  $("kpis").innerHTML = last ? `
+    <div class="kpi"><div class="l">${y} 年中位數</div><div class="v">${wan(last[3])}<span style="font-size:13px;font-weight:400"> / 坪</span></div>
+      <div class="l">${last[1].toLocaleString()} 筆${pLast ? ` · ${esc(pname)} ${wan(pLast[2])}` : ""}</div></div>
+    <div class="kpi"><div class="l">${back ? `${y - 5}→${y} 年` : "近 5 年"}</div><div class="v">${sign(c5)}</div>
+      <div class="l">${pc5 != null ? `${esc(pname)} ${sign(pc5)}` : back ? "" : "資料不足 5 年"}</div></div>
+    <div class="kpi"><div class="l">${y} 年成交筆數</div><div class="v">${last[1].toLocaleString()}</div>
+      <div class="l">${prev ? `比 ${y - 1} 年 ${sign(vol)}` : ""}</div></div>` : "";
+  $("legend").innerHTML = `<span><i style="background:var(--accent)"></i>${esc(name)}</span>`
+    + (prow.length ? `<span><i style="background:var(--parent)"></i>${esc(pname)}</span>` : "")
+    + `<span><i style="background:var(--accent);opacity:.15;height:10px"></i>25%–75%</span>`
+    + (ff != null && rows.some(r => ms(r[0]) > ff) ? `<span>虛線：申報未齊</span>` : "");
+  const xFmt = state.per === "Y" ? (x => `${new Date(x).getUTCFullYear()} 年`)
+    : (x => { const d = new Date(x); return `${d.getUTCFullYear()} Q${d.getUTCMonth() / 3 + 1}`; });
+  lineChart($("priceChart"), [
+    ...(prow.length ? [{ name: pname, color: "#94a3b8", dash: "5 4", width: 1.5, faintFrom: pff,
+      points: prow.filter(r => r[1] >= MIN_N).map(r => [ms(r[0]), r[2]]) }] : []),
+    { name, color: "#2563eb", faintFrom: ff, points: ok.map(r => [ms(r[0]), r[3]]), band: ok.map(r => [ms(r[0]), r[2], r[4]]) },
+  ], { yFmt: v => `${Math.round(v / 1e4)}萬`, xFmt, label: `${name} 每坪單價中位數`, tipFmt: v => `${wan(v)}/坪` });
+  barChart($("volChart"), rows.map(r => [ms(r[0]), r[1], ff != null && ms(r[0]) > ff]), { xFmt, label: "成交筆數", color: "#93c5fd" });
+}
+
+function renderDist() {
+  $("dist").innerHTML = Object.entries(data.bldg).map(([dim, items]) => {
+    const total = items.reduce((a, [, n]) => a + n, 0);
+    if (!total) return `<div><h3>${DIM_NAME[dim]}</h3><div class="na">沒有資料</div></div>`;
+    const max = Math.max(...items.map(([, n]) => n));
+    return `<div><h3>${DIM_NAME[dim]} <span style="font-weight:400">（${total.toLocaleString()} 個門牌）</span></h3>` + items.map(([b, n]) =>
+      `<div class="bar" title="${n.toLocaleString()} 個門牌"><span>${esc(b)}</span><span class="track"><span class="fill" style="width:${n / max * 100}%"></span></span>
+       <span class="num">${fmtPct(pct(n, total))}</span></div>`).join("") + `</div>`;
+  }).join("");
+}
+
+function renderRisk() {
+  const r = data.risk, p = data.parent_risk;
+  const pname = data.parent ? areaName(...data.parent) : null;
+  $("riskSub").textContent = `${r.doors.toLocaleString()} 個門牌落在各潛勢範圍內的比例` + (pname ? `；黑線為${pname}` : "");
+  const rows = RISK_ROWS.map(([k, label]) => [label, r[k] == null ? null : pct(r[k], r.base[k]), p && p[k] != null ? pct(p[k], p.base[k]) : null]);
+  rows.push([`離最近消防隊超過 ${data.fire_far_m / 1000} 公里`, pct(r.fire_far, r.doors), p ? pct(p.fire_far, p.doors) : null]);
+  const max = Math.max(5, ...rows.flatMap(([, a, b]) => [a ?? 0, b ?? 0]));
+  $("risk").innerHTML = rows.map(([label, a, b]) => `<div class="row"><span>${esc(label)}</span>`
+    + (a == null ? `<span class="na">此區無圖資</span><span></span>`
+      : `<span class="track"><span class="fill" style="width:${a / max * 100}%"></span>${b != null ? `<span class="mark" style="left:${b / max * 100}%"></span>` : ""}</span>
+         <span class="pct">${fmtPct(a)}${b != null ? `<small>${esc(pname)} ${fmtPct(b)}</small>` : ""}</span>`)
+    + `</div>`).join("")
+    + (r.fire_m != null ? `<p class="muted" style="margin:10px 0 0">門牌到最近消防隊的直線距離中位數：${(r.fire_m / 1000).toFixed(1)} 公里${p?.fire_m != null ? `（${esc(pname)} ${(p.fire_m / 1000).toFixed(1)} 公里）` : ""}</p>` : "");
+}
+
+$("county").addEventListener("change", e => { state.county = e.target.value; state.town = ""; load(); });
+$("town").addEventListener("change", e => { state.town = e.target.value; load(); });
+$("grp").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.grp = b.dataset.v; renderPrice(); syncUrl(); } });
+$("per").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.per = b.dataset.v; renderPrice(); } });
+load();
+</script>
+</body>
+</html>

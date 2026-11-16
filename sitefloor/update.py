@@ -96,13 +96,14 @@ WATCH_ONLY = {
     "金門縣門牌": 171571,
 }
 # 步驟的執行順序；trades 之後要重算所有衍生表
-PIPELINE = ["addr", "trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "tiers", "export",
-            "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）；tiers 用到 osm、trades、permits
+PIPELINE = ["addr", "trades", "derive", "curated", "permits", "osm", "risk", "coverage", "gaps", "tiers", "stats",
+            "export", "smoke"]  # osm 用到 permits；risk 用到 trades（主要用途）；tiers 用到 osm、trades、permits；stats 用到 trades、risk
 NEEDS = {
     # 門牌點位：實價補鄉鎮、同棟、附近、OSM 對門牌、災害潛勢都用到，trades 之後全部重跑
-    "addr": {"addr", "trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "export",
-             "smoke"},
-    "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "export", "smoke"},
+    "addr": {"addr", "trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "stats",
+             "export", "smoke"},
+    "trades": {"trades", "derive", "curated", "osm", "permits", "risk", "coverage", "gaps", "tiers", "stats", "export",
+               "smoke"},
     "curated": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
     "osm": {"curated", "osm", "coverage", "gaps", "tiers", "export", "smoke"},
     "permits": {"permits", "osm", "coverage", "gaps", "tiers", "export", "smoke"},

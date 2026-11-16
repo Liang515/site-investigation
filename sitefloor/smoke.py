@@ -70,6 +70,9 @@ def main() -> int:
         bad.append("地圖建物查不到")
     if not names.search(con, "台北之星"):
         bad.append("名稱搜尋查不到（部署檔缺 bldg_names：先跑 python -m sitefloor.names 再 export）")
+    for t in ("stats_price", "stats_bldg", "stats_risk"):  # 統計頁
+        if not (SERVE_DIR / t).exists():
+            bad.append(f"部署檔缺 {t} 表（先跑 python -m sitefloor.stats 再 export）")
     # 舊版匯出：缺成交價格、缺地圖方柱表、row group 順序亂掉
     if not lookup(con, "臺北市大安區辛亥路三段3號").get("trades"):
         bad.append("查不到成交紀錄（部署檔缺成交價格欄位，可能是舊版匯出）")
