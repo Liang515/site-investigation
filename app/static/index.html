@@ -434,6 +434,10 @@ function viewOf(door, bldg) {
   return view;
 }
 
+// 查地址時在門牌位置放的點；null＝清掉
+function setPin(r) {
+  map.getSource("pin")?.setData(r ? { type: "Point", coordinates: [r.lon, r.lat] } : { type: "FeatureCollection", features: [] });
+}
 // 選取的建物：整棟立體改成橘色（高樓在斜視角會擋住地面的外框線），地面外框線保留
 function select(uid) {
   map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]);
@@ -459,6 +463,7 @@ function bldgHead(b) {
 
 async function showBuilding(uid) {
   const b = await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json();
+  setPin(null);  // 點建物用整棟上色標示，清掉先前查地址留下的門牌點
   select(uid);
   document.getElementById("result").innerHTML = card(b, bldgHead(b), b);
   // 在地圖上點的建物也能回報：附上建物編號（OSM 建物審核後整棟套用，地標常沒有門牌）
@@ -521,10 +526,8 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   const uid = r.osm_uid || r.bldg_uid;
   const bldg = r.building !== undefined ? r.building  // 伺服器已一起回傳；舊版伺服器才另外查
     : uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
-  if (r.lon != null) {
-    map.getSource("pin").setData({ type: "Point", coordinates: [r.lon, r.lat] });
-    map.flyTo(viewOf(r, bldg));
-  }
+  setPin(r.lon != null ? r : null);  // 沒有座標的門牌也要清掉上一次的點
+  if (r.lon != null) map.flyTo(viewOf(r, bldg));
   select(uid);
   document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
   const cardEl = document.getElementById("result").querySelector(".card");
