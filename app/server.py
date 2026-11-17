@@ -119,6 +119,20 @@ async def server_timing(request: Request, call_next):
     return resp
 
 
+# ── CDN 快取：同一版部署裡結果固定的 GET 請求由 Vercel CDN 直接回應，不再執行程式（省 CPU 時間）──
+# Vercel 每次部署會清掉 CDN 快取，資料更新後不會拿到舊結果。查地址、點建物要記使用次數，不快取。
+CDN_CACHED = ("/api/buildings", "/api/hazards", "/api/pick", "/api/suggest", "/api/dashboard", "/api/stats")
+CDN_MAX_AGE = 86400
+
+
+@app.middleware("http")
+async def cdn_cache(request: Request, call_next):
+    resp = await call_next(request)
+    if request.method == "GET" and resp.status_code == 200 and request.url.path in CDN_CACHED:
+        resp.headers["Vercel-CDN-Cache-Control"] = f"max-age={CDN_MAX_AGE}"  # 只給 Vercel CDN，瀏覽器看不到
+    return resp
+
+
 def _cur():
     # DuckDB 連線不可跨執行緒共用，每個請求開 cursor
     return _TimedCursor(con.cursor())

@@ -356,12 +356,15 @@ function showDiag(reason) {
 }
 if (new URLSearchParams(location.search).has("debug")) setTimeout(() => showDiag("debug"), 6000);
 
+// 地圖範圍往外取整到 0.005 度（約 500 公尺）：附近的畫面送出相同的請求，可以直接用 CDN 快取的結果
+const snapBox = b => [Math.floor(b.getWest() / .005) * .005, Math.floor(b.getSouth() / .005) * .005,
+  Math.ceil(b.getEast() / .005) * .005, Math.ceil(b.getNorth() / .005) * .005].map(v => v.toFixed(3)).join(",");
 let timer;
 async function loadBuildings() {
   if (!MAP_OK) return;
   if (map.getZoom() < 15.5) { map.getSource("bldg").setData({ type: "FeatureCollection", features: [] }); return; }
   const b = map.getBounds();
-  const r = await fetch(`/api/buildings?bbox=${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`);
+  const r = await fetch(`/api/buildings?bbox=${snapBox(b)}`);
   map.getSource("bldg").setData(await r.json());
 }
 map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
@@ -382,7 +385,7 @@ let hzTimer, hzSeq = 0;
 async function loadHazards() {
   if (!MAP_OK || !map.isStyleLoaded()) return;
   const seq = ++hzSeq, z = map.getZoom(), b = map.getBounds();
-  const bbox = `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`;
+  const bbox = snapBox(b);
   let tooFar = false;
   for (const h of HAZARDS) {
     const on = hzOn.has(h.kind);
