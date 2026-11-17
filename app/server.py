@@ -33,6 +33,7 @@ PILLAR_M = 10  # 實價門牌方柱邊長（公尺）
 OSM_TABLE = ("osm:", "cur:")  # 存在 osm_buildings 的建物：OSM 外框、人工補畫的外框（curated/buildings.geojson）
 PILLAR_NEAR_M = 25  # 門牌點常落在建物外框外的騎樓、路邊：這個距離內已有樓層相同（±1）的建物就不畫方柱
 
+_STARTED = time.monotonic()  # 這個執行個體載入程式的時間
 app = FastAPI(title="建物查詢平台")
 
 # ── 查詢次數限制（公開部署時避免被大量抓取）：每個 IP 在時間窗內的次數上限 ──
@@ -112,9 +113,10 @@ async def server_timing(request: Request, call_next):
         return await call_next(request)
     timings: dict[str, float] = {}
     _timings.set(timings)
-    t = time.perf_counter()
+    t, c = time.perf_counter(), time.process_time()
     resp = await call_next(request)
     timings["total"] = (time.perf_counter() - t) * 1000
+    timings["cpu"] = (time.process_time() - c) * 1000  # 整個程序的 CPU 時間（同時有其他請求時會一起算進來）
     resp.headers["Server-Timing"] = ", ".join(f"{k};dur={v:.1f}" for k, v in timings.items())
     return resp
 
@@ -380,11 +382,17 @@ def api_suggest(q: str, limit: int = 8):
 
 
 @app.get("/api/version")
-@lru_cache(maxsize=1)
 def api_version():
-    """部署的資料版本（最新一筆成交日期）：部署前檢查用來比對，避免拿舊資料蓋掉正式站。"""
+    """部署的資料版本（最新一筆成交日期）：部署前檢查用來比對，避免拿舊資料蓋掉正式站。
+    另附這個執行個體啟動多久、累計用了多少 CPU 時間（含啟動），用來估算雲端的 CPU 用量。"""
+    return {"latest_trade": _latest_trade(), "uptime_s": round(time.monotonic() - _STARTED, 1),
+            "cpu_s": round(time.process_time(), 2)}
+
+
+@lru_cache(maxsize=1)
+def _latest_trade() -> str | None:
     d = _cur().execute("SELECT max(trade_date) FILTER (WHERE trade_date <= current_date) FROM trades").fetchone()[0]
-    return {"latest_trade": d.isoformat() if d else None}
+    return d.isoformat() if d else None
 
 
 @app.get("/api/stats")
