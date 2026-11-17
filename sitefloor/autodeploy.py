@@ -1,14 +1,16 @@
-"""自動部署：GitHub 上有新程式就 pull → 重建受影響的資料 → 部署前檢查 → 部署 → 推播結果。
+"""自動部署：GitHub 上有新程式就 pull → 等連續 push 結束 → 重建受影響的資料 → 部署前檢查 → 部署 → 推播結果。
 
 由排程每 5 分鐘執行一次（scripts/install_schedule.sh），放在存放最新資料的那台電腦上；
 每週資料更新（update.py）成功後也呼叫 deploy_and_record() 直接部署。
 - 和上次部署的 commit（data/state/deployed.json）比對，沒有新 commit 就什麼都不做
+- 最新的 commit 推上來滿 QUIET_S 秒、期間沒有更新的 commit 才部署：連續 push 時合併成一次部署
+  （Vercel 每次部署都會用掉一些 CPU 時間額度；--force 不等）
 - 依改到的檔案決定要重建什麼（rebuild_steps）；改到其他建庫程式時只部署程式，資料等每週更新重建
 - 部署失敗只通知一次（同一個 commit 不重試）；修好再 push 新 commit 就會重新部署
 - 和每週更新共用一把鎖（pipeline_lock），不會同時寫資料庫
 
 用法：uv run python -m sitefloor.autodeploy           檢查並部署
-      uv run python -m sitefloor.autodeploy --force   不管有沒有新 commit 都重新部署
+      uv run python -m sitefloor.autodeploy --force   不管有沒有新 commit、commit 多新都馬上部署
 """
 
 import fcntl
@@ -29,6 +31,7 @@ SERVE_DIR = ROOT / "data" / "serve"
 NAMES_FILES = {"sitefloor/names.py", "curated/building_names.csv"}
 STATS_FILES = {"sitefloor/stats.py"}
 EXPORT_FILES = {"sitefloor/export.py"}
+QUIET_S = 30 * 60  # 最新 commit 至少這麼久沒有新的 commit 才部署
 
 
 @contextmanager
@@ -53,6 +56,12 @@ def git(*a: str) -> subprocess.CompletedProcess:
 
 def head() -> str:
     return git("rev-parse", "HEAD").stdout.strip()
+
+
+def commit_age(rev: str) -> float:
+    """commit 距今幾秒（以 commit 時間計；讀不到時當成很久以前）。"""
+    t = git("log", "-1", "--format=%ct", rev).stdout.strip()
+    return time.time() - int(t) if t.isdigit() else float("inf")
 
 
 def load_state() -> dict:
@@ -160,6 +169,8 @@ def main(argv: list[str]) -> int:
         st, now = load_state(), head()
         if "--force" not in argv and now in (st.get("commit"), st.get("failed")):
             return 0  # 沒有新的 commit：不寫紀錄（每 5 分鐘一次，紀錄會被灌滿）
+        if "--force" not in argv and commit_age(now) < QUIET_S:
+            return 0  # 剛 push：等一陣子沒有新的 commit 再一起部署
         files = changed_files(st.get("commit"), now)
         steps = rebuild_steps(files)
         if not SERVE_DIR.exists() and "export" not in steps:

@@ -1,7 +1,7 @@
 #!/bin/zsh
 # 安裝／移除排程（macOS launchd），裝在存放最新資料的那台電腦上：
 # - 每週一 09:00 資料更新：python -m sitefloor.update（成功就自動部署）   紀錄：data/logs/update.log
-# - 每 5 分鐘自動部署：GitHub 有新程式就重建受影響的資料並部署（python -m sitefloor.autodeploy）
+# - 每 5 分鐘自動部署：GitHub 有新程式、且 30 分鐘內沒有更新的 commit，就重建受影響的資料並部署（python -m sitefloor.autodeploy）
 #                                                                      紀錄：data/logs/autodeploy.log
 # 用法：scripts/install_schedule.sh          安裝（重複執行會覆蓋）
 #       scripts/install_schedule.sh remove   移除
