@@ -22,6 +22,7 @@ def _setup(monkeypatch, tmp_path, now="c2", files=None):
     monkeypatch.setattr(autodeploy, "head", lambda: now)
     monkeypatch.setattr(autodeploy, "changed_files", lambda old, new: files if old else None)
     monkeypatch.setattr(autodeploy, "subjects", lambda old, new: [f"{new} 改了東西"])
+    monkeypatch.setattr(autodeploy, "commit_age", lambda rev: autodeploy.QUIET_S + 1)
     calls = {"steps": [], "deploys": 0, "notes": []}
     monkeypatch.setattr(update, "run_step", lambda s, log, counties=None: calls["steps"].append(s))
     monkeypatch.setattr(update, "notify", lambda title, msg, priority=3: calls["notes"].append(title))
@@ -70,3 +71,19 @@ def test_blocked_pull_notifies_once(monkeypatch, tmp_path):
     assert autodeploy.main([]) == 1
     assert autodeploy.main([]) == 1
     assert calls["notes"] == ["建物查詢平台：無法自動部署"]
+
+
+def test_waits_for_quiet_period(monkeypatch, tmp_path):
+    calls = _setup(monkeypatch, tmp_path, files=["app/static/index.html"])
+    autodeploy.save_state(commit="c1")
+    monkeypatch.setattr(autodeploy, "commit_age", lambda rev: 60)  # 剛 push
+
+    def ok():
+        calls["deploys"] += 1
+        return True, ""
+
+    monkeypatch.setattr(autodeploy, "deploy", ok)
+    assert autodeploy.main([]) == 0
+    assert calls["deploys"] == 0 and not calls["notes"]  # 先不部署，也不通知
+    assert autodeploy.main(["--force"]) == 0
+    assert calls["deploys"] == 1  # --force 不等
