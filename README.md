@@ -150,7 +150,10 @@ data/raw/              原始資料（不進版控）
 | 實價登錄本期、新季檔 | 下載站的修改時間；季檔試下一季 | 自動下載 → trades 之後全部重跑 |
 | 臺北市實價週報、使用執照 | data.gov.tw 資料集更新時間 | 自動下載重跑 |
 | OpenStreetMap | Geofabrik 的修改時間 | 自動下載 → osm 之後重跑 |
-| 各縣市門牌點位、臺中／臺北建物圖 | data.gov.tw 資料集更新時間 | 只在報告列出，要手動更新 |
+| 只有門牌點位的 15 個縣市（`fetch_addr.DATASETS`） | data.gov.tw 資料集更新時間 | 自動下載 → 重建該縣市門牌 → 之後全部重跑 |
+| 人工校正樓層表、建物名稱別名 | 本機檔案修改時間 | curated、osm 之後重跑 |
+| 臺中／臺北門牌與建物圖 | data.gov.tw 資料集更新時間 | 只在報告列出，要手動更新 |
+| 災害潛勢（淹水、地質敏感區、土石流、土壤液化）、消防分隊、消防栓 | data.gov.tw 資料集更新時間 | 只在報告列出，手動下載到 `data/raw/hazards/` 後重跑 `sitefloor.risk` |
 
 - `--check` 只檢查不下載；`--force` 全部重跑。版本紀錄在 `data/state/sources.json`。
 - 排程（裝在存放最新資料的那台電腦，要先 `vercel login`）：`zsh scripts/install_schedule.sh`（移除：加 `remove`）。每週一 09:00 資料更新（紀錄 `data/logs/update.log`）；每 5 分鐘 `sitefloor.autodeploy` 檢查 GitHub 有沒有新程式，有就 pull；最新的 commit 滿 30 分鐘沒有新的 commit 才依改到的檔案重建資料（名稱別名、統計、人工校正等；其他建庫程式的改動等每週更新重建）、部署並推播（連續 push 合併成一次部署，省 Vercel 的 CPU 時間額度；急著上線可在那台電腦跑 `uv run python -m sitefloor.autodeploy --force`。紀錄 `data/logs/autodeploy.log`；上次部署的 commit 記在 `data/state/deployed.json`，同一個 commit 失敗只通知一次）。兩個排程共用一把鎖，不會同時寫資料庫。

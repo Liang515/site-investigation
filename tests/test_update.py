@@ -84,6 +84,24 @@ def test_addr_auto_rebuild(monkeypatch, tmp_path):
     assert called == []
 
 
+def test_hazard_watch_only(monkeypatch, tmp_path):
+    """災害潛勢圖資有新版：只列為手動，不重跑任何步驟。"""
+    from sitefloor import update
+
+    monkeypatch.setattr(update, "head_token", lambda url, tries=2: "same")
+    monkeypatch.setattr(update, "new_seasons", list)
+    monkeypatch.setattr(update, "ROOT", tmp_path)
+    state = {"plvr_current": "same", "osm": "same", "tp_weekly": "v1",
+             **{f"watch:{ds}": "v1" for ds in update.WATCH_ONLY.values()},
+             **{f"permit:{n}": "v1" for n in update.PERMITS}}
+    flood = update.WATCH_ONLY["淹水潛勢圖"]
+    monkeypatch.setattr(update, "datagov_modified", lambda ds: "v2" if ds == flood else "v1")
+
+    new, steps, notes, manual = update.check_sources(state, force=False)
+    assert steps == set() and notes == []
+    assert any("淹水潛勢圖" in m for m in manual) and new[f"watch:{flood}"] == "v2"
+
+
 def test_fetch_addr_replaces_only_on_success(monkeypatch, tmp_path):
     import json
 
