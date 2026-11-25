@@ -83,6 +83,11 @@ def changed_files(old: str | None, new: str) -> list[str] | None:
     return [f for f in git("diff", "--name-only", old, new).stdout.splitlines() if f]
 
 
+def same_tree(old: str | None, new: str) -> bool:
+    """兩個 commit 的檔案內容完全一樣（例如 force push 改寫歷史後）。"""
+    return bool(old) and git("diff", "--quiet", old, new).returncode == 0
+
+
 def rebuild_steps(files: list[str] | None) -> list[str]:
     """要重跑的建庫步驟（照 update.PIPELINE 的順序；names、stats、export 在最後）。files=None：不確定，重建便宜的那幾步。"""
     from sitefloor.update import NEEDS, PIPELINE
@@ -135,7 +140,11 @@ def pull(argv: list[str]) -> str | None:
     before = head()
     r = git("pull", "--ff-only", "--quiet")
     if r.returncode != 0:
-        return f"git pull 失敗：{(r.stderr or r.stdout).strip()[:200]}"
+        # GitHub 的歷史被改寫（force push，例如改作者 email）但內容完全一樣：直接對齊 GitHub
+        if git("diff", "--quiet", "HEAD", "@{u}").returncode == 0:
+            r = git("reset", "--hard", "--quiet", "@{u}")
+        if r.returncode != 0:
+            return f"git pull 失敗：{(r.stderr or r.stdout).strip()[:200]}"
     if head() != before:
         if uv := shutil.which("uv"):
             subprocess.run([uv, "sync", "--quiet"], cwd=ROOT, check=False)
@@ -169,6 +178,9 @@ def main(argv: list[str]) -> int:
         st, now = load_state(), head()
         if "--force" not in argv and now in (st.get("commit"), st.get("failed")):
             return 0  # 沒有新的 commit：不寫紀錄（每 5 分鐘一次，紀錄會被灌滿）
+        if "--force" not in argv and same_tree(st.get("commit"), now):
+            save_state(commit=now)  # 歷史改寫過、內容和已部署的一樣：不用重新部署
+            return 0
         if "--force" not in argv and commit_age(now) < QUIET_S:
             return 0  # 剛 push：等一陣子沒有新的 commit 再一起部署
         files = changed_files(st.get("commit"), now)
