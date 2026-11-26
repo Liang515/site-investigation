@@ -500,7 +500,8 @@ def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
         out["note"] = "；".join(x for x in (f"「{named[0]}」→ {named[1]}", out.get("note")) if x)
     if not _na(r.tlvl) and out["county"]:
         base = r.get("base_q", r.base) if r.tlvl == 2 else r.base_main
-        town = r.town_q if isinstance(r.town_q, str) else ""
+        # 沒寫鄉鎮市區但查到了是哪一區：用查到的區，避免列入同縣市別區的同名門牌
+        town = out.get("town") or (r.town_q if isinstance(r.town_q, str) else "")
         out["trades"] = trade_records(con, pd.DataFrame({"county": [out["county"]], "town": [town], "base": [base]}))
         out["trades_base"] = base
     return out
@@ -518,6 +519,8 @@ JOIN trades t ON t.county = d.county AND t.base = d.base AND (d.town = '' OR t.t
 WHERE t.kind IN ('買賣', '預售屋') AND t.total_price IS NOT NULL
 QUALIFY row_number() OVER (PARTITION BY t.base, t.trade_date, t.floor, round(t.total_price / 1e4)
                            ORDER BY t.source = '實價登錄' DESC) = 1
+    -- 沒寫鄉鎮市區：同縣市不同區都有這個門牌時分不出是哪一區，不列
+    AND (d.town <> '' OR count(DISTINCT t.town) OVER (PARTITION BY d.county, d.base) <= 1)
 ORDER BY t.trade_date DESC NULLS LAST, t.base, t.floor
 LIMIT {TRADE_RECORDS_MAX}
 """
