@@ -336,14 +336,13 @@ def _dashboard(county: str, town: str) -> dict | None:
         d["base"] = base
         return d
 
-    latest = cur.execute("SELECT max(trade_date) FILTER (WHERE trade_date <= current_date) FROM trades").fetchall()[0][0]
     rank = {c: i for i, c in enumerate(COUNTY_ORDER)}
     towns = [t for (t,) in cur.execute("SELECT town FROM stats_risk WHERE county = ? AND town <> '' ORDER BY doors DESC",
                                        [area[0]]).fetchall()] if area[0] != stats.NATION else []
     return {
         "county": area[0], "town": area[1], "parent": list(parent) if parent else None,
         "counties": sorted(county_doors, key=lambda c: rank.get(c, 99)), "towns": towns,
-        "latest_trade": latest.isoformat() if latest else None,
+        "latest_trade": _latest_trade(),  # 已快取；不必每個區域重掃一次成交表
         "groups": stats.GROUPS, "buckets": stats.BUCKETS, "fire_far_m": stats.FIRE_FAR_M,
         "price": series(area, True), "parent_price": series(parent, False) if parent else None,
         "bldg": {dim: [[b, bldg.get(dim, {}).get(b, 0)] for b in order] for dim, order in stats.BUCKETS.items()},
@@ -417,6 +416,7 @@ def _has_column(table: str, col: str) -> bool:
                                [table, col]).fetchone()[0])
 
 
+@lru_cache(maxsize=32)  # 部署後資料表固定不變
 def _has_table(name: str) -> bool:
     return bool(_cur().execute(
         "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [name]).fetchone()[0])
