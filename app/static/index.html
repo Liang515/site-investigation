@@ -729,7 +729,7 @@ async function tradeChart(cardEl, r) {
   const ok = (r.trades || []).filter(t => t.unit_price > 0 && !t.special && t.grp && t.trade_date);
   if (!box || ok.length < MIN_TREND) return;
   let charts;
-  try { charts = await import("/charts.js?v=1"); } catch { return; }
+  try { charts = await import("/charts.js?v=2"); } catch { return; }
   const grp = Object.entries(ok.reduce((a, t) => (a[t.grp] = (a[t.grp] || 0) + 1, a), {})).sort((a, b) => b[1] - a[1])[0][0];
   const pts = ok.filter(t => t.grp === grp).map(t => [charts.ms(t.trade_date), t.unit_price * M2_PER_PING]);
   const byYear = {};

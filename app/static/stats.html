@@ -116,7 +116,7 @@
   </section>
 </main>
 <script type="module">
-import { lineChart, barChart, ms, wan } from "/charts.js?v=1";
+import { lineChart, barChart, clearChart, ms, wan } from "/charts.js?v=2";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -139,17 +139,22 @@ const pct = (a, b) => b ? a / b * 100 : null;
 const fmtPct = v => v == null ? "—" : v < 1 && v > 0 ? `${v.toFixed(1)}%` : `${Math.round(v)}%`;
 const areaName = (c, t) => t || c;
 
+let loadSeq = 0;
 async function load() {
+  const seq = ++loadSeq;  // 快速切換區域時，較慢的舊回應不蓋掉新的
   const q = new URLSearchParams();
   if (state.county) q.set("county", state.county);
   if (state.town) q.set("town", state.town);
-  const r = await fetch(`/api/dashboard?${q}`);
-  if (!r.ok) {
+  const r = await fetch(`/api/dashboard?${q}`).catch(() => null);
+  if (seq !== loadSeq) return;
+  if (!r?.ok) {
     if (state.county) { state = { ...state, county: "", town: "" }; return load(); }
     document.querySelector("main").insertAdjacentHTML("beforeend", `<p class="empty">統計資料暫時無法取得</p>`);
     return;
   }
-  data = await r.json();
+  const d = await r.json();
+  if (seq !== loadSeq) return;
+  data = d;
   if (!data.groups.includes(state.grp)) state.grp = "全部";  // 網址帶進來的 grp 只接受已知房型
   if (!load.sent) { load.sent = true; navigator.sendBeacon?.("/api/event", "stats"); }  // 使用統計：開啟一次記一次，換區域不算
   syncUrl();
@@ -161,7 +166,8 @@ function syncUrl() {
   const q = new URLSearchParams();
   for (const k of ["county", "town"]) if (state[k]) q.set(k, state[k]);
   if (state.grp !== "全部") q.set("grp", state.grp);
-  history.replaceState(null, "", `${location.pathname}${q.size ? `?${q}` : ""}`);
+  const qs = q.toString();  // 不用 q.size：Safari 17 以前沒有
+  history.replaceState(null, "", `${location.pathname}${qs ? `?${qs}` : ""}`);
 }
 
 function renderArea() {
@@ -191,8 +197,8 @@ function renderPrice() {
   const ok = rows.filter(r => r[1] >= MIN_N);
   if (!ok.length) {
     $("kpis").innerHTML = ""; $("legend").innerHTML = "";
-    $("priceChart").innerHTML = `<p class="empty">這個區域的${state.grp === "全部" ? "住宅" : esc(state.grp)}成交太少，沒有足夠資料</p>`;
-    $("volChart").innerHTML = "";
+    clearChart($("priceChart"), `<p class="empty">這個區域的${state.grp === "全部" ? "住宅" : esc(state.grp)}成交太少，沒有足夠資料</p>`);
+    clearChart($("volChart"));
     return;
   }
   $("priceChart").innerHTML = "";
@@ -209,7 +215,7 @@ function renderPrice() {
   const chg = (a, b) => a && b ? (a / b - 1) * 100 : null;
   const sign = v => v == null ? "—" : `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
   const c5 = chg(last?.[3], back?.[3]), pc5 = chg(pLast?.[2], pBack?.[2]);
-  const prev = full.at(-2), vol = chg(last?.[1], prev?.[1]);
+  const prev = full.find(r => +r[0].slice(0, 4) === y - 1), vol = chg(last?.[1], prev?.[1]);  // 前一年資料不足時不比
   $("kpis").innerHTML = last ? `
     <div class="kpi"><div class="l">${y} 年中位數</div><div class="v">${wan(last[3])}<span style="font-size:13px;font-weight:400"> / 坪</span></div>
       <div class="l">${last[1].toLocaleString()} 筆${pLast ? ` · ${esc(pname)} ${wan(pLast[2])}` : ""}</div></div>
@@ -247,7 +253,9 @@ function renderRisk() {
   const pname = data.parent ? areaName(...data.parent) : null;
   $("riskSub").textContent = `${r.doors.toLocaleString()} 個門牌落在各潛勢範圍內的比例` + (pname ? `；黑線為${pname}` : "");
   const rows = RISK_ROWS.map(([k, label]) => [label, r[k] == null ? null : pct(r[k], r.base[k]), p && p[k] != null ? pct(p[k], p.base[k]) : null]);
-  rows.push([`離最近消防隊超過 ${data.fire_far_m / 1000} 公里`, pct(r.fire_far, r.doors), p ? pct(p.fire_far, p.doors) : null]);
+  // 沒有消防隊距離（fire_m 空白）＝此區無圖資，不顯示成 0%
+  rows.push([`離最近消防隊超過 ${data.fire_far_m / 1000} 公里`, r.fire_m == null ? null : pct(r.fire_far, r.doors),
+             p?.fire_m != null ? pct(p.fire_far, p.doors) : null]);
   const max = Math.max(5, ...rows.flatMap(([, a, b]) => [a ?? 0, b ?? 0]));
   $("risk").innerHTML = rows.map(([label, a, b]) => `<div class="row"><span>${esc(label)}</span>`
     + (a == null ? `<span class="na">此區無圖資</span><span></span>`

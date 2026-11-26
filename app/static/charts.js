@@ -99,7 +99,7 @@ export function lineChart(host, series, opts = {}) {
       const x = allX.reduce((a, b) => Math.abs(sx(b) - px) < Math.abs(sx(a) - px) ? b : a);
       const rows = series.filter(s => !s.dots && s.name).map(s => {
         const p = s.points.find(q => q[0] === x);
-        return p ? `<span style="color:${s.color}">●</span> ${s.name}：${(opts.tipFmt || opts.yFmt || String)(p[1], p)}` : null;
+        return p ? `<span style="color:${s.color}">●</span> ${escHtml(s.name)}：${(opts.tipFmt || opts.yFmt || String)(p[1], p)}` : null;
       }).filter(Boolean);
       if (!rows.length) return;
       guide.setAttribute("x1", sx(x)); guide.setAttribute("x2", sx(x)); guide.setAttribute("visibility", "visible");
@@ -162,6 +162,15 @@ export function barChart(host, bars, opts = {}) {
   draw();
   watchWidth(host, draw);
 }
+
+// 清掉圖表（例：切到沒有資料的分類）：停止監看寬度，否則視窗縮放時會把舊圖表畫回來
+export function clearChart(host, html = "") {
+  host._ro?.disconnect();
+  host._ro = null;
+  host.innerHTML = html;
+}
+
+const escHtml = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 function watchWidth(host, draw) {
   host._ro?.disconnect();
