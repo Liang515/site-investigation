@@ -150,6 +150,7 @@ async function load() {
     return;
   }
   data = await r.json();
+  if (!data.groups.includes(state.grp)) state.grp = "全部";  // 網址帶進來的 grp 只接受已知房型
   if (!load.sent) { load.sent = true; navigator.sendBeacon?.("/api/event", "stats"); }  // 使用統計：開啟一次記一次，換區域不算
   syncUrl();
   document.title = `${areaName(data.county, data.town)} 區域統計 — 建物查詢平台`;
@@ -182,7 +183,7 @@ function faintFrom(rows, per) {
 }
 
 function renderPrice() {
-  $("grp").innerHTML = data.groups.map(g => `<button data-v="${g}" class="${g === state.grp ? "on" : ""}">${g}</button>`).join("");
+  $("grp").innerHTML = data.groups.map(g => `<button data-v="${esc(g)}" class="${g === state.grp ? "on" : ""}">${esc(g)}</button>`).join("");
   document.querySelectorAll("#per button").forEach(b => b.classList.toggle("on", b.dataset.v === state.per));
   const rows = data.price[state.grp]?.[state.per] || [];
   const prow = data.parent_price?.[state.grp]?.[state.per] || [];
@@ -190,7 +191,7 @@ function renderPrice() {
   const ok = rows.filter(r => r[1] >= MIN_N);
   if (!ok.length) {
     $("kpis").innerHTML = ""; $("legend").innerHTML = "";
-    $("priceChart").innerHTML = `<p class="empty">這個區域的${state.grp === "全部" ? "住宅" : state.grp}成交太少，沒有足夠資料</p>`;
+    $("priceChart").innerHTML = `<p class="empty">這個區域的${state.grp === "全部" ? "住宅" : esc(state.grp)}成交太少，沒有足夠資料</p>`;
     $("volChart").innerHTML = "";
     return;
   }

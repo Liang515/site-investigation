@@ -415,6 +415,21 @@ def _has_table(name: str) -> bool:
         "SELECT count(*) FROM information_schema.tables WHERE table_name = ?", [name]).fetchone()[0])
 
 
+MAX_BLDG_SPAN = 0.25  # 建物圖層的畫面範圍上限（度）；前端 zoom 15.5 以上才請求，正常畫面遠小於此
+
+
+def _parse_bbox(bbox: str, span: float) -> tuple[float, float, float, float] | None:
+    """解析 minlon,minlat,maxlon,maxlat。格式錯誤回 400；範圍顛倒、非有限數或超過 span 度回 None（呼叫端回空集合）。"""
+    try:
+        x0, y0, x1, y1 = map(float, bbox.split(","))
+    except ValueError:
+        raise HTTPException(400, "bbox 格式錯誤") from None
+    if not all(map(math.isfinite, (x0, y0, x1, y1))) or not (x0 < x1 and y0 < y1) \
+            or x1 - x0 > span or y1 - y0 > span:
+        return None
+    return x0, y0, x1, y1
+
+
 def _feature(i: int, geom: dict, **props) -> dict:
     return {"type": "Feature", "id": i, "properties": props, "geometry": geom}
 
@@ -426,7 +441,10 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     高度：一律 樓層×3.2m（樓層：實價優先，其次 OSM building:levels／建物圖）；不知道樓層才用 OSM height。
     例外：OSM 分棟（building:part）各用自己的高度；有手工模型的地標（sitefloor/models.py）
     與人工校正有填 height_m 的（一層很高的場館）用真實高度。"""
-    x0, y0, x1, y1 = map(float, bbox.split(","))
+    xy = _parse_bbox(bbox, MAX_BLDG_SPAN)
+    if xy is None:
+        return {"type": "FeatureCollection", "features": [], "too_large": True}
+    x0, y0, x1, y1 = xy
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
     real_h: dict[str, float] = {}
@@ -535,12 +553,10 @@ MAX_ZONE_SPAN = 0.25  # 畫面範圍上限（度）；太大時前端請使用�
 def api_hazards(kind: str = Query(...), bbox: str = Query(..., description="minlon,minlat,maxlon,maxlat")):
     if kind not in HAZARD_KINDS:
         raise HTTPException(400, "未知的圖層")
-    try:
-        x0, y0, x1, y1 = map(float, bbox.split(","))
-    except ValueError:
-        raise HTTPException(400, "bbox 格式錯誤") from None
-    if not (x0 < x1 and y0 < y1) or x1 - x0 > MAX_ZONE_SPAN or y1 - y0 > MAX_ZONE_SPAN:
+    xy = _parse_bbox(bbox, MAX_ZONE_SPAN)
+    if xy is None:
         return {"type": "FeatureCollection", "features": [], "too_large": True}
+    x0, y0, x1, y1 = xy
     if not _has_table("hazard_zones"):
         return {"type": "FeatureCollection", "features": []}
     rows = _cur().execute(f"""

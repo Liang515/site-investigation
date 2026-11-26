@@ -300,9 +300,10 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
   attributionControl: { compact: true },
   locale: { "GeolocateControl.FindMyLocation": "移到我的位置", "GeolocateControl.LocationNotAvailable": "無法取得位置" },
 });
-map.addControl(new maplibregl.NavigationControl());
-// ── 定位：移到使用者所在位置（位置只在瀏覽器裡用，不送到伺服器） ──
+// ── 縮放鈕與定位（移到使用者所在位置；位置只在瀏覽器裡用，不送到伺服器） ──
+// CDN 載入失敗時 maplibregl 是 undefined，控制項一律放在 MAP_OK 裡
 if (MAP_OK) {
+  map.addControl(new maplibregl.NavigationControl());
   const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 10000 },
                                                 showAccuracyCircle: true });
   map.addControl(geo);

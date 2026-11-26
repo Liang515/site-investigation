@@ -60,7 +60,7 @@ export function lineChart(host, series, opts = {}) {
       el("text", { x: PAD.l - 6, y: sy(v) + 4, "text-anchor": "end", fill: "#64748b" }, svg).textContent = (opts.yFmt || String)(v);
     }
     // x 軸：年份刻度（太密就隔年）
-    const ya = new Date(x0).getFullYear(), yb = new Date(x1).getFullYear();
+    const ya = new Date(x0).getUTCFullYear(), yb = new Date(x1).getUTCFullYear();
     const every = Math.max(1, Math.ceil((yb - ya + 1) / Math.max(2, Math.floor((W - PAD.l) / 48))));
     for (let y = ya; y <= yb + 1; y += every) {
       const x = Date.UTC(y, 0, 1);
@@ -103,7 +103,7 @@ export function lineChart(host, series, opts = {}) {
       }).filter(Boolean);
       if (!rows.length) return;
       guide.setAttribute("x1", sx(x)); guide.setAttribute("x2", sx(x)); guide.setAttribute("visibility", "visible");
-      tip.innerHTML = `<b>${(opts.xFmt || (v => new Date(v).getFullYear()))(x)}</b><br>${rows.join("<br>")}`;
+      tip.innerHTML = `<b>${(opts.xFmt || (v => new Date(v).getUTCFullYear()))(x)}</b><br>${rows.join("<br>")}`;
       tip.style.display = "block";
       const left = sx(x) / W * rect.width;
       tip.style.left = `${Math.min(Math.max(left - tip.offsetWidth / 2, 0), rect.width - tip.offsetWidth)}px`;
@@ -141,7 +141,7 @@ export function barChart(host, bars, opts = {}) {
       const r = el("rect", { x: PAD.l + i * bw + bw * 0.15, width: Math.max(bw * 0.7, 1), y: sy(n), height: sy(0) - sy(n),
         fill: faint ? "#fff" : (opts.color || "#94a3b8"), stroke: faint ? (opts.color || "#94a3b8") : null, rx: 1.5 }, svg);
       const show = () => {
-        tip.innerHTML = `<b>${(opts.xFmt || (v => new Date(v).getFullYear()))(x)}</b><br>${n.toLocaleString()} 筆${faint ? "（資料未齊）" : ""}`;
+        tip.innerHTML = `<b>${(opts.xFmt || (v => new Date(v).getUTCFullYear()))(x)}</b><br>${n.toLocaleString()} 筆${faint ? "（資料未齊）" : ""}`;
         tip.style.display = "block";
         const rect = svg.getBoundingClientRect(), left = (PAD.l + (i + 0.5) * bw) / W * rect.width;
         tip.style.left = `${Math.min(Math.max(left - tip.offsetWidth / 2, 0), rect.width - tip.offsetWidth)}px`;
@@ -150,7 +150,7 @@ export function barChart(host, bars, opts = {}) {
       r.addEventListener("pointerenter", show);
       r.addEventListener("pointerdown", show);
       r.addEventListener("pointerleave", () => { tip.style.display = "none"; });
-      const y = new Date(x).getFullYear(), cx = PAD.l + (i + 0.5) * bw;
+      const y = new Date(x).getUTCFullYear(), cx = PAD.l + (i + 0.5) * bw;
       if (y !== lastYear && cx - lastLabel >= 34) {  // 年份標籤至少隔 34px，太密就跳過
         el("text", { x: bars.length > 16 ? PAD.l + i * bw : cx, y: H - 6, "text-anchor": bars.length > 16 ? "start" : "middle",
           fill: "#64748b" }, svg).textContent = y;

@@ -12,7 +12,7 @@ vercel deploy --prod --yes
 
 # 部署清單由新到舊；第 KEEP+1 個之後的刪掉（正式站一定是最新的那個）
 old=$(vercel ls site-investigation 2>/dev/null \
-  | grep -oE "https://site-investigation-[a-z0-9]+-[a-z0-9-]+\.vercel\.app" | awk '!seen[$0]++' | tail -n +$((KEEP + 1)))
+  | grep -oE "https://site-investigation-[a-z0-9]+-[a-z0-9-]+\.vercel\.app" | awk '!seen[$0]++' | tail -n +$((KEEP + 1)) || true)  # 清單抓不到網址時不算部署失敗
 for u in ${(f)old}; do
   [[ -n "$u" ]] && vercel rm "$u" --yes >/dev/null && echo "已刪除舊部署 $u"
 done
