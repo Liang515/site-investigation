@@ -1,4 +1,5 @@
 """本機查詢介面。啟動：uv run uvicorn app.server:app --port 8765"""
+import asyncio
 import io
 import json
 import math
@@ -195,6 +196,14 @@ async def api_feedback(request: Request):
     cfg = _feedback_config()
     if not (cfg["github_repo"] and cfg["github_token"]) and not cfg["ntfy_topic"]:
         raise HTTPException(503, "回報功能尚未設定")
+    # 送 GitHub、ntfy 是阻塞的網路請求（最長各 15 秒），放到執行緒裡跑，不卡住其他請求
+    if not await asyncio.to_thread(_send_feedback, fb, cfg):
+        raise HTTPException(502, "暫時無法送出，請稍後再試")
+    return {"ok": True}
+
+
+def _send_feedback(fb: dict, cfg: dict) -> int:
+    """回報送到 GitHub Issue、ntfy；回傳成功送出的管道數。"""
     msg = feedback.summary(fb)
     print("[feedback]", msg.replace("\n", " | "))  # 也留在部署紀錄
     sent = 0
@@ -214,9 +223,7 @@ async def api_feedback(request: Request):
             sent += 1
         except OSError as e:
             print("[feedback] ntfy 推播失敗：", e)
-    if not sent:
-        raise HTTPException(502, "暫時無法送出，請稍後再試")
-    return {"ok": True}
+    return sent
 
 
 @app.post("/api/event", status_code=204)
@@ -840,14 +847,30 @@ async def api_batch(file: UploadFile, column: str | None = None):
     raw = await file.read(BATCH_MAX_BYTES + 1)
     if len(raw) > BATCH_MAX_BYTES:
         raise HTTPException(413, f"檔案太大，上限 {BATCH_MAX_BYTES // 1024 // 1024} MB")
-    name = file.filename or "input"
-    if name.lower().endswith((".xlsx", ".xls")):
-        df = pd.read_excel(io.BytesIO(raw), dtype=str)
-    else:
-        try:
-            df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="utf-8-sig")
-        except UnicodeDecodeError:
-            df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="cp950")
+    # 讀檔、查詢、寫 Excel 都是阻塞的運算，放到執行緒裡跑，不卡住其他請求
+    return await asyncio.to_thread(_batch, raw, file.filename or "input", column)
+
+
+def _read_table(raw: bytes, name: str) -> pd.DataFrame:
+    """讀上傳的 Excel／CSV；讀不了或沒有欄位回 400。"""
+    try:
+        if name.lower().endswith((".xlsx", ".xls")):
+            df = pd.read_excel(io.BytesIO(raw), dtype=str)
+        else:
+            try:
+                df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                df = pd.read_csv(io.BytesIO(raw), dtype=str, encoding="cp950")
+    except Exception as e:  # noqa: BLE001 — 壞檔的例外種類很多（zip、xlrd、CSV 解析、編碼）
+        print("[batch] 讀檔失敗：", type(e).__name__, e)
+        raise HTTPException(400, "無法讀取檔案，請確認是 Excel（.xlsx）或 CSV") from None
+    if df.columns.empty:
+        raise HTTPException(400, "檔案裡沒有資料")
+    return df
+
+
+def _batch(raw: bytes, name: str, column: str | None) -> StreamingResponse:
+    df = _read_table(raw, name)
     if len(df) > BATCH_MAX_ROWS:
         raise HTTPException(413, f"一次最多 {BATCH_MAX_ROWS:,} 筆，這個檔案有 {len(df):,} 筆，請分批上傳")
     col = column or _guess_col(df)
