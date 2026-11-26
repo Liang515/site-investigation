@@ -65,3 +65,13 @@ def test_feedback_posts_off_event_loop(monkeypatch):
 
     res, loop_thread = asyncio.run(run())
     assert res == {"ok": True} and seen and seen[0] is not loop_thread
+
+
+def test_vendor_files():
+    r = server.vendor("maplibre-gl-6.16.0", "maplibre-gl.mjs")
+    assert r.media_type == "text/javascript" and "immutable" in r.headers["cache-control"]
+    assert server.vendor("maplibre-gl-6.16.0", "maplibre-gl.css").media_type == "text/css"
+    for pkg, name in [("maplibre-gl-6.16.0", "LICENSE.txt"), ("..", "server.py"), ("maplibre-gl-6.16.0", "nope.mjs"),
+                      ("..", "charts.mjs")]:
+        with pytest.raises(HTTPException):
+            server.vendor(pkg, name)

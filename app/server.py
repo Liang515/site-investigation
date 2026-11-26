@@ -283,6 +283,22 @@ def charts_js():
                         headers={"Cache-Control": "public, max-age=3600"})
 
 
+# 前端函式庫（MapLibre）自己放：不依賴第三方 CDN 的可用性與完整性。路徑帶版本號，內容固定，
+# 瀏覽器快取一年、Vercel CDN 也快取（每次部署每個區域只有第一次會執行到這裡）
+VENDOR = STATIC / "vendor"
+VENDOR_TYPES = {".mjs": "text/javascript", ".css": "text/css"}
+
+
+@app.get("/vendor/{pkg}/{name}", include_in_schema=False)
+def vendor(pkg: str, name: str):
+    f = VENDOR / pkg / name
+    if f.suffix not in VENDOR_TYPES or f.resolve().parent.parent != VENDOR.resolve() or not f.is_file():
+        raise HTTPException(404)
+    return FileResponse(f, media_type=VENDOR_TYPES[f.suffix],
+                        headers={"Cache-Control": "public, max-age=31536000, immutable",
+                                 "Vercel-CDN-Cache-Control": "max-age=31536000"})
+
+
 @app.get("/stats")
 def stats_page():
     return FileResponse(STATIC / "stats.html")

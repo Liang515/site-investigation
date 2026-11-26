@@ -9,7 +9,7 @@
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>建物查詢平台</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.css">
+<link rel="stylesheet" href="/vendor/maplibre-gl-6.16.0/maplibre-gl.css">
 <style>
   :root {
     --bg: #f5f7fa; --panel: #ffffff; --ink: #1e293b; --muted: #64748b; --line: #e2e8f0; --soft: #f1f5f9;
@@ -223,9 +223,9 @@
 
 <script type="module">
 // MapLibre 6（ES module）：4.x 在 Safari 27 會不斷 WebGL context lost，6.12+ 修了 GPU 程序掛掉的處理
-// 動態載入：CDN 失敗時只有地圖顯示說明，查詢照常
+// 動態載入（檔案在 app/static/vendor/）：載入失敗時只有地圖顯示說明，查詢照常
 let maplibregl;
-try { maplibregl = await import("https://unpkg.com/maplibre-gl@6.16.0/dist/maplibre-gl.mjs"); }
+try { maplibregl = await import("/vendor/maplibre-gl-6.16.0/maplibre-gl.mjs"); }
 catch (e) { console.error("MapLibre 載入失敗", e); }
 
 const RAMP = [[1, "#d9e6f2"], [3, "#a9c6e3"], [6, "#6f9fd0"], [13, "#3a6fb3"], [21, "#7a3fa0"], [31, "#c2185b"]];
@@ -304,7 +304,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
   locale: { "GeolocateControl.FindMyLocation": "移到我的位置", "GeolocateControl.LocationNotAvailable": "無法取得位置" },
 });
 // ── 縮放鈕與定位（移到使用者所在位置；位置只在瀏覽器裡用，不送到伺服器） ──
-// CDN 載入失敗時 maplibregl 是 undefined，控制項一律放在 MAP_OK 裡
+// MapLibre 載入失敗時 maplibregl 是 undefined，控制項一律放在 MAP_OK 裡
 if (MAP_OK) {
   map.addControl(new maplibregl.NavigationControl());
   const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 10000 },
