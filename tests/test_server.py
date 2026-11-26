@@ -41,7 +41,8 @@ def _upload(name: str, raw: bytes) -> UploadFile:
     return UploadFile(file=io.BytesIO(raw), filename=name)
 
 
-@pytest.mark.parametrize("name,raw", [("壞.xlsx", b"not a zip"), ("空.csv", b""), ("空.xlsx", b"PK\x03\x04garbage")])
+@pytest.mark.parametrize("name,raw", [("壞.xlsx", b"not a zip"), ("空.csv", b""), ("空.xlsx", b"PK\x03\x04garbage"),
+                                      ("只有標題.csv", "地址\n".encode())])
 def test_batch_bad_file_is_400(name, raw):
     with pytest.raises(HTTPException) as e:
         asyncio.run(server.api_batch(_upload(name, raw)))

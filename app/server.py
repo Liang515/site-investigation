@@ -864,7 +864,7 @@ def _read_table(raw: bytes, name: str) -> pd.DataFrame:
     except Exception as e:  # noqa: BLE001 — 壞檔的例外種類很多（zip、xlrd、CSV 解析、編碼）
         print("[batch] 讀檔失敗：", type(e).__name__, e)
         raise HTTPException(400, "無法讀取檔案，請確認是 Excel（.xlsx）或 CSV") from None
-    if df.columns.empty:
+    if df.empty:  # 沒有欄位，或只有標題列
         raise HTTPException(400, "檔案裡沒有資料")
     return df
 

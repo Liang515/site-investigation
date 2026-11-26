@@ -369,7 +369,7 @@ let mapReady = false;
 map.on("load", () => { mapReady = true; });
 let timer, bldgSeq = 0, bldgBox = "";  // bldgBox：目前畫的取整範圍，相同就不重抓（旋轉、傾斜、小幅平移）
 async function loadBuildings() {
-  if (!MAP_OK) return;
+  if (!MAP_OK || !mapReady) return;  // 樣式還沒載入時圖層來源不存在；"load" 時會再呼叫
   const seq = ++bldgSeq;  // 較慢的舊回應不蓋掉新的（縮小到 15.5 以下後，飛行中的請求也不再畫出建物）
   if (map.getZoom() < 15.5) { if (bldgBox) { map.getSource("bldg").setData(EMPTY_FC); bldgBox = ""; } return; }
   const box = snapBox(map.getBounds());
@@ -462,6 +462,7 @@ function viewOf(door, bldg) {
 
 // 查地址時在門牌位置放的點；null＝清掉
 function setPin(r) {
+  if (!mapReady) { map.once("load", () => setPin(r)); return; }  // 查詢比地圖樣式先完成
   map.getSource("pin")?.setData(r ? { type: "Point", coordinates: [r.lon, r.lat] } : { type: "FeatureCollection", features: [] });
 }
 // 選取的建物：整棟立體改成橘色（高樓在斜視角會擋住地面的外框線），地面外框線保留
@@ -490,8 +491,9 @@ function bldgHead(b) {
 
 // 查詢結果的序號：查地址、點建物都寫到同一個結果區，較慢的舊回應不蓋掉新的（也不把地圖飛回舊的地方）
 let resultSeq = 0;
-function showError(resp) {
+function showError(resp, seq) {
   return resp.json().catch(() => ({})).then(err => {
+    if (seq !== resultSeq) return;
     document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
   });
 }
@@ -502,7 +504,7 @@ async function showBuilding(uid) {
   let resp;
   try { resp = await fetch(`/api/building/${encodeURIComponent(uid)}`); } catch { if (seq === resultSeq) netError(); return; }
   if (seq !== resultSeq) return;
-  if (!resp.ok) { await showError(resp); return; }
+  if (!resp.ok) { await showError(resp, seq); return; }
   const b = await resp.json();
   if (seq !== resultSeq) return;
   setPin(null);  // 點建物用整棟上色標示，清掉先前查地址留下的門牌點
@@ -553,7 +555,7 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   try { resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}${via ? `&via=${via}` : ""}`); }
   catch { if (seq === resultSeq) netError(); return; }
   if (seq !== resultSeq) return;
-  if (!resp.ok) { await showError(resp); return; }  // 例：查詢太頻繁（429）
+  if (!resp.ok) { await showError(resp, seq); return; }  // 例：查詢太頻繁（429）
   const r = await resp.json();
   if (seq !== resultSeq) return;
   const head = `<dl style="margin-top:10px">

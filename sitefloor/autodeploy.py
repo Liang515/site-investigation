@@ -140,8 +140,10 @@ def pull(argv: list[str]) -> str | None:
     before = head()
     r = git("pull", "--ff-only", "--quiet")
     if r.returncode != 0:
-        # GitHub 的歷史被改寫（force push，例如改作者 email）但內容完全一樣：直接對齊 GitHub
-        if git("diff", "--quiet", "HEAD", "@{u}").returncode == 0:
+        # GitHub 的歷史被改寫（force push，例如改作者 email）但內容完全一樣：直接對齊 GitHub。
+        # 先確認確實抓到了不同的 commit：網路斷線、金鑰失效時 @{u} 沒更新、和 HEAD 相同，要照常回報失敗
+        upstream = git("rev-parse", "@{u}").stdout.strip()
+        if upstream and upstream != before and git("diff", "--quiet", "HEAD", "@{u}").returncode == 0:
             r = git("reset", "--hard", "--quiet", "@{u}")
         if r.returncode != 0:
             return f"git pull 失敗：{(r.stderr or r.stdout).strip()[:200]}"
