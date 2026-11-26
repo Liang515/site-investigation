@@ -134,3 +134,12 @@ def test_pull_aligns_rewritten_history(tmp_path, monkeypatch):
     with pytest.raises(SystemExit, match="execv"):
         autodeploy.pull([])
     assert g(work, "rev-parse", "HEAD") == g(other, "rev-parse", "HEAD")
+
+
+def test_idle_run_does_not_write_state(monkeypatch, tmp_path):
+    _setup(monkeypatch, tmp_path)
+    autodeploy.save_state(commit="c2", blocked="之前的問題")
+    assert autodeploy.main([]) == 0 and autodeploy.load_state().get("blocked") is None  # 問題解決：清掉
+    before = autodeploy.STATE.stat().st_mtime_ns
+    assert autodeploy.main([]) == 0
+    assert autodeploy.STATE.stat().st_mtime_ns == before  # 沒有新 commit：不寫檔

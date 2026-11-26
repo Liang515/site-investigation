@@ -1,8 +1,8 @@
 """審核樓層回報：把私人 repo 裡標了「採用」的 GitHub Issue 寫進 curated/floor_corrections.csv。
 
 流程：網站收到回報 → 開 Issue（GitHub 寄信通知）→ 你查證後加標籤「採用」（不採用就直接關閉）
-→ 本機執行這支：寫進校正表、重建（curated → osm → coverage → gaps → export → smoke）、留言並關閉 Issue
-→ 確認沒問題後 vercel deploy --prod --yes。
+→ 本機執行這支：寫進校正表、重建（同 update.NEEDS["curated"]）、留言並關閉 Issue
+→ 確認沒問題後 commit、push 校正表，自動部署（sitefloor.autodeploy）會重建並上線。
 
 用法：
   uv run python -m sitefloor.review           處理標了「採用」的回報
@@ -20,9 +20,9 @@ import time
 from sitefloor import curated
 from sitefloor.address import parse
 from sitefloor.feedback import APPROVE_LABEL, KINDS, apply_comments, parse_issue
-from sitefloor.update import NOTIFY_FILE, ROOT, run_step
+from sitefloor.update import NEEDS, NOTIFY_FILE, PIPELINE, ROOT, run_step
 
-REBUILD = ["curated", "osm", "coverage", "gaps", "export", "smoke"]
+REBUILD = [s for s in PIPELINE if s in NEEDS["curated"]]  # 和每週更新、自動部署改到校正表時同一組步驟
 
 
 def repo() -> str:
@@ -138,16 +138,19 @@ def main(argv: list[str]):
     added, replaced = merge([r for _, r in rows])
     print(f"校正表：新增 {added}、取代 {replaced} → {curated.CSV.relative_to(ROOT)}")
     log: list[str] = []
-    for step in REBUILD:
-        print(f"  {step}…", flush=True)
-        try:
-            run_step(step, log)
-        except RuntimeError as e:
-            print("\n".join(log[-1:]))
-            sys.exit(f"{e}；校正表已寫入但 Issue 沒有關閉，修好後再跑一次即可")
+    from sitefloor.autodeploy import pipeline_lock
+
+    with pipeline_lock(wait=True):  # 每週更新或自動部署正在寫資料庫時等它做完
+        for step in REBUILD:
+            print(f"  {step}…", flush=True)
+            try:
+                run_step(step, log)
+            except RuntimeError as e:
+                print("\n".join(log[-1:]))
+                sys.exit(f"{e}；校正表已寫入但 Issue 沒有關閉，修好後再跑一次即可")
     for i, _ in rows:
         gh("issue", "close", str(i["number"]), "-R", rp, "--comment", "已寫進校正表，下次部署後生效。")
-    print(f"完成，關閉 {len(rows)} 個 Issue。確認後部署：vercel deploy --prod --yes")
+    print(f"完成，關閉 {len(rows)} 個 Issue。確認後 commit、push {curated.CSV.relative_to(ROOT)}，自動部署會上線")
 
 
 if __name__ == "__main__":

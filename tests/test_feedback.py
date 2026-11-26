@@ -130,3 +130,11 @@ def test_quick_flag_needs_only_target():
     assert feedback.validate({"quick": True, "building": "osm:123"})["building"] == "osm:123"
     with pytest.raises(ValueError):
         feedback.validate({"quick": True})  # 沒有地址也沒有建物
+
+
+def test_review_rebuild_matches_pipeline():
+    from sitefloor import update
+
+    # 和每週更新改到校正表時重跑的步驟一致（曾漏掉 tiers）
+    assert set(review.REBUILD) == update.NEEDS["curated"]
+    assert review.REBUILD == sorted(review.REBUILD, key=update.PIPELINE.index)

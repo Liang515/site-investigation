@@ -125,3 +125,28 @@ def test_fetch_addr_replaces_only_on_success(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError):
         fetch_addr.fetch("新北市")
     assert (tmp_path / "新北市" / "00.csv").read_text() == "new"
+
+
+def test_manual_only_is_reported_once(monkeypatch, tmp_path):
+    """只有要手動更新的項目：記下新版本，下週不再重複提醒。"""
+    import json
+
+    from sitefloor import update
+
+    monkeypatch.setattr(update, "STATE_FILE", tmp_path / "sources.json")
+    monkeypatch.setattr(update, "REPORT_DIR", tmp_path / "reports")
+    monkeypatch.setattr(update, "run_audit", lambda log: "")
+    notes = []
+    monkeypatch.setattr(update, "notify", lambda title, msg, priority=3: notes.append(msg))
+    update.STATE_FILE.write_text(json.dumps({"watch:1": "v1", "osm": "a"}))
+    result = {"manual": ["淹水潛勢圖更新於 v2"]}
+
+    def check(state, force):
+        manual = result["manual"] if state["watch:1"] == "v1" else []
+        return {**state, "watch:1": "v2"}, set(), [], manual
+
+    monkeypatch.setattr(update, "check_sources", check)
+    update.run_update(force=False, check_only=False)
+    update.run_update(force=False, check_only=False)
+    assert json.loads(update.STATE_FILE.read_text())["watch:1"] == "v2"
+    assert ["1 項要手動更新" in n for n in notes] == [True, False]

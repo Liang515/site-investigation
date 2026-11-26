@@ -176,8 +176,10 @@ def main(argv: list[str]) -> int:
                 save_state(blocked=problem)
             print(problem)
             return 1
-        save_state(blocked=None)
         st, now = load_state(), head()
+        if st.get("blocked"):  # 先前卡住的問題已解決；平常不寫檔（每 5 分鐘執行一次）
+            save_state(blocked=None)
+            st = load_state()
         if "--force" not in argv and now in (st.get("commit"), st.get("failed")):
             return 0  # 沒有新的 commit：不寫紀錄（每 5 分鐘一次，紀錄會被灌滿）
         if "--force" not in argv and same_tree(st.get("commit"), now):

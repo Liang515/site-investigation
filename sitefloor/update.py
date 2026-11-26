@@ -520,6 +520,9 @@ def run_update(force: bool, check_only: bool):
                 + "\n".join(f"- {m}" for m in manual)
                 + "\n"
             )
+            # 記下手動項目的新版本，下週不再重複提醒（和有自動更新時一樣）；標記要下載的來源不記
+            STATE_FILE.write_text(json.dumps({k: v for k, v in new.items() if not isinstance(v, tuple)},
+                                             ensure_ascii=False, indent=1))
         return
     run = [s for s in PIPELINE if any(s in NEEDS[k] for k in steps)]
     log: list[str] = []
