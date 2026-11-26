@@ -75,3 +75,30 @@ def test_vendor_files():
                       ("..", "charts.mjs")]:
         with pytest.raises(HTTPException):
             server.vendor(pkg, name)
+
+
+def test_security_headers():
+    from starlette.responses import Response
+
+    async def call_next(req):
+        return Response("ok")
+
+    req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    resp = asyncio.run(server.security_headers(req, call_next))
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["content-security-policy"] == "frame-ancestors 'none'"
+
+
+def test_cron_requires_secret_when_set(monkeypatch):
+    monkeypatch.setenv("CRON_SECRET", "s3cret")
+
+    def req(headers):
+        return Request({"type": "http", "method": "GET", "path": "/api/cron/weekly",
+                        "headers": [(k.encode(), v.encode()) for k, v in headers.items()]})
+
+    with pytest.raises(HTTPException) as e:
+        server.api_cron_weekly(req({"user-agent": "vercel-cron/1.0"}))  # 有設密鑰時只看 User-Agent 不夠
+    assert e.value.status_code == 401
+    with pytest.raises(HTTPException) as e:
+        server.api_cron_weekly(req({"authorization": "Bearer wrong"}))
+    assert e.value.status_code == 401

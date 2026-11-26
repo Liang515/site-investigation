@@ -1,5 +1,6 @@
 """本機查詢介面。啟動：uv run uvicorn app.server:app --port 8765"""
 import asyncio
+import hmac
 import io
 import json
 import math
@@ -136,6 +137,23 @@ async def cdn_cache(request: Request, call_next):
     return resp
 
 
+# 安全標頭：不讓別的網站把本站嵌在框架裡（點擊劫持）、瀏覽器不猜檔案類型、外連只帶網域不帶完整網址
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    for k, v in SECURITY_HEADERS.items():
+        resp.headers.setdefault(k, v)
+    return resp
+
+
 def _cur():
     # DuckDB 連線不可跨執行緒共用，每個請求開 cursor
     return _TimedCursor(con.cursor())
@@ -240,7 +258,7 @@ def api_cron_weekly(request: Request):
     """每週一由 Vercel Cron 呼叫（vercel.json）：上週使用統計推播到 ntfy。一週只送一次。
     有設 CRON_SECRET 時 Vercel 會帶 Authorization: Bearer <secret>；沒設時只接受 Vercel Cron 的 User-Agent。"""
     secret = os.environ.get("CRON_SECRET")
-    ok = (request.headers.get("authorization") == f"Bearer {secret}" if secret
+    ok = (hmac.compare_digest(request.headers.get("authorization", "").encode(), f"Bearer {secret}".encode()) if secret
           else request.headers.get("user-agent", "").startswith("vercel-cron"))
     if not ok:
         raise HTTPException(401)
