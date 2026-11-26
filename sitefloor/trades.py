@@ -7,12 +7,14 @@
 """
 import datetime as dt
 import re
+import ssl
 import sys
 import unicodedata
 import urllib.request
 import zipfile
 from pathlib import Path
 
+import certifi
 import pandas as pd
 
 from sitefloor.address import cn2int, parse
@@ -151,10 +153,18 @@ def to_trades(df: pd.DataFrame, *, county: str, address: str, town: str | None,
                        "total_price": "Float64", "park_price": "Float64"})
 
 
+CTX = ssl.create_default_context(cafile=certifi.where())  # macOS 內建憑證缺 TWCA
+TP_WEEKLY_COLS = ("LOCATION", "DISTRICT", "SDATE")  # 週報一定有的欄位；沒有就不是週報（例：網站暫時回傳錯誤頁）
+
+
 def fetch_taipei_weekly() -> Path:
     TP_WEEKLY_DIR.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(TP_WEEKLY_URL, headers={"User-Agent": "Mozilla/5.0"})
-    raw = urllib.request.urlopen(req, timeout=120).read()
+    raw = urllib.request.urlopen(req, timeout=120, context=CTX).read()
+    header = raw[:4096].decode("utf-8-sig", errors="replace").split("\n", 1)[0]
+    if not all(c in header.split(",") for c in TP_WEEKLY_COLS):
+        # 不存檔：快照每次都會全部重讀，存進錯誤頁之後每次都會失敗
+        raise RuntimeError(f"臺北市實價週報下載到的不是 CSV：{header[:80]!r}")
     p = TP_WEEKLY_DIR / f"{dt.date.today():%Y%m%d}.csv"
     p.write_bytes(raw)
     return p

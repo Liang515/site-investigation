@@ -150,3 +150,20 @@ def test_manual_only_is_reported_once(monkeypatch, tmp_path):
     update.run_update(force=False, check_only=False)
     assert json.loads(update.STATE_FILE.read_text())["watch:1"] == "v2"
     assert ["1 項要手動更新" in n for n in notes] == [True, False]
+
+
+def test_taipei_weekly_rejects_non_csv(monkeypatch, tmp_path):
+    import io
+
+    import pytest
+
+    from sitefloor import trades
+
+    monkeypatch.setattr(trades, "TP_WEEKLY_DIR", tmp_path)
+    body = {"raw": b"<html>503 Service Unavailable</html>"}
+    monkeypatch.setattr(trades.urllib.request, "urlopen", lambda req, timeout, context: io.BytesIO(body["raw"]))
+    with pytest.raises(RuntimeError):
+        trades.fetch_taipei_weekly()
+    assert list(tmp_path.iterdir()) == []  # 錯誤頁不存成快照
+    body["raw"] = "\ufeffCASE_T,DISTRICT,LOCATION,SDATE\n買賣,大安區,x,1150101\n".encode()
+    assert trades.fetch_taipei_weekly().read_bytes() == body["raw"]
