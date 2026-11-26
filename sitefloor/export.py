@@ -71,15 +71,32 @@ def main():
     # 多執行緒寫檔會打亂 row group 的順序（每塊的值域互相重疊，查詢就無法跳過不相關的區塊）；單執行緒才照 ORDER BY 寫出
     con.execute("SET threads = 1")
     have = {t for (t,) in con.execute("SELECT table_name FROM information_schema.tables").fetchall()}
+    # 先寫到 serve.new，全部成功才換上：中途失敗（記憶體、磁碟滿）時 data/serve 仍是上一版完整的資料
+    tmp = SERVE_DIR.with_name(f"{SERVE_DIR.name}.new")
+    shutil.rmtree(tmp, ignore_errors=True)
+    tmp.mkdir(parents=True)
+    try:
+        total = _export_all(con, have, tmp)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise
+    old = SERVE_DIR.with_name(f"{SERVE_DIR.name}.old")
+    shutil.rmtree(old, ignore_errors=True)
     if SERVE_DIR.exists():
-        shutil.rmtree(SERVE_DIR)
-    SERVE_DIR.mkdir(parents=True)
+        SERVE_DIR.rename(old)
+    tmp.rename(SERVE_DIR)
+    shutil.rmtree(old, ignore_errors=True)
+    print(f"  合計 {total / 1e6:.0f} MB → {SERVE_DIR}")
+
+
+def _export_all(con, have: set[str], dest: Path) -> int:
+    """每張表匯出到 dest/<表>/；回傳總大小（bytes）。"""
     total = 0
     for t, (cols, order) in TABLES.items():
         if t not in have:
             print(f"  {t}：資料庫裡沒有，略過")
             continue
-        out = SERVE_DIR / t
+        out = dest / t
         names = [c.strip() for c in cols.split(",")] if cols else [
             c for (c,) in con.execute("SELECT column_name FROM duckdb_columns() WHERE table_name = ?", [t]).fetchall()]
         expr = EXPR.get(t, {})
@@ -104,7 +121,7 @@ def main():
         total += size
         biggest = max(f.stat().st_size for f in files)
         print(f"  {t:14s} {len(files)} 檔  {size / 1e6:7.1f} MB（最大單檔 {biggest / 1e6:.1f} MB）")
-    print(f"  合計 {total / 1e6:.0f} MB → {SERVE_DIR}")
+    return total
 
 
 if __name__ == "__main__":
