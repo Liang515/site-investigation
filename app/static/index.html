@@ -75,10 +75,13 @@
   table.trades tr:has(+ .tnote) td { border-bottom: none; }
   .tchart { margin: 6px 0 12px; } .tchart .tsum { font-size: 13px; margin-bottom: 4px; } .tchart .tplot { margin: 8px 0 2px; }
   table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; overflow-wrap: anywhere; }
-  #drop { display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
+  #drop { position: relative; display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
   #drop:hover { border-color: var(--accent); }
   #drop .hint { display: block; margin-top: 6px; }
   #drop.over { border-color: var(--accent); color: var(--accent); }
+  /* 選檔按鈕看不見但留在 Tab 順序裡（hidden 會讓鍵盤、螢幕報讀器選不到），焦點框畫在整個拖曳區 */
+  #file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
+  #drop:has(#file:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* 分頁：整條切換鈕 */
   .tabs { display: flex; padding: 3px; margin-bottom: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); }
   .tabs button { flex: 1; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font-weight: 600; }
@@ -183,7 +186,7 @@
     <section>
       <h2>整批查詢</h2>
       <label id="drop"><b class="desk-only">拖曳 Excel / CSV 到這裡</b><span class="desk-only">，或點擊選檔</span><b class="mob-only">點擊選擇 Excel / CSV 檔</b><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
-        <input id="file" type="file" accept=".xlsx,.xls,.csv" hidden></label>
+        <input id="file" type="file" accept=".xlsx,.xls,.csv" aria-label="選擇要整批查詢的 Excel 或 CSV 檔"></label>
       <div id="batchMsg" class="note"></div>
     </section>
 
@@ -360,13 +363,25 @@ if (new URLSearchParams(location.search).has("debug")) setTimeout(() => showDiag
 // 地圖範圍往外取整到 0.005 度（約 500 公尺）：附近的畫面送出相同的請求，可以直接用 CDN 快取的結果
 const snapBox = b => [Math.floor(b.getWest() / .005) * .005, Math.floor(b.getSouth() / .005) * .005,
   Math.ceil(b.getEast() / .005) * .005, Math.ceil(b.getNorth() / .005) * .005].map(v => v.toFixed(3)).join(",");
-let timer;
+const EMPTY_FC = { type: "FeatureCollection", features: [] };
+// 樣式載入完成（"load" 事件）才能動圖層。不用 isStyleLoaded()：圖磚還在載入時它也是 false
+let mapReady = false;
+map.on("load", () => { mapReady = true; });
+let timer, bldgSeq = 0, bldgBox = "";  // bldgBox：目前畫的取整範圍，相同就不重抓（旋轉、傾斜、小幅平移）
 async function loadBuildings() {
   if (!MAP_OK) return;
-  if (map.getZoom() < 15.5) { map.getSource("bldg").setData({ type: "FeatureCollection", features: [] }); return; }
-  const b = map.getBounds();
-  const r = await fetch(`/api/buildings?bbox=${snapBox(b)}`);
-  map.getSource("bldg").setData(await r.json());
+  const seq = ++bldgSeq;  // 較慢的舊回應不蓋掉新的（縮小到 15.5 以下後，飛行中的請求也不再畫出建物）
+  if (map.getZoom() < 15.5) { if (bldgBox) { map.getSource("bldg").setData(EMPTY_FC); bldgBox = ""; } return; }
+  const box = snapBox(map.getBounds());
+  if (box === bldgBox) return;
+  try {
+    const r = await fetch(`/api/buildings?bbox=${box}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (seq !== bldgSeq) return;
+    map.getSource("bldg").setData(data);
+    bldgBox = box;
+  } catch (e) { console.error("建物載入失敗", e); }
 }
 map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
 map.on("load", loadBuildings);
@@ -383,22 +398,32 @@ hzEl.addEventListener("change", e => {
   loadHazards();
 });
 let hzTimer, hzSeq = 0;
+const hzDrawn = {};  // 各圖層目前畫的 { box, tooLarge }：範圍相同就不重抓（例：勾選另一個圖層時）
 async function loadHazards() {
-  if (!MAP_OK || !map.isStyleLoaded()) return;
-  const seq = ++hzSeq, z = map.getZoom(), b = map.getBounds();
-  const bbox = snapBox(b);
-  let tooFar = false;
-  for (const h of HAZARDS) {
+  if (!MAP_OK || !mapReady) return;
+  const seq = ++hzSeq, z = map.getZoom(), bbox = snapBox(map.getBounds());
+  // 各圖層平行抓；回傳 true＝範圍太大沒畫
+  const jobs = HAZARDS.map(async h => {
     const on = hzOn.has(h.kind);
     for (const id of [`hz-${h.kind}`, `hz-${h.kind}-line`]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
-    if (!on) continue;
-    if (z < HZ_MIN_ZOOM) { tooFar = true; map.getSource(`hz-${h.kind}`).setData({ type: "FeatureCollection", features: [] }); continue; }
+    if (!on) return false;
+    if (z < HZ_MIN_ZOOM) {
+      if (hzDrawn[h.kind]) { map.getSource(`hz-${h.kind}`).setData(EMPTY_FC); delete hzDrawn[h.kind]; }
+      return true;
+    }
+    if (hzDrawn[h.kind]?.box === bbox) return hzDrawn[h.kind].tooLarge;
     const r = await fetch(`/api/hazards?kind=${h.kind}&bbox=${bbox}`);
-    if (seq !== hzSeq || !r.ok) return;  // 已經移到別處
+    if (!r.ok) throw new Error(`${h.kind} ${r.status}`);
     const data = await r.json();
-    tooFar ||= !!data.too_large;
+    if (seq !== hzSeq) return false;  // 已經移到別處
     map.getSource(`hz-${h.kind}`).setData(data);
-  }
+    hzDrawn[h.kind] = { box: bbox, tooLarge: !!data.too_large };
+    return !!data.too_large;
+  });
+  const res = await Promise.allSettled(jobs);
+  if (seq !== hzSeq) return;
+  for (const x of res) if (x.status === "rejected") console.error("災害圖層載入失敗", x.reason);
+  const tooFar = res.some(x => x.status === "fulfilled" && x.value);
   hzHint.textContent = tooFar ? "目前地圖範圍太大，放大到鄉鎮範圍才會顯示圖層。"
     : "勾選後疊在地圖上；放大到鄉鎮範圍才會顯示。潛勢圖僅供防災參考。";
 }
@@ -441,6 +466,7 @@ function setPin(r) {
 }
 // 選取的建物：整棟立體改成橘色（高樓在斜視角會擋住地面的外框線），地面外框線保留
 function select(uid) {
+  if (!mapReady) { map.once("load", () => select(uid)); return; }  // 查詢比地圖樣式先完成
   map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]);
   map.setPaintProperty("bldg", "fill-extrusion-color",
     uid ? ["case", ["==", ["get", "uid"], uid], SEL_COLOR, BLDG_COLOR] : BLDG_COLOR);
@@ -462,8 +488,23 @@ function bldgHead(b) {
   return `<dl style="margin-top:10px">${b.name ? `<dt>名稱</dt><dd>${esc(b.name)}</dd>` : ""}<dt>地址</dt><dd>${place}</dd></dl>`;
 }
 
+// 查詢結果的序號：查地址、點建物都寫到同一個結果區，較慢的舊回應不蓋掉新的（也不把地圖飛回舊的地方）
+let resultSeq = 0;
+function showError(resp) {
+  return resp.json().catch(() => ({})).then(err => {
+    document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
+  });
+}
+const netError = () => { document.getElementById("result").innerHTML = `<div class="note">連線失敗，請稍後再試</div>`; };
+
 async function showBuilding(uid) {
-  const b = await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json();
+  const seq = ++resultSeq;
+  let resp;
+  try { resp = await fetch(`/api/building/${encodeURIComponent(uid)}`); } catch { if (seq === resultSeq) netError(); return; }
+  if (seq !== resultSeq) return;
+  if (!resp.ok) { await showError(resp); return; }
+  const b = await resp.json();
+  if (seq !== resultSeq) return;
   setPin(null);  // 點建物用整棟上色標示，清掉先前查地址留下的門牌點
   select(uid);
   document.getElementById("result").innerHTML = card(b, bldgHead(b), b);
@@ -507,13 +548,14 @@ document.getElementById("f").addEventListener("submit", e => {
 });
 
 async function doLookup(q, via) {  // via：查詢入口，只用於統計各功能的使用次數
-  const resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}${via ? `&via=${via}` : ""}`);
-  if (!resp.ok) {  // 例：查詢太頻繁（429）
-    const err = await resp.json().catch(() => ({}));
-    document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
-    return;
-  }
+  const seq = ++resultSeq;
+  let resp;
+  try { resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}${via ? `&via=${via}` : ""}`); }
+  catch { if (seq === resultSeq) netError(); return; }
+  if (seq !== resultSeq) return;
+  if (!resp.ok) { await showError(resp); return; }  // 例：查詢太頻繁（429）
   const r = await resp.json();
+  if (seq !== resultSeq) return;
   const head = `<dl style="margin-top:10px">
       <dt>標準化</dt><dd>${gmapLink(r)}</dd>
       <dt>所在樓層</dt><dd>${v(r.unit_floor)}</dd>
@@ -526,7 +568,8 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
   const uid = r.osm_uid || r.bldg_uid;
   const bldg = r.building !== undefined ? r.building  // 伺服器已一起回傳；舊版伺服器才另外查
-    : uid ? await (await fetch(`/api/building/${encodeURIComponent(uid)}`)).json() : null;
+    : uid ? await fetch(`/api/building/${encodeURIComponent(uid)}`).then(x => x.ok ? x.json() : null).catch(() => null) : null;
+  if (seq !== resultSeq) return;
   setPin(r.lon != null ? r : null);  // 沒有座標的門牌也要清掉上一次的點
   if (r.lon != null) map.flyTo(viewOf(r, bldg));
   select(uid);
@@ -541,9 +584,9 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "start" });
   // 查不到時：列出模糊搜尋的候選
   if (r.confidence === "無" || r.confidence === "待確認") {
-    const items = (await (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`)).json())
+    const items = (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`).then(x => x.ok ? x.json() : []).catch(() => []))
       .filter(x => x.kind !== "road" && x.text !== r.normalized);
-    if (items.length) document.getElementById("result").insertAdjacentHTML("beforeend",
+    if (items.length && seq === resultSeq) document.getElementById("result").insertAdjacentHTML("beforeend",
       `<div class="didyou"><h2>你是不是要找</h2>${items.map(sgHtml).join("")}</div>`);
   }
 }
@@ -788,11 +831,22 @@ let pickItems = [], pickLevel = "county";
 const laneLabel = l => l === "" ? "沿路門牌" : l;
 const isSet = k => k === "lane" ? pick.lane != null : pick[k] !== "";
 
+let pickSeq = 0;
 async function loadPick() {
+  const seq = ++pickSeq;  // 連點時只畫最後一次的結果
   const p = new URLSearchParams();
   for (const k of LEVELS) if (isSet(k)) p.set(k, pick[k]);
   tilesEl.innerHTML = `<span class="hint">載入中…</span>`;
-  const r = await (await fetch(`/api/pick?${p}`)).json();
+  let r;
+  try {
+    const resp = await fetch(`/api/pick?${p}`);
+    if (!resp.ok) throw new Error(resp.status);
+    r = await resp.json();
+  } catch {
+    if (seq === pickSeq) tilesEl.innerHTML = `<span class="hint">載入失敗，請稍後再試</span>`;
+    return;
+  }
+  if (seq !== pickSeq) return;
   pickLevel = r.level; pickItems = r.items;
   if (r.level === "door") pick.lane = r.lane;  // 只有一種巷弄時後端直接給門牌
   filterEl.value = "";
@@ -884,14 +938,18 @@ const drop = document.getElementById("drop"), fileIn = document.getElementById("
 async function upload(file) {
   msg.textContent = `處理中：${file.name}…`;
   const fd = new FormData(); fd.append("file", file);
-  const r = await fetch("/api/batch", { method: "POST", body: fd });
+  let r;
+  try { r = await fetch("/api/batch", { method: "POST", body: fd }); }
+  catch { msg.textContent = "失敗：連線中斷，請稍後再試"; return; }
   if (!r.ok) { msg.textContent = `失敗：${(await r.json().catch(() => ({}))).detail || r.status}`; return; }
   const blob = await r.blob();
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: file.name.replace(/\.[^.]+$/, "") + "_樓層.xlsx" });
   a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);  // 下載開始後釋放
   msg.textContent = `完成：已下載 ${a.download}`;
 }
-fileIn.addEventListener("change", () => fileIn.files[0] && upload(fileIn.files[0]));
+// 清空選取：同一個檔案修改後再選一次也會觸發 change
+fileIn.addEventListener("change", () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) upload(f); });
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]); });
