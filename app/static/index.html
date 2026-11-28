@@ -3,30 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f5f7fa">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>建物查詢平台</title>
+<link rel="stylesheet" href="/common.css?v=1">
 <link rel="stylesheet" href="/vendor/maplibre-gl-6.16.0/maplibre-gl.css">
 <style>
-  :root {
-    --bg: #f5f7fa; --panel: #ffffff; --ink: #1e293b; --muted: #64748b; --line: #e2e8f0; --soft: #f1f5f9;
-    --accent: #2563eb; --accent-soft: #eff4ff; --hi: #15803d; --mid: #b45309; --lo: #b91c1c;
-    /* 字級只用五種：32 大數字、20 頁面標題、16 區塊標題、14 內文、12 輔助說明與小標 */
-    --fs-display: 32px; --fs-h1: 20px; --fs-title: 16px; --fs-body: 14px; --fs-cap: 12px;
-    --radius: 10px; --shadow: 0 1px 2px rgba(15, 23, 42, .05), 0 1px 3px rgba(15, 23, 42, .06);
-  }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-    color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; }
-  small { font-size: var(--fs-cap); }  /* 不用瀏覽器預設的 smaller（約 11.7px），和其他輔助字對齊 */
-  a { color: var(--accent); }
-  #app { display: grid; grid-template-columns: 380px 1fr; height: 100%; }
-  html, body { font-size: var(--fs-body); line-height: 1.6; }
-  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 24px; }
+  html, body { height: 100%; }
+  #app { display: grid; grid-template-columns: 396px 1fr; height: 100%; }
+  aside { background: var(--panel); border-right: 1px solid var(--line); overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
   h1 { font-size: var(--fs-h1); line-height: 28px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
   .brand { display: flex; align-items: center; gap: 8px; }
   .brand img { width: 28px; height: 28px; border-radius: 7px; flex: none; }
@@ -39,82 +29,126 @@
   input[type=text] { flex: 1; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; }
   input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
   /* 只套用到左側面板的按鈕；地圖上的縮放按鈕用 MapLibre 自己的樣式 */
-  :where(aside) button { font: inherit; font-weight: 600; padding: 8px 16px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
+  :where(aside) button { font: inherit; font-weight: 600; padding: 8px 16px; border: 0; border-radius: 8px; background: var(--accent); color: var(--accent-ink); cursor: pointer; min-block-size: 32px; }
   :where(aside) button:hover { filter: brightness(1.08); }
   :where(aside) button:disabled { opacity: .5; cursor: default; }
+
+  /* ── 分頁：role="tablist"（以底線＋底色共同標示選中，不單靠顏色） ── */
+  .tabs { display: flex; padding: 3px; margin-bottom: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); gap: 2px; }
+  .tabs [role="tab"] { position: relative; flex: 1; background: transparent; color: var(--muted); padding: 7px 4px; border-radius: 7px; font-weight: 600; min-block-size: 34px; }
+  .tabs [role="tab"][aria-selected="true"] { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+  .tabs [role="tab"][aria-selected="true"]::after { content: ""; position: absolute; inset: auto 12px 2px; border-block-end: 2.5px solid var(--accent); border-radius: 2px; }
+
+  /* ── 範例快選 ── */
+  .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: var(--fs-cap); color: var(--muted); }
+  :where(aside) .ex { background: var(--soft); color: var(--ink); border: 1px solid var(--line); padding: 3px 9px; font-size: var(--fs-cap); font-weight: 500; border-radius: 99px; min-block-size: 26px; }
+  :where(aside) .ex:hover { border-color: var(--accent); color: var(--accent); filter: none; }
+
+  /* ── 結果卡片與頂部風險快覽 ── */
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
-  .big { font-size: var(--fs-display); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+  .big { font-size: var(--fs-display); font-weight: 700; line-height: 1.05; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
   .big small { font-size: var(--fs-body); font-weight: 500; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+  .subline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: var(--fs-cap); color: var(--muted); }
+  .card-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+  :where(aside) .icon-btn { display: inline-flex; align-items: center; gap: 4px; background: var(--soft); color: var(--ink); border: 1px solid var(--line); padding: 5px 10px; font-size: var(--fs-cap); font-weight: 600; border-radius: 7px; min-inline-size: 28px; min-block-size: 28px; }
+  :where(aside) .icon-btn:hover { border-color: var(--accent); color: var(--accent); filter: none; }
+
+  /* 複製連結狀態氣泡（用 opacity 顯隱，不移除出無障礙樹） */
+  .copy { position: relative; display: inline-flex; align-items: center; }
+  .copy-tip { position: absolute; inset-block-start: calc(100% + 5px); inset-inline-end: 0; padding: 3px 8px; border-radius: 6px; background: var(--tip-bg); color: #fff; font-size: 11px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 6; }
+  .copy:has([data-copied], [data-failed]) .copy-tip { opacity: 1; }
+  .copy-button[data-copied] { border-color: var(--hi); color: var(--hi); }
+  .copy-button[data-failed] { border-color: var(--lo); color: var(--lo); }
+
+  /* 信心標籤（顏色＋符號共同標示） */
+  .badge { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-cap); padding: 2px 8px; border-radius: 99px; font-weight: 600; border: 1px solid transparent; }
+  .b-高 { background: var(--hi-soft); color: var(--hi); border-color: color-mix(in srgb, var(--hi) 30%, transparent); }
+  .b-中 { background: var(--mid-soft); color: var(--mid); border-color: color-mix(in srgb, var(--mid) 30%, transparent); }
+  .b-低, .b-無, .b-待確認 { background: var(--lo-soft); color: var(--lo); border-color: color-mix(in srgb, var(--lo) 30%, transparent); }
+
+  /* 頂部風險摘要膠囊 */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-cap); font-weight: 600; padding: 3px 9px; border-radius: 99px; text-decoration: none; border: 1px solid transparent; line-height: 1.4; }
+  .chip-danger { background: var(--lo-soft); color: var(--lo); border-color: color-mix(in srgb, var(--lo) 28%, transparent); }
+  .chip-warn { background: var(--mid-soft); color: var(--mid); border-color: color-mix(in srgb, var(--mid) 30%, transparent); }
+  .chip-ok { background: var(--hi-soft); color: var(--hi); border-color: color-mix(in srgb, var(--hi) 28%, transparent); }
+  .chip:hover { filter: brightness(.96); }
+
   /* 欄位：名稱灰、值深色，同樣 14px；用顏色分主從，不用大小 */
-  dl { display: grid; grid-template-columns: 104px 1fr; gap: 6px 12px; margin: 12px 0 0; }
+  dl { display: grid; grid-template-columns: 100px 1fr; gap: 6px 12px; margin: 12px 0 0; }
   dt { color: var(--muted); }
   dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
-  .badge { display: inline-block; font-size: var(--fs-cap); padding: 2px 8px; border-radius: 99px; color: #fff; font-weight: 600; }
-  .b-高 { background: var(--hi); } .b-中 { background: var(--mid); } .b-低, .b-無, .b-待確認 { background: var(--lo); }
   .note { font-size: var(--fs-cap); color: var(--muted); margin-top: 10px; overflow-wrap: anywhere; line-height: 1.6; }
-  .risk { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .area-bar { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: var(--soft); font-size: var(--fs-cap); display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .area-bar strong { font-variant-numeric: tabular-nums; }
+  .risk { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; scroll-margin-top: 16px; }
   .risk h3 { font-size: var(--fs-title); font-weight: 700; margin: 0; }
-  .risk h4 { margin: 16px 0 0; padding-bottom: 6px; border-bottom: 1px solid var(--soft); }
+  .risk h4 { margin: 14px 0 0; padding-bottom: 5px; border-bottom: 1px solid var(--soft); }
   .risk dl { margin-top: 8px; }
   .ufl { font-size: var(--fs-cap); color: var(--muted); margin-top: 4px; line-height: 1.6; }
   .rz { color: var(--lo); font-weight: 600; } .rn { color: var(--muted); } .rx { color: var(--muted); }
-  .hzl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
-  .hzl label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-  .hzl i { width: 14px; height: 14px; border-radius: 3px; background: var(--c); flex: none; }
-  .addrs { font-size: var(--fs-cap); color: var(--muted); max-height: 120px; overflow-y: auto; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--soft); }
-  .legend { display: flex; gap: 0; font-size: var(--fs-cap); color: var(--muted); }
-  .legend span { flex: 1; text-align: center; padding-top: 14px; position: relative; }
-  .legend span::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 10px; background: var(--c); }
-  .legend span:first-child::before { border-radius: 4px 0 0 4px; } .legend span:last-child::before { border-radius: 0 4px 4px 0; }
+  .addrs-fold { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--soft); }
+  .addrs { font-size: var(--fs-cap); color: var(--muted); max-height: 150px; overflow-y: auto; margin-top: 8px; line-height: 1.7; }
+
+  /* 載入中骨架屏（使用原生 <progress>，不打擾螢幕報讀器） */
+  .card.loading { display: flex; flex-direction: column; gap: 10px; }
+  .card.loading progress { width: 100%; height: 4px; border: 0; border-radius: 4px; }
+  .skel { height: 14px; border-radius: 6px; background: var(--soft); animation: pulse 1.2s ease-in-out infinite; }
+  .skel.lg { height: 32px; width: 45%; }
+  .skel.short { width: 65%; }
+  @keyframes pulse { 50% { opacity: .45; } }
+
   table { width: 100%; border-collapse: collapse; font-size: var(--fs-cap); margin-top: 8px; }
   details summary { cursor: pointer; }
-  td { padding: 4px 0; border-bottom: 1px solid var(--line); }
-  td.n { text-align: right; font-variant-numeric: tabular-nums; }
-  table.trades tr.th td { color: var(--muted); font-weight: 600; }
-  table.trades tr:not(.tnote) td:first-child { white-space: nowrap; }  /* 只有日期欄不換行；備註可能很長 */
+  td, th { padding: 4px 0; border-bottom: 1px solid var(--line); text-align: left; }
+  th { color: var(--muted); font-weight: 600; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  table.trades tr:not(.tnote) td:first-child { white-space: nowrap; }
   table.trades tr:has(+ .tnote) td { border-bottom: none; }
   .tchart { margin: 6px 0 12px; } .tchart .tsum { font-size: 13px; margin-bottom: 4px; } .tchart .tplot { margin: 8px 0 2px; }
   table.trades .tnote td { padding-top: 0; color: var(--muted); font-size: .92em; overflow-wrap: anywhere; }
-  #drop { position: relative; display: block; border: 1.5px dashed #cbd5e1; border-radius: var(--radius); padding: 16px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
-  #drop:hover { border-color: var(--accent); }
+
+  #drop { position: relative; display: block; border: 1.5px dashed var(--line); border-radius: var(--radius); padding: 18px 14px; text-align: center; color: var(--ink); cursor: pointer; line-height: 1.6; background: var(--soft); }
+  #drop:hover, #drop.over { border-color: var(--accent); }
+  #drop.over { color: var(--accent); }
   #drop .hint { display: block; margin-top: 6px; }
-  #drop.over { border-color: var(--accent); color: var(--accent); }
-  /* 選檔按鈕看不見但留在 Tab 順序裡（hidden 會讓鍵盤、螢幕報讀器選不到），焦點框畫在整個拖曳區 */
   #file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip-path: inset(50%); }
   #drop:has(#file:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* 分頁：整條切換鈕 */
-  .tabs { display: flex; padding: 3px; margin-bottom: 12px; background: var(--soft); border: 1px solid var(--line); border-radius: var(--radius); }
-  .tabs button { flex: 1; background: transparent; color: var(--muted); padding: 7px 0; border-radius: 7px; font-weight: 600; }
-  .tabs button.on { background: var(--panel); color: var(--ink); box-shadow: var(--shadow); }
+
   .crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: var(--fs-cap); margin-bottom: 8px; }
-  .crumbs button { background: var(--accent-soft); color: var(--accent); padding: 4px 10px; font-size: var(--fs-cap); }
+  .crumbs button { background: var(--accent-soft); color: var(--accent); padding: 4px 10px; font-size: var(--fs-cap); min-block-size: 28px; }
   .crumbs .cur { color: var(--muted); }
-  /* 高度上限讓 22 個縣市整個放得下；更多（路、門牌）時框內捲動，下緣淡出提示還有 */
-  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 380px; overflow-y: auto; padding: 2px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px; max-height: 360px; overflow-y: auto; padding: 2px; }
   .tiles.more { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
     mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent); }
   .tiles.wide { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
   .tiles.num { grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); }
   .tile { background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 9px 4px; font-weight: 500; line-height: 1.3; position: relative; }
-  .tile:hover { border-color: var(--accent); color: var(--accent); }
+  .tile:hover { border-color: var(--accent); color: var(--accent); filter: none; }
   .tile small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
   .tile.has::after { content: ""; position: absolute; top: 4px; right: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--hi); }
+
   #f { position: relative; }
-  /* 輸入框右側的清除鈕（有文字才出現） */
   .qwrap { position: relative; flex: 1; min-width: 0; display: flex; }
   .qwrap input { padding-right: 34px; }
-  #qClear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; padding: 0;
+  #qClear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); min-inline-size: 28px; min-block-size: 28px; width: 28px; height: 28px; padding: 0;
     border-radius: 50%; background: transparent; color: var(--muted); font-size: 18px; font-weight: 400; line-height: 1; }
-  #qClear:hover { background: var(--bg); color: var(--ink); }
-  #sugg { position: absolute; top: 100%; left: 0; right: 0; z-index: 5; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; box-shadow: 0 6px 20px rgba(0,0,0,.08); max-height: 320px; overflow-y: auto; }
+  #qClear:hover { background: var(--soft); color: var(--ink); filter: none; }
+  #sugg { position: absolute; top: 100%; left: 0; right: 0; z-index: 12; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; box-shadow: var(--float-shadow); max-height: 320px; overflow-y: auto; }
   .sg { display: block; width: 100%; text-align: left; background: transparent; color: var(--ink); border-radius: 0; padding: 8px 10px; border-bottom: 1px solid var(--line); }
   .sg:last-child { border-bottom: 0; }
   :where(aside) .sg { font-weight: 400; }
-  .sg:hover, .sg.on { background: var(--accent-soft); }
+  .sg:hover, .sg.on { background: var(--accent-soft); filter: none; }
   .sg small { display: block; color: var(--muted); margin-top: 2px; }
   .sg .dot { color: var(--hi); }
   .didyou { margin-top: 10px; }
+  .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
+  #pickFilter { width: 100%; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+
+  .meta-sec { display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
   .fb { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .meta-sec .fb { margin-top: 0; border-top: 0; padding-top: 0; }
   .fb summary { color: var(--accent); letter-spacing: 0; }
   .fbform { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; font-size: var(--fs-cap); color: var(--muted); }
   .fbform label { display: flex; flex-direction: column; gap: 4px; }
@@ -123,36 +157,108 @@
   .fbform textarea { resize: vertical; }
   .fbform button { justify-self: start; }
   .fbbtns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-
-  .card .again { margin-top: 12px; width: 100%; }
-  .didyou .sg { border: 1px solid var(--line); border-radius: 8px; margin-top: 4px; }
-  #pickFilter { width: 100%; padding: 7px 12px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
-  #map { height: 100%; position: relative; }
+  .card .again.bottom-again { margin-top: 14px; width: 100%; }
   .hint { font-size: var(--fs-cap); color: var(--muted); line-height: 1.6; }
+
+  /* ── 地圖區與浮動控制項（圖層 Popover、2D/3D、縮放提示、樓層圖例、Hover 預覽） ── */
+  #mapWrap { position: relative; height: 100%; min-height: 0; }
+  #map { height: 100%; width: 100%; position: relative; }
+  .map-tools { position: absolute; top: 12px; left: 12px; z-index: 4; display: flex; gap: 6px; flex-wrap: wrap; }
+  .mbtn { font: inherit; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 11px; min-block-size: 32px; border-radius: 8px; border: 1px solid var(--line);
+    background: var(--float-bg); color: var(--ink); box-shadow: var(--float-shadow); cursor: pointer; backdrop-filter: blur(8px); }
+  .mbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .mbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+  .mchip { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 99px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  #layerBtn { anchor-name: --layer-btn; }
+  /* 原生 Popover 圖層面板：@supports 漸進強化 CSS Anchor Positioning，舊瀏覽器安全退回固定位置 */
+  #layerPanel { border: 1px solid var(--line); border-radius: 12px; padding: 14px; width: min(300px, calc(100vw - 24px));
+    background: var(--panel); color: var(--ink); box-shadow: var(--float-shadow); font-size: var(--fs-body); }
+  @supports (position-area: block-end) {
+    #layerPanel { position-anchor: --layer-btn; inset: auto; margin: 6px 0 0;
+      position-area: block-end span-inline-end; position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline; }
+  }
+  @supports not (position-area: block-end) {
+    #layerPanel { position: fixed; top: 52px; left: 12px; right: auto; bottom: auto; margin: 0; }
+  }
+  @supports not selector(:popover-open) {
+    #layerPanel:not(.open) { display: none; }
+    #layerPanel.open { display: block; z-index: 20; }
+  }
+  .pop-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .pop-head strong { font-size: 13px; }
+  .pop-close { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; min-inline-size: 28px; min-block-size: 28px; border-radius: 6px; cursor: pointer; }
+  .pop-close:hover { background: var(--soft); color: var(--ink); }
+  .hzl { display: flex; flex-direction: column; gap: 8px; }
+  .hz-item { display: flex; flex-direction: column; gap: 4px; }
+  .hz-item label { display: flex; align-items: center; gap: 7px; cursor: pointer; font-size: 13px; }
+  .hz-item i { width: 14px; height: 14px; border-radius: 3px; background: var(--c); flex: none; border: 1px solid rgba(0,0,0,.1); }
+  .hz-scale { display: flex; gap: 2px; margin-left: 22px; font-size: 11px; color: var(--muted); }
+  .hz-scale span { flex: 1; text-align: center; padding-top: 9px; position: relative; font-variant-numeric: tabular-nums; }
+  .hz-scale span::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: var(--c); border-radius: 2px; }
+
+  /* 縮放層級浮動提示 */
+  #zoomHint { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4;
+    display: inline-flex; align-items: center; gap: 8px; padding: 5px 8px 5px 12px; border-radius: 99px;
+    background: var(--float-bg); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--float-shadow);
+    font-size: var(--fs-cap); backdrop-filter: blur(8px); white-space: nowrap; }
+  #zoomHint button { border: 0; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600;
+    padding: 3px 10px; border-radius: 99px; cursor: pointer; min-block-size: 24px; }
+
+  /* 左下浮動樓層圖例 */
+  #mapLegend { position: absolute; left: 12px; bottom: 12px; z-index: 4; width: min(280px, calc(100% - 76px));
+    background: var(--float-bg); border: 1px solid var(--line); border-radius: 10px; padding: 7px 10px 6px;
+    box-shadow: var(--float-shadow); backdrop-filter: blur(8px); }
+  .leg-title { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  .legend { display: flex; gap: 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .legend span { flex: 1; text-align: center; padding-top: 11px; position: relative; }
+  .legend span::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 8px; background: var(--c); }
+  .legend span:first-child::before { border-radius: 4px 0 0 4px; } .legend span:last-child::before { border-radius: 0 4px 4px 0; }
+
+  /* 地圖 Hover 輕量建物預覽 */
+  #bldgTip { position: absolute; z-index: 5; pointer-events: none; background: var(--tip-bg); color: #fff;
+    padding: 5px 9px; border-radius: 7px; font-size: 12px; line-height: 1.4; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25); transform: translate(12px, -50%); }
+  #bldgTip small { display: block; opacity: .78; font-size: 11px; }
+
+  @media (prefers-color-scheme: dark) {
+    .maplibregl-ctrl-group { background: var(--panel); border: 1px solid var(--line); }
+    .maplibregl-ctrl-group button + button { border-top-color: var(--line); }
+    .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) brightness(.9); }
+    .maplibregl-ctrl-attrib { background: var(--float-bg) !important; color: var(--muted); }
+    .maplibregl-ctrl-attrib a { color: var(--accent); }
+    .maplibregl-ctrl-attrib-button { filter: invert(1) brightness(.9); }
+  }
+
   .mob-only { display: none; }
+  @media (pointer: coarse) {
+    .mbtn, :where(aside) .icon-btn, :where(aside) .ex { min-block-size: 36px; }
+  }
   @media (max-width: 760px) {
     html, body { height: auto; }
-    /* 手機：標題 → 地圖 → 查詢結果 → 選地址／輸入地址 → 其他 */
+    /* 手機：標題 → 地圖 → 查詢結果 → 分頁與表單 → 其他 */
     #app { display: flex; flex-direction: column; height: auto; }
-    aside, aside > section:first-of-type, aside > div:first-child { display: contents; }
+    aside, aside > section:first-of-type, aside > header { display: contents; }
     aside > * { padding: 0 16px; }
-    /* 標題列固定在頂端（不透明底色）：iOS 26 遇到固定標題列就不會把頂端的內容淡化模糊 */
-    h1.brand { order: 1; position: sticky; top: 0; z-index: 10; background: var(--bg);
-      padding: 12px 16px 8px; }
+    h1.brand { order: 1; position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 12px 16px 8px; }
     .sub { order: 2; margin-top: 0; padding: 0 16px 10px; }
-    #map { order: 3; height: 45vh; }
+    #mapWrap { order: 3; height: 45vh; transition: height .2s ease; }
+    #mapWrap.compact { height: 24vh; }
     #result { order: 4; padding: 0 16px; margin-top: 12px !important; }
     #result:empty { display: none; }
     .tabs { order: 5; margin: 16px 16px 12px; }
-    #pickBox, #typeBox { order: 6; padding: 0 16px; }
-    aside > section:not(:first-of-type) { order: 7; padding-top: 24px; }
-    aside > section:last-of-type { padding-bottom: 24px; }
+    #typeBox, #pickBox, #batchBox { order: 6; padding: 0 16px; }
+    .meta-sec { order: 7; margin: 20px 16px 28px; }
     .crumbs button { padding: 6px 12px; }
     .desk-only { display: none; }
-    .mob-only { display: inline !important; }
-    .card .again { display: block !important; }
-    input[type=text], #pickFilter, .fbform input, .fbform select, .fbform textarea { font-size: 16px; }  /* iPhone：小於 16px 點輸入框會自動放大 */
-    .tiles { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }  /* 超過就在框內捲動，不能溢出蓋到下面的區塊 */
+    .mob-only { display: inline-flex !important; }
+    .card .again.bottom-again { display: block !important; }
+    input[type=text], #pickFilter, .fbform input, .fbform select, .fbform textarea { font-size: 16px; }
+    .tiles { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }
+    #zoomHint { top: auto; bottom: 54px; }
+    #mapLegend { bottom: 8px; left: 8px; padding: 5px 8px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
 </style>
@@ -162,63 +268,95 @@
 </head>
 <body>
 <div id="app">
-  <aside>
-    <div>
+  <aside aria-label="查詢與建物資訊">
+    <header>
       <h1 class="brand"><img src="/logo.png" alt="" width="28" height="28">建物查詢平台</h1>
-      <div class="sub">查門牌的樓層、構造、年份與災害潛勢<br>非官方工具，結果僅供參考 · <a href="/stats">區域統計</a> · <a href="/about">資料來源與授權</a></div>
-    </div>
+      <div class="sub">查門牌的樓層、構造、年份與災害潛勢<br>非官方工具，結果僅供參考 · <a id="navStats" href="/stats">區域統計</a> · <a href="/about">資料來源與授權</a></div>
+    </header>
 
     <section>
-      <div class="tabs"><button type="button" id="tabPick" class="on">選擇地址</button><button type="button" id="tabType">輸入地址</button></div>
-      <div id="pickBox">
+      <div class="tabs" role="tablist" aria-label="查詢方式">
+        <button type="button" id="tabType" role="tab" aria-selected="true" tabindex="0">輸入地址</button>
+        <button type="button" id="tabPick" role="tab" aria-selected="false" tabindex="-1">選擇地址</button>
+        <button type="button" id="tabBatch" role="tab" aria-selected="false" tabindex="-1">整批查詢</button>
+      </div>
+
+      <div id="typeBox" role="tabpanel" aria-labelledby="tabType">
+        <search>
+          <form id="f" autocomplete="off">
+            <label for="q" class="visually-hidden">地址、建案或地標</label>
+            <span class="qwrap">
+              <input id="q" type="text" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="sugg" placeholder="地址、建案或地標，例：市政路390號">
+              <button type="button" id="qClear" aria-label="清除輸入" title="清除" hidden>×</button>
+            </span>
+            <button type="submit" id="qBtn">查詢</button>
+            <div id="sugg" role="listbox" aria-label="建議門牌" hidden></div>
+          </form>
+        </search>
+        <div class="examples" aria-label="範例查詢">
+          <span>試查：</span>
+          <button type="button" class="ex" data-q="臺中市西屯區市政路390號">市政路390號</button>
+          <button type="button" class="ex" data-q="台北101">台北101</button>
+          <button type="button" class="ex" data-q="台北之星">台北之星</button>
+        </div>
+        <div class="hint" style="margin-top:4px">支援錯字、簡寫、地標或建案名稱</div>
+      </div>
+
+      <div id="pickBox" role="tabpanel" aria-labelledby="tabPick" hidden>
         <div class="crumbs" id="crumbs"></div>
-        <input id="pickFilter" type="search" placeholder="篩選（可不填）" hidden>
+        <input id="pickFilter" type="search" aria-label="篩選選項" placeholder="篩選（可不填）" hidden>
         <div class="tiles" id="tiles"></div>
         <div class="hint" id="pickHint" style="margin-top:6px"></div>
       </div>
-      <div id="typeBox" hidden>
-        <form id="f" autocomplete="off"><span class="qwrap"><input id="q" type="text" placeholder="地址或地標，例：市政路390號"><button type="button" id="qClear" aria-label="清除" title="清除" hidden>×</button></span><button>查詢</button><div id="sugg" hidden></div></form>
-        <div class="hint" style="margin-top:6px">可以打錯字、用簡寫或只打一部分，會列出最接近的門牌</div>
+
+      <div id="batchBox" role="tabpanel" aria-labelledby="tabBatch" hidden>
+        <label id="drop">
+          <b class="desk-only">拖曳 Excel / CSV 到這裡</b><span class="desk-only">，或點擊選檔</span><b class="mob-only">點擊選擇 Excel / CSV 檔</b>
+          <span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
+          <input id="file" type="file" accept=".xlsx,.xls,.csv" aria-label="選擇要整批查詢的 Excel 或 CSV 檔">
+        </label>
+        <div id="batchMsg" class="note" aria-live="polite"></div>
       </div>
+
+      <div id="srStatus" class="visually-hidden" aria-live="polite"></div>
       <div id="result" style="margin-top:12px"></div>
     </section>
 
-    <section>
-      <h2>整批查詢</h2>
-      <label id="drop"><b class="desk-only">拖曳 Excel / CSV 到這裡</b><span class="desk-only">，或點擊選檔</span><b class="mob-only">點擊選擇 Excel / CSV 檔</b><span class="hint">自動找「地址」欄，回傳加上樓層欄位的 Excel<br>一次最多 2,000 筆、4 MB</span>
-        <input id="file" type="file" accept=".xlsx,.xls,.csv" aria-label="選擇要整批查詢的 Excel 或 CSV 檔"></label>
-      <div id="batchMsg" class="note"></div>
-    </section>
-
-    <section>
-      <h2>地上樓層</h2>
-      <div class="legend" id="legend"></div>
-      <div class="hint" style="margin-top:8px">放大到街區可看到 3D 建物，點建物看屬性</div>
-    </section>
-
-    <section>
-      <h2>災害潛勢圖層</h2>
-      <div class="hzl" id="hzl"></div>
-      <div class="hint" id="hzhint" style="margin-top:8px">勾選後疊在地圖上；放大到鄉鎮範圍才會顯示。潛勢圖僅供防災參考。</div>
-    </section>
-
-    <section>
+    <section class="meta-sec">
       <details class="fb fb-general"><summary>回報問題</summary>
         <form class="fbform">
           <label class="wide">問題類型<select name="kind"></select></label>
           <label class="wide">地點<input name="address" maxlength="100" placeholder="可不填，例：信義計畫區、某條路一帶"></label>
           <label class="wide">說明<textarea name="detail" maxlength="500" rows="3" required placeholder="例：這一區的建物都畫錯了、手機版某個按鈕沒反應"></textarea></label>
           <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
-          <button type="submit">送出</button><span class="fbmsg hint"></span>
+          <button type="submit">送出</button><span class="fbmsg hint" aria-live="polite"></span>
           <div class="hint wide">樓層錯誤請先查詢該地址或點選建物，從結果卡片下方回報。</div>
-        </form></details>
-    </section>
+        </form>
+      </details>
 
-    <section>
       <details><summary>各縣市涵蓋率</summary><table id="stats"></table></details>
     </section>
   </aside>
-  <div id="map"></div>
+
+  <main id="mapWrap" aria-label="3D 建物地圖">
+    <div id="map"></div>
+    <div class="map-tools" id="mapTools">
+      <button type="button" id="layerBtn" class="mbtn" popovertarget="layerPanel">圖層<span id="hzBadge" class="mchip" hidden></span></button>
+      <button type="button" id="tiltBtn" class="mbtn" aria-pressed="true" aria-label="切換 2D 俯視與 3D 立體">3D</button>
+      <button type="button" id="mapSizeBtn" class="mbtn mob-only" aria-pressed="false">縮小地圖</button>
+    </div>
+    <div id="layerPanel" popover="auto">
+      <div class="pop-head">
+        <strong>災害潛勢圖層</strong>
+        <button type="button" class="pop-close" id="layerClose" popovertarget="layerPanel" popovertargetaction="hide" aria-label="關閉圖層面板">×</button>
+      </div>
+      <div class="hzl" id="hzl"></div>
+      <div class="hint" id="hzhint" style="margin-top:8px">勾選後疊在地圖上；放大到鄉鎮範圍才會顯示。潛勢圖僅供防災參考。</div>
+    </div>
+    <div id="zoomHint" hidden><span>放大至街區顯示 3D 建物</span><button type="button" id="zoomInBtn">放大</button></div>
+    <div id="mapLegend"><span class="leg-title">地上樓層（點建物看屬性）</span><div class="legend" id="legend"></div></div>
+    <div id="bldgTip" aria-hidden="true" hidden></div>
+  </main>
 </div>
 
 <script type="module">
@@ -234,8 +372,6 @@ document.getElementById("legend").innerHTML =
   RAMP.map((r, i) => `<span style="--c:${r[1]}">${LABELS[i]}</span>`).join("")
   + `<span style="--c:#bdbdbd">未知</span>`;
 
-// 瀏覽器不支援 WebGL（硬體加速關閉、部分公司電腦／遠端桌面）時地圖畫不出來：
-// 在地圖區顯示原因，並用不做事的替身物件，讓查詢等其他功能照常運作
 function webglOK() {
   try { const c = document.createElement("canvas"); return !!(c.getContext("webgl2") || c.getContext("webgl")); }
   catch { return false; }
@@ -243,18 +379,21 @@ function webglOK() {
 const MAP_OK = typeof maplibregl !== "undefined" && webglOK();
 const NOOP = new Proxy(function () {}, { get: (t, k) => k === Symbol.toPrimitive ? () => "" : NOOP, apply: () => NOOP });
 if (!MAP_OK) {
+  document.getElementById("mapTools").hidden = true;
+  document.getElementById("mapLegend").hidden = true;
   document.getElementById("map").innerHTML = `<div style="padding:24px;max-width:460px;color:var(--muted);font-size:14px;line-height:1.7">
     <b style="color:var(--ink)">這個瀏覽器無法顯示 3D 地圖</b><br>
     地圖需要 WebGL。請確認瀏覽器設定裡的「硬體加速」已開啟，或改用最新版 Chrome、Edge、Safari。<br>
     查詢功能不受影響，可以照常使用。</div>`;
 }
-// ── 災害潛勢圖層（/api/hazards）：顏色依等級（rank）由淺到深 ──
+
+// ── 災害潛勢圖層（/api/hazards）：顏色依等級（rank）由淺到深，附多階色階說明 ──
 const HAZARDS = [
-  { kind: "flood500", name: "淹水（24h 500mm）", colors: ["#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c"] },
-  { kind: "liquefaction", name: "土壤液化", colors: ["#fee391", "#fe9929", "#cc4c02"] },
+  { kind: "flood500", name: "淹水（24h 500mm）", colors: ["#c6dbef", "#9ecae1", "#6baed6", "#3182bd", "#08519c"], labels: ["0.3–0.5", "0.5–1", "1–2", "2–3", ">3m"] },
+  { kind: "liquefaction", name: "土壤液化", colors: ["#fee391", "#fe9929", "#cc4c02"], labels: ["低潛勢", "中潛勢", "高潛勢"] },
   { kind: "fault", name: "活動斷層", colors: ["#d7301f"] },
   { kind: "landslide", name: "山崩地滑", colors: ["#8c510a"] },
-  { kind: "debris", name: "土石流", colors: ["#bcbddc", "#807dba", "#54278f"] },
+  { kind: "debris", name: "土石流", colors: ["#bcbddc", "#807dba", "#54278f"], labels: ["低風險", "中風險", "高風險"] },
   { kind: "fire_station", name: "消防分隊", colors: ["#e31a1c"], point: true },
 ];
 const HZ_MIN_ZOOM = 12;
@@ -263,9 +402,9 @@ const HAZARD_LAYERS = HAZARDS.flatMap(h => h.point
   ? [{ id: `hz-${h.kind}`, type: "circle", source: `hz-${h.kind}`, layout: { visibility: "none" },
        paint: { "circle-radius": 6, "circle-color": h.colors[0], "circle-stroke-color": "#fff", "circle-stroke-width": 2 } }]
   : [{ id: `hz-${h.kind}`, type: "fill", source: `hz-${h.kind}`, layout: { visibility: "none" },
-       paint: { "fill-color": rankColor(h.colors), "fill-opacity": 0.4 } },
+       paint: { "fill-color": rankColor(h.colors), "fill-opacity": 0.42 } },
      { id: `hz-${h.kind}-line`, type: "line", source: `hz-${h.kind}`, layout: { visibility: "none" },
-       paint: { "line-color": rankColor(h.colors), "line-width": 1, "line-opacity": 0.7 } }]);
+       paint: { "line-color": rankColor(h.colors), "line-width": 1, "line-opacity": 0.72 } }]);
 
 // 沒有樓層、只有 OSM 高度的建物：以 高度÷3.2m 上色
 const BLDG_COLOR = ["case", ["all", ["==", ["get", "floors"], null], ["==", ["get", "h"], null]], "#bdbdbd",
@@ -280,7 +419,7 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
         tiles: ["https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}"],
         attribution: "© 內政部國土測繪中心" },
       bldg: { type: "geojson", data: { type: "FeatureCollection", features: [] },
-        attribution: "建物外框：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\">© OpenStreetMap 貢獻者</a>、臺中市政府、臺北市政府｜樓層與門牌：內政部實價登錄、各縣市政府門牌與使用執照資料（<a href=\"/about\">完整來源</a>）" },
+        attribution: "建物外框：<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener\">© OpenStreetMap 貢獻者</a>、臺中市政府、臺北市政府｜樓層與門牌：內政部實價登錄、各縣市政府門牌與使用執照資料（<a href=\"/about\">完整來源</a>）" },
       pin: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
       ...Object.fromEntries(HAZARDS.map(h => [`hz-${h.kind}`, { type: "geojson", data: { type: "FeatureCollection", features: [] },
         attribution: "災害潛勢：經濟部水利署、地質調查及礦業管理中心、農業部、臺南市政府、內政部消防署" }])),
@@ -303,17 +442,13 @@ const map = !MAP_OK ? NOOP : new maplibregl.Map({
   attributionControl: { compact: true },
   locale: { "GeolocateControl.FindMyLocation": "移到我的位置", "GeolocateControl.LocationNotAvailable": "無法取得位置" },
 });
-// ── 縮放鈕與定位（移到使用者所在位置；位置只在瀏覽器裡用，不送到伺服器） ──
-// MapLibre 載入失敗時 maplibregl 是 undefined，控制項一律放在 MAP_OK 裡
 if (MAP_OK) {
   map.addControl(new maplibregl.NavigationControl());
   const geo = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 10000 },
                                                 showAccuracyCircle: true });
   map.addControl(geo);
-  // 內建會縮放到整個誤差圈（定位不準時拉得很遠，看不到 3D 建物）：固定放大到能畫出建物的層級
-  geo.on("geolocate", () => navigator.sendBeacon?.("/api/event", "geolocate"));  // 只記次數，不送位置
+  geo.on("geolocate", () => navigator.sendBeacon?.("/api/event", "geolocate"));
   geo.on("geolocate", e => map.easeTo({ center: [e.coords.longitude, e.coords.latitude], zoom: 17 }));
-  // 權限被拒時 MapLibre 會停用按鈕，點了沒反應；保持可點，點了顯示原因
   const geoBtn = map.getContainer().querySelector(".maplibregl-ctrl-geolocate");
   if (geoBtn) new MutationObserver(() => { if (geoBtn.disabled) geoBtn.disabled = false; })
     .observe(geoBtn, { attributes: true, attributeFilter: ["disabled"] });
@@ -322,15 +457,57 @@ if (MAP_OK) {
     document.getElementById("result").innerHTML = `<div class="note">${why}。</div>`;
   });
 }
-window.map = map;  // 方便在主控台除錯
+window.map = map;
 
-// ── 地圖診斷：只有網址加 ?debug=1 時才在地圖上顯示狀態（一般使用者看不到） ──
+// ── Popover 舊瀏覽器安全退回（原生支援 Popover API 時不做任何事） ──
+const layerBtn = document.getElementById("layerBtn"), layerPanel = document.getElementById("layerPanel");
+if (!Object.hasOwn(HTMLElement.prototype, "popover")) {
+  const closePop = () => layerPanel.classList.remove("open");
+  layerBtn.addEventListener("click", e => { e.stopPropagation(); layerPanel.classList.toggle("open"); });
+  document.getElementById("layerClose").addEventListener("click", closePop);
+  document.addEventListener("click", e => { if (!layerPanel.contains(e.target) && e.target !== layerBtn) closePop(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closePop(); });
+}
+
+// ── 2D / 3D 視角切換與手機地圖高度切換 ──
+const tiltBtn = document.getElementById("tiltBtn");
+function syncTiltBtn() {
+  if (!MAP_OK) return;
+  const is3d = map.getPitch() > 5;
+  tiltBtn.setAttribute("aria-pressed", String(is3d));
+  tiltBtn.textContent = is3d ? "3D" : "2D";
+}
+tiltBtn.addEventListener("click", () => {
+  if (!MAP_OK) return;
+  const to3d = map.getPitch() <= 5;
+  map.easeTo({ pitch: to3d ? 50 : 0, bearing: to3d ? -15 : 0, duration: 350 });
+});
+if (MAP_OK) map.on("pitchend", syncTiltBtn);
+
+const mapSizeBtn = document.getElementById("mapSizeBtn"), mapWrap = document.getElementById("mapWrap");
+mapSizeBtn.addEventListener("click", () => {
+  const compact = mapWrap.classList.toggle("compact");
+  mapSizeBtn.setAttribute("aria-pressed", String(compact));
+  mapSizeBtn.textContent = compact ? "展開地圖" : "縮小地圖";
+  if (MAP_OK) setTimeout(() => map.resize(), 220);
+});
+
+// ── 縮放層級提示（zoom < 15.5 時提示放大看 3D 建物） ──
+const zoomHint = document.getElementById("zoomHint");
+function syncZoomHint() {
+  if (!MAP_OK) return;
+  zoomHint.hidden = map.getZoom() >= 15.5;
+}
+document.getElementById("zoomInBtn").addEventListener("click", () => {
+  if (MAP_OK) map.easeTo({ zoom: 16.2, duration: 400 });
+});
+
+// ── 地圖診斷：只有網址加 ?debug=1 時才在地圖上顯示狀態 ──
 const mapErrors = [];
 let lostCount = 0;
 map.on("error", e => {
   const msg = String(e?.error?.message || e?.error || e).slice(0, 160);
   mapErrors.push(msg);
-  // WebGL 一直被瀏覽器收回（例：Safari 27.0）：顯示說明，不要只剩空白
   if (/context lost/i.test(msg) && ++lostCount === 20) showGLLost();
 });
 function showGLLost() {
@@ -350,7 +527,7 @@ function showDiag(reason) {
   const c = map.getCanvas();
   const box = document.createElement("div");
   box.id = "diag";
-  box.style.cssText = "position:absolute;left:10px;bottom:30px;z-index:9;max-width:440px;background:rgba(255,255,255,.95);border:1px solid #ccc;border-radius:8px;padding:10px 12px;font:12px/1.5 monospace;color:#222;white-space:pre-wrap";
+  box.style.cssText = "position:absolute;left:10px;bottom:70px;z-index:9;max-width:440px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;font:12px/1.5 monospace;color:var(--ink);white-space:pre-wrap";
   box.textContent = [`地圖診斷（${reason}）`,
     `loaded=${map.loaded()} style=${map.isStyleLoaded()} 畫布=${c.width}x${c.height} 容器=${map.getContainer().offsetWidth}x${map.getContainer().offsetHeight} dpr=${devicePixelRatio}`,
     `中心=${map.getCenter().lng.toFixed(4)},${map.getCenter().lat.toFixed(4)} zoom=${map.getZoom().toFixed(1)}`,
@@ -364,13 +541,13 @@ if (new URLSearchParams(location.search).has("debug")) setTimeout(() => showDiag
 const snapBox = b => [Math.floor(b.getWest() / .005) * .005, Math.floor(b.getSouth() / .005) * .005,
   Math.ceil(b.getEast() / .005) * .005, Math.ceil(b.getNorth() / .005) * .005].map(v => v.toFixed(3)).join(",");
 const EMPTY_FC = { type: "FeatureCollection", features: [] };
-// 樣式載入完成（"load" 事件）才能動圖層。不用 isStyleLoaded()：圖磚還在載入時它也是 false
 let mapReady = false;
-map.on("load", () => { mapReady = true; });
-let timer, bldgSeq = 0, bldgBox = "";  // bldgBox：目前畫的取整範圍，相同就不重抓（旋轉、傾斜、小幅平移）
+map.on("load", () => { mapReady = true; syncZoomHint(); });
+let timer, bldgSeq = 0, bldgBox = "";
 async function loadBuildings() {
-  if (!MAP_OK || !mapReady) return;  // 樣式還沒載入時圖層來源不存在；"load" 時會再呼叫
-  const seq = ++bldgSeq;  // 較慢的舊回應不蓋掉新的（縮小到 15.5 以下後，飛行中的請求也不再畫出建物）
+  if (!MAP_OK || !mapReady) return;
+  syncZoomHint();
+  const seq = ++bldgSeq;
   if (map.getZoom() < 15.5) { if (bldgBox) { map.getSource("bldg").setData(EMPTY_FC); bldgBox = ""; } return; }
   const box = snapBox(map.getBounds());
   if (box === bldgBox) return;
@@ -383,26 +560,38 @@ async function loadBuildings() {
     bldgBox = box;
   } catch (e) { console.error("建物載入失敗", e); }
 }
-map.on("moveend", () => { clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
+map.on("moveend", () => { syncZoomHint(); clearTimeout(timer); timer = setTimeout(loadBuildings, 200); });
 map.on("load", loadBuildings);
 
-// 災害潛勢圖層：勾選的才載入；記住勾選狀態（只存在這台瀏覽器）
+// ── 災害潛勢圖層：勾選的才載入，記住勾選狀態，並在浮動鈕顯示啟用數量與各階色帶 ──
 let hzOn = new Set();
 try { hzOn = new Set(JSON.parse(localStorage.getItem("hazards") || "[]")); } catch {}
-const hzEl = document.getElementById("hzl"), hzHint = document.getElementById("hzhint");
-hzEl.innerHTML = HAZARDS.map(h => `<label><input type="checkbox" value="${h.kind}" ${hzOn.has(h.kind) ? "checked" : ""}>
-  <i style="--c:${h.colors[h.colors.length - 1]}"></i>${h.name}</label>`).join("");
+const hzEl = document.getElementById("hzl"), hzHint = document.getElementById("hzhint"), hzBadge = document.getElementById("hzBadge");
+function syncHzBadge() {
+  hzBadge.textContent = hzOn.size ? String(hzOn.size) : "";
+  hzBadge.hidden = !hzOn.size;
+  layerBtn.setAttribute("aria-label", hzOn.size ? `災害潛勢圖層（已開啟 ${hzOn.size} 項）` : "開啟災害潛勢圖層");
+  hzEl.querySelectorAll(".hz-scale").forEach(el => { el.hidden = !hzOn.has(el.dataset.kind); });
+}
+hzEl.innerHTML = HAZARDS.map(h => {
+  const scale = h.labels ? `<div class="hz-scale" data-kind="${h.kind}" ${hzOn.has(h.kind) ? "" : "hidden"}>${
+    h.colors.map((c, i) => `<span style="--c:${c}">${h.labels[i]}</span>`).join("")}</div>` : "";
+  return `<div class="hz-item"><label><input type="checkbox" value="${h.kind}" ${hzOn.has(h.kind) ? "checked" : ""}>
+    <i style="--c:${h.colors[h.colors.length - 1]}"></i>${h.name}</label>${scale}</div>`;
+}).join("");
+syncHzBadge();
 hzEl.addEventListener("change", e => {
+  if (e.target.type !== "checkbox") return;
   e.target.checked ? hzOn.add(e.target.value) : hzOn.delete(e.target.value);
   try { localStorage.setItem("hazards", JSON.stringify([...hzOn])); } catch {}
+  syncHzBadge();
   loadHazards();
 });
 let hzTimer, hzSeq = 0;
-const hzDrawn = {};  // 各圖層目前畫的 { box, tooLarge }：範圍相同就不重抓（例：勾選另一個圖層時）
+const hzDrawn = {};
 async function loadHazards() {
   if (!MAP_OK || !mapReady) return;
   const seq = ++hzSeq, z = map.getZoom(), bbox = snapBox(map.getBounds());
-  // 各圖層平行抓；回傳 true＝範圍太大沒畫
   const jobs = HAZARDS.map(async h => {
     const on = hzOn.has(h.kind);
     for (const id of [`hz-${h.kind}`, `hz-${h.kind}-line`]) if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on ? "visible" : "none");
@@ -415,7 +604,7 @@ async function loadHazards() {
     const r = await fetch(`/api/hazards?kind=${h.kind}&bbox=${bbox}`);
     if (!r.ok) throw new Error(`${h.kind} ${r.status}`);
     const data = await r.json();
-    if (seq !== hzSeq) return false;  // 已經移到別處
+    if (seq !== hzSeq) return false;
     map.getSource(`hz-${h.kind}`).setData(data);
     hzDrawn[h.kind] = { box: bbox, tooLarge: !!data.too_large };
     return !!data.too_large;
@@ -429,162 +618,347 @@ async function loadHazards() {
 }
 map.on("moveend", () => { clearTimeout(hzTimer); hzTimer = setTimeout(loadHazards, 250); });
 map.on("load", loadHazards);
-// 資料來源標示一開始就收成 ⓘ（點開才顯示），不擋地圖
 map.on("load", () => document.querySelectorAll(".maplibregl-ctrl-attrib.maplibregl-compact-show")
   .forEach(e => e.classList.remove("maplibregl-compact-show")));
 
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const v = x => x == null || x === "" ? "—" : esc(x);
-// 標準化地址 → Google 地圖搜尋（官方網址格式，不需金鑰）；輸入沒寫縣市時補上查到的縣市區，避免找到別的城市
+const srStatus = document.getElementById("srStatus");
+let lastSr = "";
+function announce(text) {
+  let msg = text;
+  if (msg === lastSr) msg += "\u00A0";
+  lastSr = msg;
+  srStatus.textContent = "";
+  requestAnimationFrame(() => { srStatus.textContent = msg; });
+}
+
+// ── 網址同步與區域統計導覽聯動 ──
+const navStats = document.getElementById("navStats");
+function syncPageUrl(params, title, county, town) {
+  const q = new URLSearchParams();
+  for (const [k, val] of Object.entries(params)) if (val) q.set(k, val);
+  const qs = q.toString();
+  history.replaceState(null, "", `${location.pathname}${qs ? `?${qs}` : ""}`);
+  document.title = title ? `${title} — 建物查詢平台` : "建物查詢平台";
+  if (county) {
+    const sq = new URLSearchParams({ county });
+    if (town) sq.set("town", town);
+    navStats.href = `/stats?${sq}`;
+  } else {
+    navStats.href = "/stats";
+  }
+}
+
+// ── 複製分享連結（Invoker Commands + 舊瀏覽器 click 退回 + Async Clipboard / execCommand 退回） ──
+function legacyCopy(text) {
+  const prev = document.activeElement;
+  const f = Object.assign(document.createElement("textarea"), { value: text });
+  f.setAttribute("readonly", "");
+  f.style.cssText = "position:fixed;inset-block-start:0;opacity:0";
+  document.body.append(f);
+  f.select();
+  try { return document.execCommand("copy"); }
+  finally { f.remove(); prev?.focus({ preventScroll: true }); }
+}
+const copyTimers = new WeakMap();
+let lastCopyMsg = "";
+function reportCopy(button, ok) {
+  const tip = button.nextElementSibling;
+  clearTimeout(copyTimers.get(button));
+  button.removeAttribute("data-copied");
+  button.removeAttribute("data-failed");
+  let message = ok ? "已複製連結" : "複製失敗";
+  if (message === lastCopyMsg) message += "\u00A0";
+  lastCopyMsg = message;
+  tip.textContent = "";
+  void button.offsetWidth;
+  button.setAttribute(ok ? "data-copied" : "data-failed", "");
+  requestAnimationFrame(() => { tip.textContent = message; });
+  copyTimers.set(button, setTimeout(() => {
+    button.removeAttribute("data-copied");
+    button.removeAttribute("data-failed");
+    tip.textContent = "";
+  }, 2000));
+}
+async function doCopy(button, target) {
+  const text = target.matches("input, textarea") ? target.value : target.textContent.trim();
+  if (!text) return;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else if (!legacyCopy(text)) throw new Error("fail");
+    reportCopy(button, true);
+  } catch {
+    if (legacyCopy(text)) reportCopy(button, true);
+    else reportCopy(button, false);
+  }
+}
+if ("CommandEvent" in window) {
+  document.addEventListener("command", e => {
+    if (e.command === "--copy") doCopy(e.source, e.target);
+  }, true);
+} else {
+  document.addEventListener("click", e => {
+    if (e.defaultPrevented) return;
+    const btn = e.target.closest('button[command="--copy"]');
+    if (!btn) return;
+    const target = document.getElementById(btn.getAttribute("commandfor"));
+    if (target) doCopy(btn, target);
+  });
+}
+
 function gmapLink(r) {
   if (!r.normalized) return "—";
   const full = r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized;
   const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(full)}`;
   const link = `<a href="${esc(url)}" target="_blank" rel="noopener" title="在 Google 地圖開啟">${esc(full)} ↗</a>`;
-  // 有門牌座標時加街景：Google 會開在離這個點最近的街景
   const pano = r.lat != null && r.lon != null
     ? ` · <a href="${esc(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${r.lat},${r.lon}`)}" target="_blank" rel="noopener">街景 ↗</a>`
     : "";
   return link + pano;
 }
 
-// 飛到查到的建物：畫面中心放在建物上，鏡頭站在門牌那一側（臨街面）朝建物看，
-// 避免同一基地的其他高樓擋在鏡頭和這棟之間
 function viewOf(door, bldg) {
   const view = { center: [door.lon, door.lat], zoom: 18, pitch: 55 };
   if (!bldg || bldg.lon == null) return view;
   const k = Math.cos(door.lat * Math.PI / 180);
   const dx = (bldg.lon - door.lon) * k, dy = bldg.lat - door.lat;
   view.center = [bldg.lon, bldg.lat];
-  if (Math.hypot(dx, dy) > 3e-5) view.bearing = Math.atan2(dx, dy) * 180 / Math.PI;  // 門牌離建物中心 3 m 以上才轉向
+  if (Math.hypot(dx, dy) > 3e-5) view.bearing = Math.atan2(dx, dy) * 180 / Math.PI;
   return view;
 }
 
-// 查地址時在門牌位置放的點；null＝清掉
 function setPin(r) {
-  if (!mapReady) { map.once("load", () => setPin(r)); return; }  // 查詢比地圖樣式先完成
-  map.getSource("pin")?.setData(r ? { type: "Point", coordinates: [r.lon, r.lat] } : { type: "FeatureCollection", features: [] });
+  if (!mapReady) { map.once("load", () => setPin(r)); return; }
+  map.getSource("pin")?.setData(r ? { type: "Point", coordinates: [r.lon, r.lat] } : EMPTY_FC);
 }
-// 選取的建物：整棟立體改成橘色（高樓在斜視角會擋住地面的外框線），地面外框線保留
 function select(uid) {
-  if (!mapReady) { map.once("load", () => select(uid)); return; }  // 查詢比地圖樣式先完成
+  if (!mapReady) { map.once("load", () => select(uid)); return; }
   map.setFilter("bldg-sel", ["==", ["get", "uid"], uid || ""]);
   map.setPaintProperty("bldg", "fill-extrusion-color",
     uid ? ["case", ["==", ["get", "uid"], uid], SEL_COLOR, BLDG_COLOR] : BLDG_COLOR);
 }
 
-// 點地圖上的建物：只看建物圖屬性
-// 點地圖建物的卡片抬頭：名稱、地址（Google 地圖＋街景）；沒有門牌的用建物位置開地圖
-function bldgHead(b) {
-  const first = (b.addresses || [])[0];
-  const more = (b.addresses || []).length > 1 ? `<small class="rx">（共 ${b.addresses.length} 個門牌，見下方）</small>` : "";
-  let place = "—";
-  if (first) place = gmapLink({ normalized: `${b.county || ""}${first}`, lat: b.lat, lon: b.lon }) + more;
-  else if (b.lat != null) {
-    const at = `${b.lat},${b.lon}`;
-    place = `<a href="${esc(`https://www.google.com/maps/search/?api=1&query=${at}`)}" target="_blank" rel="noopener">Google 地圖 ↗</a>`
-      + ` · <a href="${esc(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}`)}" target="_blank" rel="noopener">街景 ↗</a>`
-      + ` <small class="rx">（沒有門牌，依建物位置）</small>`;
-  }
-  return `<dl style="margin-top:10px">${b.name ? `<dt>名稱</dt><dd>${esc(b.name)}</dd>` : ""}<dt>地址</dt><dd>${place}</dd></dl>`;
+// ── 區域統計快取（走勢圖與「本區概況」共用，同區不重複抓） ──
+const dashCache = new Map();
+async function getDashboard(county, town) {
+  if (!county) return null;
+  const key = `${county}|${town || ""}`;
+  if (dashCache.has(key)) return dashCache.get(key);
+  const p = new URLSearchParams({ county });
+  if (town) p.set("town", town);
+  const prom = fetch(`/api/dashboard?${p}`).then(r => r.ok ? r.json() : null).catch(() => null);
+  dashCache.set(key, prom);
+  const d = await prom;
+  if (!d) dashCache.delete(key);
+  return d;
 }
 
-// 查詢結果的序號：查地址、點建物都寫到同一個結果區，較慢的舊回應不蓋掉新的（也不把地圖飛回舊的地方）
+// ── 頂部風險摘要膠囊（Above the fold 一眼掌握災害命中情形） ──
+const NOT_IN_ZONE = "未在範圍內", NO_MAP = "此區無圖資";
+const isHit = x => x && x !== NOT_IN_ZONE && x !== NO_MAP;
+function riskChipsHtml(r) {
+  const chips = [];
+  if (isHit(r.flood500)) {
+    const sev = r.flood500 === "0.3-0.5" ? "chip-warn" : "chip-danger";
+    chips.push(`<a class="chip ${sev}" href="#risk-detail">淹水 ${esc(r.flood500)}m</a>`);
+  } else if (isHit(r.flood650)) {
+    chips.push(`<a class="chip chip-warn" href="#risk-detail">650mm 淹水 ${esc(r.flood650)}m</a>`);
+  }
+  if (isHit(r.liquefaction)) {
+    const sev = r.liquefaction.includes("高") ? "chip-danger" : "chip-warn";
+    chips.push(`<a class="chip ${sev}" href="#risk-detail">液化 ${esc(r.liquefaction)}</a>`);
+  }
+  if (isHit(r.fault)) chips.push(`<a class="chip chip-danger" href="#risk-detail">活動斷層</a>`);
+  if (isHit(r.landslide)) chips.push(`<a class="chip chip-danger" href="#risk-detail">山崩地滑</a>`);
+  if (isHit(r.debris)) chips.push(`<a class="chip chip-danger" href="#risk-detail">土石流</a>`);
+  if (!chips.length) {
+    const checked = [r.flood500, r.flood650, r.liquefaction, r.fault, r.landslide, r.debris].some(x => x === NOT_IN_ZONE);
+    if (checked) chips.push(`<a class="chip chip-ok" href="#risk-detail">✓ 無已知災害潛勢</a>`);
+  }
+  return chips.length ? `<div class="chips" aria-label="災害潛勢快覽">${chips.join("")}</div>` : "";
+}
+
+const CONF_ICON = { "高": "✓", "中": "~", "低": "!", "待確認": "?", "無": "—" };
+function confBadge(conf) {
+  if (!conf) return "";
+  return `<span class="badge b-${esc(conf)}"><span aria-hidden="true">${CONF_ICON[conf] || ""}</span> 信心：${esc(conf)}</span>`;
+}
+
+function showLoading() {
+  document.getElementById("result").innerHTML = `<div class="card loading" aria-busy="true">
+    <progress aria-label="查詢中"></progress>
+    <div class="skel lg"></div>
+    <div class="skel"></div>
+    <div class="skel short"></div>
+  </div>`;
+}
+
 let resultSeq = 0;
 function showError(resp, seq) {
   return resp.json().catch(() => ({})).then(err => {
     if (seq !== resultSeq) return;
-    document.getElementById("result").innerHTML = `<div class="note">${esc(err.detail || `查詢失敗（${resp.status}）`)}</div>`;
+    const text = err.detail || `查詢失敗（${resp.status}）`;
+    document.getElementById("result").innerHTML = `<div class="note" role="alert">${esc(text)}</div>`;
   });
 }
-const netError = () => { document.getElementById("result").innerHTML = `<div class="note">連線失敗，請稍後再試</div>`; };
+const netError = () => { document.getElementById("result").innerHTML = `<div class="note" role="alert">連線失敗，請稍後再試</div>`; };
 
-async function showBuilding(uid) {
+// ── 整合後的主結果卡片（合併原基本資料與建築結構／使用性質，消除重複欄位） ──
+function renderCard(r, opts = {}) {
+  const { isBldg = false, bldg = null, noCoord = "" } = opts;
+  const belowTxt = r.floors_below != null ? `地下 ${esc(r.floors_below)} 層` : "";
+  const showRisk = isBldg || (r.normalized && r.confidence !== "待確認");
+  const shareUrl = location.href;
+  const age = r.year ? `${new Date().getFullYear() - r.year} 年（${esc(r.year_kind || "年份")} ${esc(r.year)}）` : "—";
+
+  let placeRow = "";
+  if (isBldg) {
+    const first = (r.addresses || [])[0];
+    const more = (r.addresses || []).length > 1 ? ` <small class="rx">（共 ${r.n_units || r.addresses.length} 個門牌）</small>` : "";
+    let place = "—";
+    if (first) place = gmapLink({ normalized: `${r.county || ""}${first}`, lat: r.lat, lon: r.lon }) + more;
+    else if (r.lat != null) {
+      const at = `${r.lat},${r.lon}`;
+      place = `<a href="${esc(`https://www.google.com/maps/search/?api=1&query=${at}`)}" target="_blank" rel="noopener">Google 地圖 ↗</a>`
+        + ` · <a href="${esc(`https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${at}`)}" target="_blank" rel="noopener">街景 ↗</a>`
+        + ` <small class="rx">（無門牌，依建物位置）</small>`;
+    }
+    placeRow = `${r.name ? `<dt>名稱</dt><dd>${esc(r.name)}</dd>` : ""}<dt>地址</dt><dd>${place}</dd>`;
+  } else {
+    placeRow = `<dt>標準化地址</dt><dd>${gmapLink(r)}</dd>`
+      + (r.unit_floor != null && r.unit_floor !== "" ? `<dt>所在樓層</dt><dd>${esc(r.unit_floor)}</dd>` : "");
+  }
+
+  const areaLink = r.county
+    ? `/stats?county=${encodeURIComponent(r.county)}${r.town ? `&town=${encodeURIComponent(r.town)}` : ""}`
+    : "";
+  const areaLabel = r.town || r.county || "";
+
+  return `<div class="card">
+    <div class="card-top">
+      <div>
+        <div class="big">${v(r.floors_above)}<small>層（地上）</small></div>
+        <div class="subline">
+          ${belowTxt ? `<span>${belowTxt}</span>` : ""}
+          ${confBadge(r.confidence)}
+        </div>
+      </div>
+      <div class="card-actions">
+        <span id="shareUrl" class="visually-hidden">${esc(shareUrl)}</span>
+        <span class="copy">
+          <button type="button" class="icon-btn copy-button" command="--copy" commandfor="shareUrl">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            複製連結
+          </button>
+          <span class="copy-tip" role="status"></span>
+        </span>
+        <button type="button" class="icon-btn again mob-only">重查</button>
+      </div>
+    </div>
+    ${showRisk ? riskChipsHtml(r) : ""}
+    ${r.note && !isBldg ? `<div class="note">${esc(r.note)}</div>` : ""}
+    ${noCoord}
+    <dl>
+      ${placeRow}
+      <dt>構造</dt><dd>${v(r.structure)}</dd>
+      <dt>建物型態</dt><dd>${v(r.btype)}</dd>
+      <dt>屋齡</dt><dd>${age}${r.year_kind === "建照年" ? `<br><small class="rx">臺北市建照套繪圖只收民國 90 年後的建照；舊建物改建、增建也會領新建照，不一定是興建年</small>` : ""}</dd>
+      ${showRisk ? `<dt>主要用途</dt><dd>${v(r.usage)}${r.usage_source ? ` <small class="rx">（${esc(r.usage_source)}）</small>` : ""}${r.usage_floors ? `<div class="ufl">${r.usage_floors.split("；").map(x => `<div>${esc(x)}</div>`).join("")}</div>` : ""}</dd>
+      <dt>使用分區</dt><dd>${v(r.zoning)}</dd>` : ""}
+      <dt>資料來源</dt><dd>${v(r.source)}${r.level ? ` <small class="rx">（${esc(r.level)}）</small>` : ""}</dd>
+      ${r.t_n != null ? `<dt>實價筆數</dt><dd>${v(r.t_n)}</dd>` : ""}
+      ${bldg && bldg.n_units ? `<dt>同棟門牌</dt><dd>${esc(bldg.n_units)} 個</dd>` : ""}
+    </dl>
+    ${areaLink ? `<div class="area-bar" id="areaBar"><span>${esc(areaLabel)}區域概況</span><a href="${areaLink}">看${esc(areaLabel)}統計 →</a></div>` : ""}
+    ${bldg && bldg.note ? `<div class="note">${bldg.osm ? "OSM 建物：" : ""}${esc(bldg.note)}</div>` : ""}
+    ${bldg && String(bldg.source || "").includes("建照套繪") ? `<div class="note">臺北市建照套繪圖是一張建照一個外框，只記最高樓層；同一張建照裡較低的部分（裙樓、附屬建物等）也會被畫成同樣高度。</div>` : ""}
+    ${bldg && bldg.addresses?.length ? `<details class="addrs-fold"><summary>查看同棟門牌（顯示 ${bldg.addresses.length}${bldg.n_units > bldg.addresses.length ? ` / 共 ${bldg.n_units}` : ""} 筆）</summary><div class="addrs">${bldg.addresses.map(esc).join("<br>")}</div></details>` : ""}
+  </div>`;
+}
+
+async function hydrateAreaBar(cardEl, r) {
+  const bar = cardEl.querySelector("#areaBar");
+  if (!bar || !r.county) return;
+  const d = await getDashboard(r.county, r.town);
+  if (!d || !bar.isConnected) return;
+  const yrows = (d.price?.["全部"]?.Y || []).filter(row => row[1] >= 5);
+  const cutoff = d.latest_trade ? Date.parse(d.latest_trade + "T00:00:00Z") - 30 * 864e5 : null;
+  const full = cutoff != null ? yrows.filter(row => Date.UTC(+row[0].slice(0, 4) + 1, 0, 1) <= cutoff + 864e5) : yrows;
+  const last = full.at(-1) || yrows.at(-1);
+  if (!last) return;
+  const areaLabel = r.town || r.county;
+  const link = `/stats?county=${encodeURIComponent(r.county)}${r.town ? `&town=${encodeURIComponent(r.town)}` : ""}`;
+  bar.innerHTML = `<span>${esc(areaLabel)} ${last[0].slice(0, 4)} 年住宅中位數 <strong>${wanPing(last[3])}/坪</strong></span><a href="${link}">看區域統計 →</a>`;
+}
+
+async function showBuilding(uid, fly = false) {
   const seq = ++resultSeq;
+  setPin(null);
+  select(uid);  // 立即上橘色回饋，不等 API
+  showLoading();
   let resp;
   try { resp = await fetch(`/api/building/${encodeURIComponent(uid)}`); } catch { if (seq === resultSeq) netError(); return; }
   if (seq !== resultSeq) return;
   if (!resp.ok) { await showError(resp, seq); return; }
   const b = await resp.json();
   if (seq !== resultSeq) return;
-  setPin(null);  // 點建物用整棟上色標示，清掉先前查地址留下的門牌點
-  select(uid);
-  document.getElementById("result").innerHTML = card(b, bldgHead(b), b);
-  // 在地圖上點的建物也能回報：附上建物編號（OSM 建物審核後整棟套用，地標常沒有門牌）
   const first = (b.addresses || [])[0];
   const addr = first ? `${b.county || ""}${first}` : (b.name || `地圖建物 ${uid}`);
+  syncPageUrl({ bldg: uid }, b.name || first || "建物詳情", b.county, b.town);
+  if (fly && b.lon != null && b.lat != null) map.flyTo({ center: [b.lon, b.lat], zoom: 17.5, pitch: 55 });
+  document.getElementById("result").innerHTML = renderCard(b, { isBldg: true, bldg: b });
   const cardEl = document.getElementById("result").querySelector(".card");
   if (b.trades?.length) { cardEl.insertAdjacentHTML("beforeend", tradesHtml(b)); tradeChart(cardEl, b); }
   cardEl.insertAdjacentHTML("beforeend", riskHtml(b));
   cardEl.insertAdjacentHTML("beforeend", feedbackHtml({ normalized: addr, floors_above: b.floors_above }, uid));
-  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
-}
-
-// 查詢結果（圖資＋實價合併後）為主；有對到建物就附上同棟門牌
-function card(r, head, bldg) {
-  return `
-    <div class="card">
-      <div class="big">${v(r.floors_above)}<small>層（地上）</small></div>
-      ${head}
-      <dl>
-        <dt>地下樓層</dt><dd>${v(r.floors_below)}</dd>
-        <dt>構造</dt><dd>${v(r.structure)}</dd>
-        <dt>建物型態</dt><dd>${v(r.btype)}</dd>
-        <dt>${v(r.year_kind || "年份")}</dt><dd>${v(r.year)}</dd>
-        <dt>資料來源</dt><dd>${v(r.source)}</dd>
-        ${r.t_n != null ? `<dt>實價筆數</dt><dd>${v(r.t_n)}</dd>` : ""}
-        ${bldg ? `<dt>同棟門牌</dt><dd>${v(bldg.n_units)}</dd>` : ""}
-      </dl>
-      ${bldg && bldg.note ? `<div class="note">${bldg.osm ? "OSM 建物：" : ""}${esc(bldg.note)}</div>` : ""}
-      ${bldg && String(bldg.source || "").includes("建照套繪") ? `<div class="note">臺北市建照套繪圖是一張建照一個外框，只記最高樓層；同一張建照裡較低的部分（裙樓、附屬建物等）也會被畫成同樣高度。</div>` : ""}
-      ${bldg ? `<div class="addrs">${bldg.addresses.map(esc).join("<br>")}</div>` : ""}
-    </div>`;
+  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again bottom-again mob-only">查詢其他地址</button>`);
+  hydrateAreaBar(cardEl, b);
+  announce(`已載入建物：${b.name || first || ""}，地上 ${b.floors_above ?? "未知"} 層`);
 }
 
 document.getElementById("f").addEventListener("submit", e => {
   e.preventDefault();
   const q = document.getElementById("q").value.trim();
-  lastSubmitted = q; clearTimeout(suggTimer); suggSeq++;  // 取消還在路上的建議請求
+  lastSubmitted = q; clearTimeout(suggTimer); suggSeq++;
   hideSugg();
   if (q) doLookup(q, "type");
 });
 
-async function doLookup(q, via) {  // via：查詢入口，只用於統計各功能的使用次數
+async function doLookup(q, via) {
   const seq = ++resultSeq;
+  showLoading();
   let resp;
   try { resp = await fetch(`/api/lookup?q=${encodeURIComponent(q)}${via ? `&via=${via}` : ""}`); }
   catch { if (seq === resultSeq) netError(); return; }
   if (seq !== resultSeq) return;
-  if (!resp.ok) { await showError(resp, seq); return; }  // 例：查詢太頻繁（429）
+  if (!resp.ok) { await showError(resp, seq); return; }
   const r = await resp.json();
   if (seq !== resultSeq) return;
-  const head = `<dl style="margin-top:10px">
-      <dt>標準化</dt><dd>${gmapLink(r)}</dd>
-      <dt>所在樓層</dt><dd>${v(r.unit_floor)}</dd>
-      <dt>比對方式</dt><dd>${v(r.level)}</dd>
-      <dt>信心</dt><dd><span class="badge b-${esc(r.confidence)}">${esc(r.confidence)}</span></dd>
-    </dl>${r.note ? `<div class="note">${esc(r.note)}</div>` : ""}`;
-  // 基隆、南投、嘉義市、宜蘭、連江沒有門牌座標：只有實價登錄，地圖無法定位
   const noCoord = r.lon == null && r.county && r.confidence !== "無" && r.confidence !== "待確認"
     ? `<div class="note">${esc(r.county)}沒有開放門牌座標資料，地圖無法定位到這個門牌（樓層資料來自實價登錄）。</div>` : "";
-  // 有 OSM 建物（每棟分開）優先框它，其次市府建物圖
   const uid = r.osm_uid || r.bldg_uid;
-  const bldg = r.building !== undefined ? r.building  // 伺服器已一起回傳；舊版伺服器才另外查
+  const bldg = r.building !== undefined ? r.building
     : uid ? await fetch(`/api/building/${encodeURIComponent(uid)}`).then(x => x.ok ? x.json() : null).catch(() => null) : null;
   if (seq !== resultSeq) return;
-  setPin(r.lon != null ? r : null);  // 沒有座標的門牌也要清掉上一次的點
+  const fullQ = r.normalized ? (r.county && !r.normalized.startsWith(r.county) ? `${r.county}${r.town || ""}${r.normalized}` : r.normalized) : q;
+  syncPageUrl({ q: fullQ }, fullQ, r.county, r.town);
+  setPin(r.lon != null ? r : null);
   if (r.lon != null) map.flyTo(viewOf(r, bldg));
   select(uid);
-  document.getElementById("result").innerHTML = card(r, head + noCoord, bldg);
+  document.getElementById("result").innerHTML = renderCard(r, { isBldg: false, bldg, noCoord });
   const cardEl = document.getElementById("result").querySelector(".card");
   if (r.trades?.length) { cardEl.insertAdjacentHTML("beforeend", tradesHtml(r)); tradeChart(cardEl, r); }
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", riskHtml(r));
   if (r.normalized && r.confidence !== "待確認") cardEl.insertAdjacentHTML("beforeend", feedbackHtml(r));
-  // 手機：結果在地圖下方、選單更下面，給一顆回到選單的按鈕
-  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again mob-only">查詢其他地址</button>`);
-  // 手機：結果卡片排在地圖正下方，查詢完捲到地圖，地圖與結果一起看
-  if (matchMedia("(max-width: 760px)").matches) document.getElementById("map").scrollIntoView({ behavior: "smooth", block: "start" });
-  // 查不到時：列出模糊搜尋的候選
+  cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again bottom-again mob-only">查詢其他地址</button>`);
+  hydrateAreaBar(cardEl, r);
+  announce(`查詢完成：${fullQ}，地上 ${r.floors_above ?? "未知"} 層，信心${r.confidence || "無"}`);
+  if (matchMedia("(max-width: 760px)").matches) {
+    document.getElementById("mapWrap").scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (via === "pick") {
+    cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
   if (r.confidence === "無" || r.confidence === "待確認") {
     const items = (await fetch(`/api/suggest?q=${encodeURIComponent(q)}`).then(x => x.ok ? x.json() : []).catch(() => []))
       .filter(x => x.kind !== "road" && x.text !== r.normalized);
@@ -593,39 +967,53 @@ async function doLookup(q, via) {  // via：查詢入口，只用於統計各功
   }
 }
 
-// ── 打字時的模糊搜尋建議（/api/suggest） ──
+// ── 範例快選 ──
+document.querySelector(".examples").addEventListener("click", e => {
+  const b = e.target.closest(".ex"); if (!b) return;
+  const q = b.dataset.q;
+  qEl.value = q; lastSubmitted = q; syncClear(); hideSugg();
+  doLookup(q, "type");
+});
+
+// ── 打字時的模糊搜尋建議（/api/suggest，支援完整 ARIA combobox 與鍵盤捲動跟隨） ──
 const qEl = document.getElementById("q"), suggEl = document.getElementById("sugg");
 let suggItems = [], suggOn = -1, suggTimer, suggSeq = 0;
 function sgHtml(x, i) {
-  const dot = x.has ? `<span class="dot">●</span> ` : "";
-  // 建物名稱：顯示名稱，選了查它的代表門牌（同名的好幾棟各自不同）
-  return `<button type="button" class="sg" data-text="${esc(x.kind === "name" ? x.addr : x.text)}" data-kind="${esc(x.kind)}">${dot}${esc(x.text)}`
+  const dot = x.has ? `<span class="dot" aria-hidden="true">●</span> ` : "";
+  return `<button type="button" class="sg" role="option" id="sg-${i}" aria-selected="false" data-text="${esc(x.kind === "name" ? x.addr : x.text)}" data-kind="${esc(x.kind)}">${dot}${esc(x.text)}`
     + `${x.hint ? `<small>${esc(x.hint)}</small>` : ""}</button>`;
 }
-function hideSugg() { suggEl.hidden = true; suggOn = -1; }
+function hideSugg() {
+  suggEl.hidden = true;
+  suggOn = -1;
+  qEl.setAttribute("aria-expanded", "false");
+  qEl.removeAttribute("aria-activedescendant");
+}
 let lastSubmitted = "";
 async function updateSugg() {
   const q = qEl.value.trim();
-  if (q.length < 2 || q === lastSubmitted) { hideSugg(); return; }  // 已送出查詢的文字不再跳建議
+  if (q.length < 2 || q === lastSubmitted) { hideSugg(); return; }
   const seq = ++suggSeq;
-  const resp = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`);
-  if (!resp.ok) { hideSugg(); return; }
+  const resp = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`).catch(() => null);
+  if (!resp?.ok) { hideSugg(); return; }
   const items = await resp.json();
-  if (seq !== suggSeq) return;  // 有更新的輸入，丟掉舊結果
+  if (seq !== suggSeq) return;
   suggItems = items; suggOn = -1;
   suggEl.innerHTML = items.map(sgHtml).join("");
   suggEl.hidden = !items.length;
+  qEl.setAttribute("aria-expanded", String(items.length > 0));
+  qEl.removeAttribute("aria-activedescendant");
 }
 function chooseSugg(text, kind) {
   qEl.value = text; syncClear();
   hideSugg();
-  if (kind === "road") { qEl.focus(); updateSugg(); return; }  // 選了路，接著打門牌號
+  if (kind === "road") { qEl.focus(); updateSugg(); return; }
+  lastSubmitted = text;
   doLookup(text, "suggest");
 }
 const qClear = document.getElementById("qClear");
 const syncClear = () => { qClear.hidden = !qEl.value; };
 qEl.addEventListener("input", () => { syncClear(); clearTimeout(suggTimer); suggTimer = setTimeout(updateSugg, 200); });
-// 一鍵清除：清掉文字與建議，游標留在輸入框可以直接打下一筆（查詢結果和地圖不動）
 qClear.addEventListener("click", () => {
   clearTimeout(suggTimer); suggSeq++;
   qEl.value = ""; lastSubmitted = ""; hideSugg(); syncClear(); qEl.focus();
@@ -635,7 +1023,17 @@ qEl.addEventListener("keydown", e => {
   if (e.key === "ArrowDown" || e.key === "ArrowUp") {
     e.preventDefault();
     suggOn = (suggOn + (e.key === "ArrowDown" ? 1 : -1) + suggItems.length) % suggItems.length;
-    suggEl.querySelectorAll(".sg").forEach((b, i) => b.classList.toggle("on", i === suggOn));
+    const opts = suggEl.querySelectorAll(".sg");
+    opts.forEach((b, i) => {
+      const on = i === suggOn;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-selected", String(on));
+    });
+    const active = opts[suggOn];
+    if (active) {
+      qEl.setAttribute("aria-activedescendant", active.id);
+      active.scrollIntoView({ block: "nearest" });
+    }
   } else if (e.key === "Enter" && suggOn >= 0) {
     e.preventDefault();
     const it = suggItems[suggOn];
@@ -645,13 +1043,17 @@ qEl.addEventListener("keydown", e => {
 qEl.addEventListener("blur", () => setTimeout(hideSugg, 150));
 document.getElementById("result").addEventListener("click", e => {
   const b = e.target.closest(".sg"); if (b) chooseSugg(b.dataset.text, b.dataset.kind);
+  const chip = e.target.closest('a.chip[href="#risk-detail"]');
+  if (chip) {
+    const target = document.getElementById("risk-detail");
+    if (target) { e.preventDefault(); target.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
 });
 suggEl.addEventListener("mousedown", e => {
   const b = e.target.closest(".sg"); if (b) { e.preventDefault(); chooseSugg(b.dataset.text, b.dataset.kind); }
 });
 
-// ── 建物風險資訊：C 建築結構、O 使用性質、E 災害潛勢（sitefloor/risk.py） ──
-const NOT_IN_ZONE = "未在範圍內", NO_MAP = "此區無圖資";
+// ── 建物風險與安全防護詳情（建築結構與使用性質已整合進卡片主欄，此區不重複） ──
 function hz(x) {
   if (x == null) return `<span class="rx">—（沒有門牌座標）</span>`;
   if (x === NOT_IN_ZONE) return `<span class="rn">${x}</span>`;
@@ -661,22 +1063,13 @@ function hz(x) {
 const dist = m => m >= 1000 ? `${(m / 1000).toFixed(1)} 公里` : `${m} 公尺`;
 function hydrant(r) {
   if (r.lon == null) return hz(null);
-  if (r.hydrants_100m == null) return hz(NO_MAP);  // 金門、連江沒有消防栓資料
+  if (r.hydrants_100m == null) return hz(NO_MAP);
   return r.hydrant_m != null ? `直線 ${dist(r.hydrant_m)}` : "2 公里內沒有";
 }
 function riskHtml(r) {
-  const age = r.year ? `${new Date().getFullYear() - r.year} 年（${esc(r.year_kind || "年份")} ${esc(r.year)}）` : "—";
   const flood = d => d && d !== NOT_IN_ZONE && d !== NO_MAP ? `${d} 公尺` : d;
-  return `<div class="risk"><h3>建物風險資訊</h3>
+  return `<div class="risk" id="risk-detail"><h3>安全防護與災害潛勢</h3>
     ${r.risk_note ? `<div class="note">${esc(r.risk_note)}</div>` : ""}
-    <h4>建築結構</h4><dl>
-      <dt>構造</dt><dd>${v(r.structure)}</dd>
-      <dt>樓層</dt><dd>${r.floors_above != null ? `地上 ${esc(r.floors_above)} 層` : "—"}${r.floors_below != null ? `、地下 ${esc(r.floors_below)} 層` : ""}</dd>
-      <dt>屋齡</dt><dd>${age}${r.year_kind === "建照年" ? `<br><small class="rx">臺北市建照套繪圖只收民國 90 年後的建照；舊建物改建、增建也會領新建照，不一定是興建年</small>` : ""}</dd></dl>
-    <h4>使用性質</h4><dl>
-      <dt>主要用途</dt><dd>${v(r.usage)}${r.usage_source ? ` <small class="rx">（${esc(r.usage_source)}）</small>` : ""}${r.usage_floors ? `<div class="ufl">${r.usage_floors.split("；").map(x => `<div>${esc(x)}</div>`).join("")}</div>` : ""}</dd>
-      <dt>使用分區</dt><dd>${v(r.zoning)}</dd>
-      <dt>建物型態</dt><dd>${v(r.btype)}</dd></dl>
     <h4>安全防護</h4><dl>
       <dt>最近消防分隊</dt><dd>${r.fire_station ? `${esc(r.fire_station.replace(/^.*?消防局/, ""))}（直線 ${dist(r.fire_station_m)}）` : hz(r.lon == null ? null : NO_MAP)}</dd>
       <dt>最近消防栓</dt><dd>${hydrant(r)}</dd>
@@ -692,7 +1085,7 @@ function riskHtml(r) {
   </div>`;
 }
 
-// ── 實價登錄成交紀錄：只列買賣，照原始資料顯示，不做估價；先列最新 TRADES_SHOWN 筆，其餘收合 ──
+// ── 實價登錄成交紀錄 ──
 const M2_PER_PING = 3.305785, TRADES_SHOWN = 5;
 const wan = x => x == null ? "—" : Math.round(x / 1e4).toLocaleString("zh-TW");
 function tradeRows(ts, showBase) {
@@ -706,22 +1099,22 @@ function tradeRows(ts, showBase) {
   }).join("");
 }
 function tradesHtml(r) {
-  const head = `<tr class="th"><td>成交日期</td><td class="n">樓層</td><td class="n">總價</td><td class="n">每坪</td></tr>`;
+  const head = `<thead><tr><th scope="col">成交日期</th><th scope="col" class="n">樓層</th><th scope="col" class="n">總價</th><th scope="col" class="n">每坪</th></tr></thead>`;
   const rest = r.trades.slice(TRADES_SHOWN);
-  const showBase = new Set(r.trades.map(t => t.base)).size > 1;  // 點地圖建物：棟內多個門牌合併列出
+  const showBase = new Set(r.trades.map(t => t.base)).size > 1;
   const main = r.trades_base && r.normalized && !r.normalized.endsWith(r.trades_base)
     ? `<div class="note">這個門牌沒有自己的成交紀錄，以下是主號 ${esc(r.trades_base)} 的紀錄。</div>` : "";
   return `<div class="risk"><h3>實價登錄成交紀錄</h3>${main}
     <div class="tchart" hidden><div class="tsum"></div><div class="tplot"></div><div class="note tcap"></div></div>
-    <table class="trades">${head}${tradeRows(r.trades.slice(0, TRADES_SHOWN), showBase)}</table>
+    <table class="trades">${head}<tbody>${tradeRows(r.trades.slice(0, TRADES_SHOWN), showBase)}</tbody></table>
     ${rest.length ? `<details><summary>其餘 ${rest.length} 筆${r.trades.length >= 300 ? "（最多列 300 筆）" : ""}</summary>
-      <table class="trades">${tradeRows(rest, showBase)}</table></details>` : ""}
+      <table class="trades"><tbody>${tradeRows(rest, showBase)}</tbody></table></details>` : ""}
     <div class="note">內政部實價登錄${r.county === "臺北市" ? "與臺北市實價週報" : ""}的買賣紀錄，新到舊排列，租賃不列。價格照原始申報，總價含車位、沒有調整；親友間交易、含增建等特殊情形見各筆備註。僅供參考，以<a href="https://lvr.land.moi.gov.tw/" target="_blank" rel="noopener">內政部實價登錄</a>公告為準，本站不提供估價。</div>
   </div>`;
 }
 
-// ── 單價走勢圖：每筆買賣一個點＋逐年中位數，背景是同鄉鎮同型態的中位數（區域統計）；排除特殊交易 ──
-const MIN_TREND = 3, TREND_FROM = 2013;  // 至少幾筆才畫圖；摘要從這年起算（和區域統計 sitefloor/stats.py START_YEAR 一致）
+// ── 單價走勢圖（散點也可滑過／點擊檢視該筆日期、樓層、單價與總價） ──
+const MIN_TREND = 3, TREND_FROM = 2013;
 const median = a => { const v = [...a].sort((x, y) => x - y), m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
 const wanPing = v => `${(v / 1e4).toFixed(v >= 1e6 ? 0 : 1)} 萬`;
 async function tradeChart(cardEl, r) {
@@ -729,29 +1122,29 @@ async function tradeChart(cardEl, r) {
   const ok = (r.trades || []).filter(t => t.unit_price > 0 && !t.special && t.grp && t.trade_date);
   if (!box || ok.length < MIN_TREND) return;
   let charts;
-  try { charts = await import("/charts.js?v=2"); } catch { return; }
+  try { charts = await import("/charts.js?v=3"); } catch { return; }
   const grp = Object.entries(ok.reduce((a, t) => (a[t.grp] = (a[t.grp] || 0) + 1, a), {})).sort((a, b) => b[1] - a[1])[0][0];
-  const pts = ok.filter(t => t.grp === grp).map(t => [charts.ms(t.trade_date), t.unit_price * M2_PER_PING]);
+  const pts = ok.filter(t => t.grp === grp).map(t => [charts.ms(t.trade_date), t.unit_price * M2_PER_PING,
+    { date: t.trade_date, floor: t.floor, total: t.total_price }]);
   const byYear = {};
-  for (const [x, v] of pts) (byYear[new Date(x).getUTCFullYear()] ||= []).push(v);
+  for (const [x, val] of pts) (byYear[new Date(x).getUTCFullYear()] ||= []).push(val);
   const years = Object.keys(byYear).map(Number).filter(y => byYear[y].length >= 2).sort();
-  const own = years.map(y => [Date.UTC(y, 6, 1), median(byYear[y])]);  // 年中位數畫在年中
-  // 同鄉鎮同型態的行情（區域統計），只取這棟有成交的期間前後
+  const own = years.map(y => [Date.UTC(y, 6, 1), median(byYear[y])]);
   let area = [], areaName = "", d = null;
   if (r.county && r.town) {
-    try { d = await (await fetch(`/api/dashboard?county=${encodeURIComponent(r.county)}&town=${encodeURIComponent(r.town)}`)).json(); } catch { d = null; }
+    d = await getDashboard(r.county, r.town);
     const y0 = new Date(Math.min(...pts.map(p => p[0]))).getUTCFullYear() - 1;
     area = (d?.price?.[grp]?.Y || []).filter(row => row[1] >= 5 && +row[0].slice(0, 4) >= y0)
       .map(row => [Date.UTC(+row[0].slice(0, 4), 6, 1), row[3]]);
     areaName = `${r.town}${grp}`;
   }
-  if (!box.isConnected) return;  // 等資料時使用者已經查了別的地址
+  if (!box.isConnected) return;
   box.hidden = false;
-  navigator.sendBeacon?.("/api/event", "trend");  // 使用統計：只記次數
+  navigator.sendBeacon?.("/api/event", "trend");
   const areaAt = y => area.find(([x]) => new Date(x).getUTCFullYear() === y)?.[1];
   const pctTxt = v => `${v >= 0 ? "+" : ""}${Math.round(v * 100)}%`;
   let sum = "";
-  const sy = years.filter(y => y >= TREND_FROM);  // 更早的紀錄照畫，但不拿來算漲幅（沒有同期行情可比）
+  const sy = years.filter(y => y >= TREND_FROM);
   if (sy.length >= 2 && sy.at(-1) - sy[0] >= 3) {
     const [a, b] = [sy[0], sy.at(-1)], va = median(byYear[a]), vb = median(byYear[b]);
     const aa = areaAt(a), ab = areaAt(b);
@@ -764,20 +1157,24 @@ async function tradeChart(cardEl, r) {
   }
   box.querySelector(".tsum").innerHTML = sum ? `<b>${sum}</b>` : `<span class="note">成交筆數少，還看不出趨勢</span>`;
   charts.lineChart(box.querySelector(".tplot"), [
-    ...(area.length ? [{ name: areaName, color: "#94a3b8", dash: "5 4", width: 1.5, points: area }] : []),
-    { name: "每筆成交", color: "#2563eb", dots: true, points: pts },
-    ...(own.length ? [{ name: "這棟（年中位數）", color: "#2563eb", points: own }] : []),
-  ], { height: 170, yFmt: v => `${Math.round(v / 1e4)}萬`, tipFmt: v => `${wanPing(v)}/坪`, label: "這棟的每坪單價" });
+    ...(area.length ? [{ name: areaName, color: "var(--parent)", dash: "5 4", width: 1.5, points: area }] : []),
+    { name: "每筆成交", color: "var(--accent)", dots: true, points: pts },
+    ...(own.length ? [{ name: "這棟（年中位數）", color: "var(--accent)", points: own }] : []),
+  ], {
+    height: 170,
+    yFmt: v => `${Math.round(v / 1e4)}萬`,
+    tipFmt: v => `${wanPing(v)}/坪`,
+    dotFmt: ([, y, m]) => `<b>${esc(m.date)}${m.floor != null ? ` · ${esc(m.floor)} 樓` : ""}</b><br>單價 ${wanPing(y)}/坪${m.total ? `<br>總價 ${wan(m.total)} 萬` : ""}`,
+    label: "這棟的每坪單價",
+  });
   const link = r.county ? `<a href="/stats?county=${encodeURIComponent(r.county)}${r.town ? `&town=${encodeURIComponent(r.town)}` : ""}&grp=${encodeURIComponent(grp)}">${esc(r.town || r.county)}行情 →</a>` : "";
-  box.querySelector(".tcap").innerHTML = `每坪單價（萬元）。點＝每筆${esc(grp)}買賣，實線＝這棟逐年中位數（該年 2 筆以上）`
+  box.querySelector(".tcap").innerHTML = `每坪單價（萬元）。點＝每筆${esc(grp)}買賣（滑過或點擊看明細），實線＝這棟逐年中位數（該年 2 筆以上）`
     + (area.length ? `，虛線＝${esc(areaName)}中位數` : "") + `。已排除親友間、含增建等特殊交易；單價受樓層、坪數、屋況影響，只是粗略趨勢，不是估價。${link}`;
 }
 
-// ── 問題回報：結果卡片下方的表單，送到 /api/feedback（推播給維護者審核） ──
-// 類型要和 sitefloor/feedback.py 的 KINDS 一致
+// ── 問題回報（補上網路錯誤處理，避免按鈕卡在停用狀態） ──
 const FB_KINDS = [["floors", "樓層錯誤"], ["address", "地址或位置錯誤"], ["shape", "建物形狀或立體圖錯誤"],
   ["info", "年份、構造或用途錯誤"], ["hazard", "災害潛勢或消防資訊錯誤"], ["site", "網站功能或建議"], ["other", "其他問題"]];
-// 側欄的一般回報：不限地址，樓層錯誤要從結果卡片回報
 document.querySelector(".fb-general select").innerHTML = FB_KINDS.filter(([k]) => k !== "floors")
   .map(([k, t]) => `<option value="${k}">${t}</option>`).join("");
 function feedbackHtml(r, building = "") {
@@ -790,18 +1187,17 @@ function feedbackHtml(r, building = "") {
       <label class="wide fd" hidden>說明<textarea name="detail" maxlength="500" rows="3" placeholder="例：這裡應該只有一棟、地址對到隔壁、年份不對"></textarea></label>
       <label class="wide">依據<input name="basis" maxlength="200" placeholder="例：住在這裡、使用執照、建案資料"></label>
       <label class="wide">聯絡方式<input name="contact" maxlength="100" placeholder="可不填（需要確認時聯絡你）"></label>
-      <div class="wide fbbtns"><button type="submit">送出</button><span class="fbmsg hint"></span></div>
+      <div class="wide fbbtns"><button type="submit">送出</button><span class="fbmsg hint" aria-live="polite"></span></div>
       <div class="hint wide">不知道正確資料也可以：什麼都不填直接送出，就是「標記這筆有誤」。</div>
     </form></details>`;
 }
 document.getElementById("result").addEventListener("click", e => {
   if (e.target.closest(".again")) document.querySelector(".tabs").scrollIntoView({ behavior: "smooth", block: "start" });
 });
-// 樓層錯誤才要填樓層；其他問題改填說明
 document.addEventListener("change", e => {
   if (e.target.name !== "kind") return;
   const f = e.target.closest(".fbform"), floors = e.target.value === "floors";
-  if (!f.querySelector(".fl")) return;  // 側欄的一般回報沒有樓層欄位
+  if (!f.querySelector(".fl")) return;
   f.querySelectorAll(".fl").forEach(l => l.hidden = !floors);
   f.querySelector(".fd").hidden = floors;
 });
@@ -809,12 +1205,18 @@ async function sendFeedback(f, data) {
   const msg = f.querySelector(".fbmsg"), btns = f.querySelectorAll("button");
   btns.forEach(b => b.disabled = true); msg.textContent = "送出中…";
   if (f.dataset.addr !== undefined) Object.assign(data, { address: f.dataset.addr, shown: f.dataset.shown, building: f.dataset.bldg });
-  const resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  let resp;
+  try {
+    resp = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+  } catch {
+    msg.textContent = "連線失敗，請稍後再試";
+    btns.forEach(b => b.disabled = false);
+    return;
+  }
   const out = await resp.json().catch(() => ({}));
   if (resp.ok) { msg.textContent = "已收到，謝謝！確認後會更新。"; f.querySelectorAll("input, select, textarea").forEach(i => i.disabled = true); }
   else { msg.textContent = out.detail || `送出失敗（${resp.status}）`; btns.forEach(b => b.disabled = false); }
 }
-// 結果卡片的回報：有填資料就是一般回報；樓層、說明、依據都沒填就送出＝只標記這筆有誤
 document.addEventListener("submit", e => {
   const f = e.target.closest(".fbform"); if (!f) return;
   e.preventDefault();
@@ -824,18 +1226,19 @@ document.addEventListener("submit", e => {
   sendFeedback(f, data);
 });
 
-// ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick 回傳下一層） ──
+// ── 用選的：縣市 → 鄉鎮市區 → 路街 → 巷弄 → 門牌號（/api/pick） ──
 const LEVELS = ["county", "town", "road", "lane"];
 const LEVEL_NAME = { county: "縣市", town: "鄉鎮市區", road: "路／街", lane: "巷弄", door: "門牌號" };
 const pick = { county: "", town: "", road: "", lane: null };
 const tilesEl = document.getElementById("tiles"), filterEl = document.getElementById("pickFilter");
-let pickItems = [], pickLevel = "county";
+let pickItems = [], pickLevel = "county", pickLoaded = false;
 const laneLabel = l => l === "" ? "沿路門牌" : l;
 const isSet = k => k === "lane" ? pick.lane != null : pick[k] !== "";
 
 let pickSeq = 0;
 async function loadPick() {
-  const seq = ++pickSeq;  // 連點時只畫最後一次的結果
+  pickLoaded = true;
+  const seq = ++pickSeq;
   const p = new URLSearchParams();
   for (const k of LEVELS) if (isSet(k)) p.set(k, pick[k]);
   tilesEl.innerHTML = `<span class="hint">載入中…</span>`;
@@ -850,7 +1253,7 @@ async function loadPick() {
   }
   if (seq !== pickSeq) return;
   pickLevel = r.level; pickItems = r.items;
-  if (r.level === "door") pick.lane = r.lane;  // 只有一種巷弄時後端直接給門牌
+  if (r.level === "door") pick.lane = r.lane;
   filterEl.value = "";
   filterEl.hidden = pickItems.length <= 40;
   filterEl.placeholder = r.level === "door" ? "篩選門牌號，例：390" : `篩選${LEVEL_NAME[r.level]}，例：${r.level === "road" ? "中山" : "1"}`;
@@ -860,12 +1263,10 @@ async function loadPick() {
 function renderCrumbs() {
   const chosen = LEVELS.filter(isSet);
   document.getElementById("crumbs").innerHTML =
-    (chosen.length ? `<button data-back="-1">全部</button>` : "")
-    + chosen.map((k, i) => `<span class="cur">›</span><button data-back="${i}">${esc(k === "lane" ? laneLabel(pick[k]) : pick[k])}</button>`).join("")
+    (chosen.length ? `<button type="button" data-back="-1">全部</button>` : "")
+    + chosen.map((k, i) => `<span class="cur">›</span><button type="button" data-back="${i}">${esc(k === "lane" ? laneLabel(pick[k]) : pick[k])}</button>`).join("")
     + `<span class="cur">${chosen.length ? "›" : ""} 選${LEVEL_NAME[pickLevel]}</span>`;
 }
-
-// 框內還有沒捲到的項目：下緣淡出（Mac 預設不顯示捲軸，否則看起來像框線被切掉）
 function tileFade() {
   tilesEl.classList.toggle("more", tilesEl.scrollHeight - tilesEl.scrollTop - tilesEl.clientHeight > 4);
 }
@@ -876,11 +1277,11 @@ function renderTiles() {
   const f = filterEl.value.trim();
   const items = f ? pickItems.filter(x => (pickLevel === "lane" ? laneLabel(x.name) : x.name).includes(f)) : pickItems;
   tilesEl.className = "tiles" + (pickLevel === "door" ? " num" : pickLevel === "road" || pickLevel === "lane" ? " wide" : "");
-  tilesEl.innerHTML = items.length ? items.map((x, i) => {
+  tilesEl.innerHTML = items.length ? items.map(x => {
     const label = pickLevel === "lane" ? laneLabel(x.name) : x.name;
     const sub = pickLevel === "county" ? `${x.n} 區` : pickLevel === "door" ? "" : `${x.n.toLocaleString()} 門牌`;
     const has = pickLevel === "door" ? x.has : false;
-    return `<button class="tile${has ? " has" : ""}" data-i="${pickItems.indexOf(x)}">${esc(label)}${sub ? `<small>${sub}</small>` : ""}</button>`;
+    return `<button type="button" class="tile${has ? " has" : ""}" data-i="${pickItems.indexOf(x)}">${esc(label)}${sub ? `<small>${sub}</small>` : ""}</button>`;
   }).join("") : `<span class="hint">沒有符合的${LEVEL_NAME[pickLevel]}</span>`;
   tilesEl.scrollTop = 0;
   tileFade();
@@ -905,37 +1306,82 @@ tilesEl.addEventListener("click", e => {
 });
 document.getElementById("crumbs").addEventListener("click", e => {
   const b = e.target.closest("button[data-back]"); if (!b) return;
-  const keep = +b.dataset.back;  // 保留到第 keep 層（含），之後清掉
+  const keep = +b.dataset.back;
   LEVELS.forEach((k, i) => { if (i > keep) pick[k] = k === "lane" ? null : ""; });
   loadPick();
 });
 filterEl.addEventListener("input", renderTiles);
 
-const tabPick = document.getElementById("tabPick"), tabType = document.getElementById("tabType");
-function setTab(t) {
-  tabPick.classList.toggle("on", t === "pick"); tabType.classList.toggle("on", t === "type");
-  document.getElementById("pickBox").hidden = t !== "pick";
-  document.getElementById("typeBox").hidden = t !== "type";
-  if (t === "type") document.getElementById("q").focus();
-  try { localStorage.setItem("searchTab", t); } catch {}
+// ── 3 分頁（輸入地址｜選擇地址｜整批查詢）：完整 ARIA tablist 與方向鍵切換 ──
+const TABS = [
+  { key: "type", btn: document.getElementById("tabType"), panel: document.getElementById("typeBox") },
+  { key: "pick", btn: document.getElementById("tabPick"), panel: document.getElementById("pickBox") },
+  { key: "batch", btn: document.getElementById("tabBatch"), panel: document.getElementById("batchBox") },
+];
+function setTab(key, focusInput = false) {
+  if (!TABS.some(t => t.key === key)) key = "type";
+  for (const t of TABS) {
+    const on = t.key === key;
+    t.btn.setAttribute("aria-selected", String(on));
+    t.btn.tabIndex = on ? 0 : -1;
+    t.panel.hidden = !on;
+  }
+  if (key === "pick" && !pickLoaded) loadPick();
+  if (key === "type" && focusInput) qEl.focus();
+  try { localStorage.setItem("searchTab", key); } catch {}
 }
-tabPick.addEventListener("click", () => setTab("pick"));
-tabType.addEventListener("click", () => setTab("type"));
-let savedTab = "pick";
-try { savedTab = localStorage.getItem("searchTab") || "pick"; } catch {}
-setTab(savedTab);
-loadPick();
-
-// 方柱（沒有建物外框、用實價登錄樓層畫的門牌）點了直接查該門牌
-map.on("click", "bldg", e => {
-  const p = e.features[0].properties;
-  if (p.pillar) { document.getElementById("q").value = p.addr; syncClear(); doLookup(p.addr, "pillar"); }
-  else showBuilding(p.uid);
+const tablist = document.querySelector(".tabs");
+tablist.addEventListener("click", e => {
+  const btn = e.target.closest('[role="tab"]'); if (!btn) return;
+  const t = TABS.find(x => x.btn === btn);
+  if (t) setTab(t.key, true);
 });
-map.on("mouseenter", "bldg", () => map.getCanvas().style.cursor = "pointer");
-map.on("mouseleave", "bldg", () => map.getCanvas().style.cursor = "");
+tablist.addEventListener("keydown", e => {
+  const cur = TABS.findIndex(x => x.btn === document.activeElement);
+  if (cur < 0) return;
+  let next = cur;
+  if (e.key === "ArrowRight") next = (cur + 1) % TABS.length;
+  else if (e.key === "ArrowLeft") next = (cur - 1 + TABS.length) % TABS.length;
+  else if (e.key === "Home") next = 0;
+  else if (e.key === "End") next = TABS.length - 1;
+  else return;
+  e.preventDefault();
+  setTab(TABS[next].key, false);
+  TABS[next].btn.focus();
+});
 
-// 整批
+// ── 地圖點選與 Hover 建物輕量預覽（零額外 API 請求） ──
+const bldgTip = document.getElementById("bldgTip");
+const hideTip = () => { bldgTip.hidden = true; };
+if (MAP_OK) {
+  map.on("click", "bldg", e => {
+    hideTip();
+    const p = e.features[0].properties;
+    if (p.pillar) { qEl.value = p.addr; lastSubmitted = p.addr; syncClear(); doLookup(p.addr, "pillar"); }
+    else showBuilding(p.uid);
+  });
+  if (matchMedia("(hover: hover)").matches) {
+    map.on("mousemove", "bldg", e => {
+      map.getCanvas().style.cursor = "pointer";
+      const p = e.features[0]?.properties;
+      if (!p) { hideTip(); return; }
+      const title = p.name || (p.pillar ? p.addr : "");
+      const fl = p.floors != null ? `地上 ${esc(p.floors)} 層` : "樓層未知";
+      bldgTip.innerHTML = `${title ? `<b>${esc(title)}</b><br>` : ""}${fl}<small>點擊查看詳情</small>`;
+      bldgTip.hidden = false;
+      const maxL = mapWrap.clientWidth - bldgTip.offsetWidth - 16;
+      const x = Math.min(Math.max(e.point.x, 8), Math.max(8, maxL));
+      const y = Math.min(Math.max(e.point.y, 28), mapWrap.clientHeight - 28);
+      bldgTip.style.left = `${x}px`;
+      bldgTip.style.top = `${y}px`;
+    });
+    map.on("mouseleave", "bldg", () => { map.getCanvas().style.cursor = ""; hideTip(); });
+    map.on("dragstart", hideTip);
+    map.on("zoomstart", hideTip);
+  }
+}
+
+// ── 整批查詢 ──
 const drop = document.getElementById("drop"), fileIn = document.getElementById("file"), msg = document.getElementById("batchMsg");
 async function upload(file) {
   msg.textContent = `處理中：${file.name}…`;
@@ -947,23 +1393,39 @@ async function upload(file) {
   const blob = await r.blob();
   const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: file.name.replace(/\.[^.]+$/, "") + "_樓層.xlsx" });
   a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);  // 下載開始後釋放
+  setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
   msg.textContent = `完成：已下載 ${a.download}`;
 }
-// 清空選取：同一個檔案修改後再選一次也會觸發 change
 fileIn.addEventListener("change", () => { const f = fileIn.files[0]; fileIn.value = ""; if (f) upload(f); });
 drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
 drop.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); e.dataTransfer.files[0] && upload(e.dataTransfer.files[0]); });
 
+// ── 初始狀態：支援分享連結（?q= 或 ?bldg=），無參數則依上次分頁（預設輸入地址） ──
+const initParams = new URLSearchParams(location.search);
+const initQ = initParams.get("q")?.trim();
+const initBldg = initParams.get("bldg")?.trim();
+let savedTab = "type";
+try { savedTab = localStorage.getItem("searchTab") || "type"; } catch {}
+if (initQ) {
+  setTab("type", false);
+  qEl.value = initQ; lastSubmitted = initQ; syncClear();
+  doLookup(initQ, null);
+} else if (initBldg) {
+  setTab(savedTab, false);
+  showBuilding(initBldg, true);
+} else {
+  setTab(savedTab, false);
+}
+
 fetch("/api/stats").then(r => r.json()).then(rows => {
   const pct = x => `${(x * 100).toFixed(0)}%`;
   document.getElementById("stats").innerHTML =
-    `<tr><td></td><td class="n hint">門牌號</td><td class="n hint">實價</td><td class="n hint">高＋中</td><td class="n hint">任一</td></tr>`
+    `<thead><tr><th scope="col">縣市</th><th scope="col" class="n">門牌號</th><th scope="col" class="n">實價</th><th scope="col" class="n">高＋中</th><th scope="col" class="n">任一</th></tr></thead><tbody>`
     + rows.map(s => `<tr><td>${esc(s.county)}</td><td class="n">${s.addresses.toLocaleString()}</td>`
       + `<td class="n">${pct(s.by_trade)}</td><td class="n">${pct(s.high_mid)}</td><td class="n">${pct(s.any_floor)}</td></tr>`).join("")
-    + `<tr><td colspan="5" class="hint">實價＝該門牌自己有實價登錄；高＋中＝含同棟、同巷、附近一致的推估；任一＝再含低信心（建物圖、不一致的同棟、附近七成以上一致、同路一致）</td></tr>`;
-});
+    + `<tr><td colspan="5" class="hint">實價＝該門牌自己有實價登錄；高＋中＝含同棟、同巷、附近一致的推估；任一＝再含低信心（建物圖、不一致的同棟、附近七成以上一致、同路一致）</td></tr></tbody>`;
+}).catch(() => {});
 </script>
 </body>
 </html>

@@ -1,30 +1,44 @@
 """本機查詢介面。啟動：uv run uvicorn app.server:app --port 8765"""
+from __future__ import annotations
+
 import asyncio
+import base64
+import hashlib
 import hmac
 import io
 import json
 import math
 import os
-import urllib.error
-import urllib.request
 import re
 import sys
 import time
+import urllib.error
+import urllib.request
 from collections import defaultdict, deque
 from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 import duckdb
-import pandas as pd
-import shapely
 from fastapi import FastAPI, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
-from sitefloor import feedback, lookup as lookup_mod, popularity, stats, usage
+if TYPE_CHECKING:
+    import pandas as pd
+
+from sitefloor import feedback, popularity, stats, usage
+from sitefloor import lookup as lookup_mod
 from sitefloor.db import connect
-from sitefloor.lookup import COLUMNS, TP_PERMIT_SOURCE, building_risk, lookup, lookup_many, trade_records
+from sitefloor.lookup import (
+    COLUMNS,
+    TP_PERMIT_SOURCE,
+    building_risk,
+    lookup,
+    lookup_many,
+    trade_records,
+)
 from sitefloor.models import MODELS, REPLACED_PARTS
 from sitefloor.render import FLOOR_M, extrude_height, part_extent, resolve_overlaps
 from sitefloor.suggest import Suggester, split_base
@@ -125,7 +139,11 @@ async def server_timing(request: Request, call_next):
 
 # ── CDN 快取：同一版部署裡結果固定的 GET 請求由 Vercel CDN 直接回應，不再執行程式（省 CPU 時間）──
 # Vercel 每次部署會清掉 CDN 快取，資料更新後不會拿到舊結果。查地址、點建物要記使用次數，不快取。
-CDN_CACHED = ("/api/buildings", "/api/hazards", "/api/pick", "/api/suggest", "/api/dashboard", "/api/stats")
+CDN_CACHED = (
+    "/", "/stats", "/about", "/common.css", "/charts.js",
+    "/favicon.ico", "/logo.png", "/favicon.png", "/apple-touch-icon.png",
+    "/api/buildings", "/api/hazards", "/api/pick", "/api/suggest", "/api/dashboard", "/api/stats",
+)
 CDN_MAX_AGE = 86400
 
 
@@ -137,11 +155,42 @@ async def cdn_cache(request: Request, call_next):
     return resp
 
 
-# 安全標頭：不讓別的網站把本站嵌在框架裡（點擊劫持）、瀏覽器不猜檔案類型、外連只帶網域不帶完整網址
+# 安全標頭：完整 CSP（內嵌腳本以 SHA-256 雜湊放行、不開 script unsafe-inline；僅允許國土測繪圖磚）、防點擊劫持與 MIME 嗅探
+_INLINE_SCRIPT_RE = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE)
+
+
+def _build_csp() -> str:
+    hashes: list[str] = []
+    seen: set[str] = set()
+    for name in ("index.html", "stats.html", "about.html"):
+        html = (STATIC / name).read_text(encoding="utf-8")
+        for body in _INLINE_SCRIPT_RE.findall(html):
+            digest = base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode("ascii")
+            token = f"'sha256-{digest}'"
+            if token not in seen:
+                seen.add(token)
+                hashes.append(token)
+    script_src = " ".join(["'self'", *hashes])
+    return "; ".join([
+        "default-src 'self'",
+        f"script-src {script_src}",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' data: blob: https://wmts.nlsc.gov.tw",
+        "connect-src 'self' https://wmts.nlsc.gov.tw data: blob:",
+        "worker-src 'self' blob:",
+        "child-src 'self' blob:",
+        "font-src 'self' data:",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ])
+
+
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Content-Security-Policy": "frame-ancestors 'none'",
+    "Content-Security-Policy": _build_csp(),
     "Referrer-Policy": "strict-origin-when-cross-origin",
 }
 
@@ -301,6 +350,12 @@ def charts_js():
                         headers={"Cache-Control": "public, max-age=3600"})
 
 
+@app.get("/common.css", include_in_schema=False)
+def common_css():
+    return FileResponse(STATIC / "common.css", media_type="text/css",
+                        headers={"Cache-Control": "public, max-age=3600"})
+
+
 # 前端函式庫（MapLibre）自己放：不依賴第三方 CDN 的可用性與完整性。路徑帶版本號，內容固定，
 # 瀏覽器快取一年、Vercel CDN 也快取（每次部署每個區域只有第一次會執行到這裡）
 VENDOR = STATIC / "vendor"
@@ -326,8 +381,7 @@ def stats_page():
 def _dashboard(county: str, town: str) -> dict | None:
     cur = _cur()
     area = (county or stats.NATION, town if county else "")
-    found = cur.execute("SELECT * FROM stats_risk WHERE county = ? AND town = ?", list(area)).df()
-    if found.empty:
+    if not cur.execute("SELECT 1 FROM stats_risk WHERE county = ? AND town = ? LIMIT 1", list(area)).fetchone():
         return None
     parent = None if area[0] == stats.NATION else (area[0], "") if area[1] else (stats.NATION, "")
     keys = [area] + ([parent] if parent else [])
@@ -348,17 +402,22 @@ def _dashboard(county: str, town: str) -> dict | None:
     for dim, bucket, n in cur.execute("SELECT dim, bucket, n FROM stats_bldg WHERE county = ? AND town = ?",
                                       list(area)).fetchall():
         bldg.setdefault(dim, {})[bucket] = n
-    risk_rows = cur.execute(f"SELECT * FROM stats_risk WHERE {where}", args).df()
+    risk_cur = cur.execute(f"SELECT * FROM stats_risk WHERE {where}", args)
+    risk_cols = [c[0] for c in risk_cur.description]
+    risk_map: dict[tuple[str, str], dict] = {}
+    for row in risk_cur.fetchall():
+        rec = dict(zip(risk_cols, row))
+        risk_map[(rec.pop("county"), rec.pop("town"))] = rec
     cov = {(k, c) for k, c in cur.execute("SELECT kind, county FROM risk_coverage").fetchall()}
     county_doors = dict(cur.execute(
         "SELECT county, doors FROM stats_risk WHERE town = '' AND county <> ?", [stats.NATION]).fetchall())
 
     def risk(key):
         """各項門牌數，加上算比例的分母 base：有這種圖資的縣市的門牌數（沒有圖資＝不知道，不是 0）。"""
-        r = risk_rows[(risk_rows.county == key[0]) & (risk_rows.town == key[1])]
-        if r.empty:
+        rec = risk_map.get(key)
+        if rec is None:
             return None
-        d = {k: (None if pd.isna(v) else int(v)) for k, v in r.iloc[0].drop(["county", "town"]).items()}
+        d = {k: (None if v is None or (isinstance(v, float) and math.isnan(v)) else int(v)) for k, v in rec.items()}
         base = {}
         for col, kind in stats.RISK_KINDS.items():
             if key[0] == stats.NATION:
@@ -440,7 +499,7 @@ def api_stats():
     # coverage 表由 `python -m sitefloor.coverage` 預先算好
     rows = _cur().execute(
         "SELECT county, doors, by_trade, high_mid, any_floor FROM coverage ORDER BY doors DESC").fetchall()
-    return [dict(county=c, addresses=n, by_trade=round(t, 3), high_mid=round(h, 3), any_floor=round(a, 3))
+    return [{"county": c, "addresses": n, "by_trade": round(t, 3), "high_mid": round(h, 3), "any_floor": round(a, 3)}
             for c, n, t, h, a in rows]
 
 
@@ -485,6 +544,8 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     xy = _parse_bbox(bbox, MAX_BLDG_SPAN)
     if xy is None:
         return {"type": "FeatureCollection", "features": [], "too_large": True}
+    import shapely
+
     x0, y0, x1, y1 = xy
     box = [x0, x1, y0, y1]
     osm: list[tuple] = []  # (uid, floors, height, name, geom)
@@ -600,6 +661,8 @@ def api_hazards(kind: str = Query(...), bbox: str = Query(..., description="minl
     x0, y0, x1, y1 = xy
     if not _has_table("hazard_zones"):
         return {"type": "FeatureCollection", "features": []}
+    import shapely
+
     rows = _cur().execute(f"""
         SELECT value, rank, wkb FROM hazard_zones
         WHERE kind = ? AND maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ?
@@ -650,6 +713,8 @@ def _building_doors(uid: str, lon, lat) -> tuple[pd.DataFrame, str | None]:
 
 
 def _with_risk(out: dict) -> dict:
+    import pandas as pd
+
     doors, note = _building_doors(out["uid"], out.get("lon"), out.get("lat"))
     out.update(building_risk(_cur(), doors))
     towns = doors.town.dropna() if "town" in doors else pd.Series(dtype=object)
@@ -670,6 +735,8 @@ def _floors_from_doors(full_addrs: list[str]) -> dict | None:
     取信心最高、其次最多門牌一致的結果。讓「點地圖建物」和「查該地址」看到的樓層一致。"""
     if not full_addrs:
         return None
+    import pandas as pd
+
     res = lookup_many(_cur(), full_addrs)
     res = res[res.floors_above.notna() & res.confidence.isin(list(_CONF_RANK))]
     if res.empty:
@@ -752,22 +819,25 @@ def api_building(uid: str):
     return _building(uid)
 
 
+_BLDG_COLS = ("uid", "county", "source", "floors_above", "floors_below", "structure", "btype",
+              "year", "year_kind", "lon", "lat")
+
+
 def _building(uid: str, risk: bool = True) -> dict:
     """建物資料；risk＝一併算建物風險資訊與棟內成交紀錄（點地圖建物時要，查地址時卡片用門牌自己的）。"""
     if uid.startswith(OSM_TABLE):
         return _osm_building(uid, risk)
     cur = _cur()
-    b = cur.execute("""SELECT uid, county, source, floors_above, floors_below, structure, btype,
-                       year, year_kind, lon, lat FROM buildings WHERE uid = ?""", [uid]).df()
-    if b.empty:
+    row = cur.execute("""SELECT uid, county, source, floors_above, floors_below, structure, btype,
+                         year, year_kind, lon, lat FROM buildings WHERE uid = ?""", [uid]).fetchone()
+    if row is None:
         raise HTTPException(404)
     uids = _door_uids(uid)
     addrs = cur.execute("""
         SELECT DISTINCT town || base AS addr FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 1 LIMIT 30
     """, [uids]).fetchall()
     n = cur.execute("SELECT count(*) FROM addresses WHERE list_contains(?, bldg_uid)", [uids]).fetchone()[0]
-    out = b.iloc[0].to_dict()
-    out = {k: (None if pd.isna(v) else v) for k, v in out.items()}
+    out = {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in zip(_BLDG_COLS, row)}
     out.update(addresses=[a for (a,) in addrs], n_units=n)
     if _has_column("buildings", "annex") and cur.execute("SELECT annex FROM buildings WHERE uid = ?", [uid]).fetchone()[0]:
         out["note"] = (f"同一張建照拆出來的附屬小外框；套繪圖記的 {out['floors_above']} 層是整張建照的最高樓層，"
@@ -795,21 +865,28 @@ COUNTY_ORDER = ["基隆市", "臺北市", "新北市", "桃園市", "新竹市",
 
 @lru_cache(maxsize=4)
 def _counties() -> list[dict]:
-    rows = _cur().execute("""
-        SELECT county, count(DISTINCT town) FROM (
-            SELECT county, town FROM addresses UNION ALL SELECT county, town FROM door_trade)
-        WHERE town IS NOT NULL GROUP BY 1""").fetchall()
+    if _has_table("pick_towns"):
+        rows = _cur().execute("SELECT county, count(*) FROM pick_towns GROUP BY 1").fetchall()
+    else:
+        rows = _cur().execute("""
+            SELECT county, count(DISTINCT town) FROM (
+                SELECT county, town FROM addresses UNION ALL SELECT county, town FROM door_trade)
+            WHERE town IS NOT NULL GROUP BY 1""").fetchall()
     rank = {c: i for i, c in enumerate(COUNTY_ORDER)}
     return [{"name": c, "n": n} for c, n in sorted(rows, key=lambda r: rank.get(r[0], 99))]
 
 
 @lru_cache(maxsize=32)
 def _towns(county: str) -> list[dict]:
-    rows = _cur().execute("""
-        SELECT town, count(DISTINCT base) FROM (
-            SELECT town, base FROM addresses WHERE county = ? UNION ALL
-            SELECT town, base FROM door_trade WHERE county = ?)
-        WHERE town IS NOT NULL GROUP BY 1 ORDER BY 2 DESC""", [county, county]).fetchall()
+    if _has_table("pick_towns"):
+        rows = _cur().execute(
+            "SELECT town, n FROM pick_towns WHERE county = ? ORDER BY n DESC", [county]).fetchall()
+    else:
+        rows = _cur().execute("""
+            SELECT town, count(DISTINCT base) FROM (
+                SELECT town, base FROM addresses WHERE county = ? UNION ALL
+                SELECT town, base FROM door_trade WHERE county = ?)
+            WHERE town IS NOT NULL GROUP BY 1 ORDER BY 2 DESC""", [county, county]).fetchall()
     return [{"name": t, "n": n} for t, n in rows]
 
 
@@ -887,6 +964,8 @@ async def api_batch(file: UploadFile, column: str | None = None):
 
 def _read_table(raw: bytes, name: str) -> pd.DataFrame:
     """讀上傳的 Excel／CSV；讀不了或沒有欄位回 400。"""
+    import pandas as pd
+
     try:
         if name.lower().endswith((".xlsx", ".xls")):
             df = pd.read_excel(io.BytesIO(raw), dtype=str)
@@ -904,6 +983,8 @@ def _read_table(raw: bytes, name: str) -> pd.DataFrame:
 
 
 def _batch(raw: bytes, name: str, column: str | None) -> StreamingResponse:
+    import pandas as pd
+
     df = _read_table(raw, name)
     if len(df) > BATCH_MAX_ROWS:
         raise HTTPException(413, f"一次最多 {BATCH_MAX_ROWS:,} 筆，這個檔案有 {len(df):,} 筆，請分批上傳")

@@ -3,38 +3,37 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f5f7fa">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>區域統計 — 建物查詢平台</title>
+<link rel="stylesheet" href="/common.css?v=1">
 <style>
-  :root {
-    --bg: #f5f7fa; --panel: #ffffff; --ink: #1e293b; --muted: #64748b; --line: #e2e8f0; --soft: #f1f5f9;
-    --accent: #2563eb; --accent-soft: #eff4ff; --parent: #94a3b8; --risk: #dc2626; --up: #b91c1c; --down: #15803d;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif; -webkit-font-smoothing: antialiased; }
   main { max-width: 960px; margin: 0 auto; padding: 20px 16px 64px; }
-  a { color: var(--accent); }
   header { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 10px 0; margin: 0 0 8px; }
-  h1 { font-size: 20px; line-height: 28px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 { font-size: var(--fs-h1); line-height: 28px; margin: 0; display: flex; align-items: center; gap: 8px; }
   h1 img { border-radius: 7px; }
-  h2 { font-size: 16px; margin: 0 0 4px; }
-  .muted { color: var(--muted); font-size: 12px; }
+  h2 { font-size: var(--fs-title); margin: 0 0 4px; }
+  .muted { color: var(--muted); font-size: var(--fs-cap); }
   .area { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-  select { font: inherit; font-size: 16px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
-  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-top: 16px; }
+  select { font: inherit; font-size: 16px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); min-block-size: 36px; }
+  section.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; margin-top: 16px; box-shadow: var(--shadow); transition: opacity .15s; }
+  section.card.loading { opacity: .55; }
   .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-  .seg { display: inline-flex; background: var(--soft); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
-  .seg button { font: inherit; font-size: 13px; border: 0; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; }
-  .seg button.on { background: var(--panel); color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(15,23,42,.08); }
+  .seg { display: inline-flex; background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+  .seg button { font: inherit; font-size: 13px; font-weight: 600; border: 1px solid transparent; background: none; padding: 4px 10px; border-radius: 6px; color: var(--muted); cursor: pointer; min-block-size: 28px; }
+  .seg button[aria-pressed="true"] { background: var(--panel); color: var(--ink); border-color: var(--line); box-shadow: var(--shadow); }
   .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
   .kpi { background: var(--soft); border-radius: 8px; padding: 10px 12px; }
   .kpi .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .kpi .l { font-size: 12px; color: var(--muted); }
-  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 6px 0 2px; }
+  .kpi .l { font-size: var(--fs-cap); color: var(--muted); }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--fs-cap); color: var(--muted); margin: 6px 0 2px; }
   .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; border-radius: 2px; }
   .chart { position: relative; margin-top: 18px; }
   .dist { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px 24px; }
@@ -46,14 +45,18 @@
   .risk .row { display: grid; grid-template-columns: 180px 1fr 150px; gap: 10px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
   .risk .row:last-child { border-bottom: 0; }
   .risk .track { background: var(--soft); border-radius: 4px; height: 12px; position: relative; }
-  .risk .fill { position: absolute; inset: 0 auto 0 0; background: var(--risk); opacity: .8; border-radius: 4px; }
-  .risk .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .55; }
+  .risk .fill { position: absolute; inset: 0 auto 0 0; background: var(--risk); opacity: .82; border-radius: 4px; }
+  .risk .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: .65; }
   .risk .pct { text-align: right; font-variant-numeric: tabular-nums; }
   .risk .pct small { display: block; color: var(--muted); font-size: 11px; }
-  .na { color: var(--muted); font-size: 12px; }
-  ul.notes { padding-left: 18px; margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+  .na { color: var(--muted); font-size: var(--fs-cap); }
+  ul.notes { padding-left: 18px; margin: 6px 0 0; color: var(--muted); font-size: var(--fs-cap); }
   ul.notes li { margin: 3px 0; }
   .empty { color: var(--muted); padding: 24px 0; text-align: center; }
+  #errBox { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: var(--lo-soft); color: var(--lo); font-size: 13px; }
+  @media (pointer: coarse) {
+    .seg button { min-block-size: 34px; }
+  }
   @media (max-width: 640px) {
     main { padding-top: 8px; }
     .kpis { grid-template-columns: 1fr 1fr; }
@@ -77,13 +80,17 @@
     <select id="town" aria-label="鄉鎮市區"></select>
     <span class="muted" id="asof"></span>
   </div>
+  <div id="errBox" role="alert" hidden></div>
 
-  <section class="card" id="price">
+  <section class="card data-card" id="price">
     <div class="head">
       <div><h2>房價走勢</h2><div class="muted">住宅買賣的每坪單價中位數（萬元／坪）</div></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <div class="seg" id="grp"></div>
-        <div class="seg" id="per"><button data-v="Y" class="on">年</button><button data-v="Q">季</button></div>
+        <div class="seg" id="grp" role="group" aria-label="建物型態"></div>
+        <div class="seg" id="per" role="group" aria-label="時間粒度">
+          <button type="button" data-v="Y" aria-pressed="true">年</button>
+          <button type="button" data-v="Q" aria-pressed="false">季</button>
+        </div>
       </div>
     </div>
     <div class="kpis" id="kpis"></div>
@@ -93,12 +100,12 @@
     <div class="chart" id="volChart" style="margin-top:6px"></div>
   </section>
 
-  <section class="card">
+  <section class="card data-card">
     <div class="head"><div><h2>建物</h2><div class="muted">有實價登錄紀錄的門牌（一個門牌號約為一棟），依最近一筆紀錄的建物資料</div></div></div>
     <div class="dist" id="dist"></div>
   </section>
 
-  <section class="card risk">
+  <section class="card risk data-card">
     <div class="head"><div><h2>災害潛勢</h2><div class="muted" id="riskSub">門牌落在各潛勢範圍內的比例；黑線為比較區域</div></div></div>
     <div id="risk"></div>
   </section>
@@ -109,14 +116,14 @@
       <li>房價：內政部實價登錄的買賣，限住宅大樓、華廈、公寓、透天厝、套房，每坪單價依實價登錄申報欄位（車位另計時已扣除車位）。</li>
       <li>排除價格不反映一般行情的交易：親友或特殊關係、僅車位、政府標售或協議價購、土地建物分件登記、含增建或未登記建物、頂樓加蓋、瑕疵物件等（依備註欄判斷）。</li>
       <li>最近一兩季申報還沒到齊，畫成虛線、空心點；當年度未過完的平均也只到資料日期為止。</li>
-      <li>成交少於 5 筆的期間不畫中位數。灰色色帶為 25%–75% 的單價範圍。</li>
+      <li>成交少於 5 筆的期間不畫中位數。色帶為 25%–75% 的單價範圍。</li>
       <li>建物、災害潛勢以「門牌號」計數，不是戶數；某縣市沒有某種圖資時顯示「無圖資」，全國比例只用有圖資的縣市計算。</li>
       <li>本頁僅為統計描述，不是估價，也不代表任何個別房屋的價值或風險；官方資訊請見內政部不動產資訊平台與各災害潛勢主管機關。</li>
     </ul>
   </section>
 </main>
 <script type="module">
-import { lineChart, barChart, clearChart, ms, wan } from "/charts.js?v=2";
+import { lineChart, barChart, clearChart, ms, wan } from "/charts.js?v=3";
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -138,10 +145,20 @@ let data = null;
 const pct = (a, b) => b ? a / b * 100 : null;
 const fmtPct = v => v == null ? "—" : v < 1 && v > 0 ? `${v.toFixed(1)}%` : `${Math.round(v)}%`;
 const areaName = (c, t) => t || c;
+const dataCards = document.querySelectorAll(".data-card");
+function setLoading(on) {
+  dataCards.forEach(c => {
+    c.classList.toggle("loading", on);
+    c.setAttribute("aria-busy", String(on));
+  });
+  if (on) $("asof").textContent = "載入中…";
+}
 
 let loadSeq = 0;
 async function load() {
-  const seq = ++loadSeq;  // 快速切換區域時，較慢的舊回應不蓋掉新的
+  const seq = ++loadSeq;
+  $("errBox").hidden = true;
+  setLoading(true);
   const q = new URLSearchParams();
   if (state.county) q.set("county", state.county);
   if (state.town) q.set("town", state.town);
@@ -149,14 +166,18 @@ async function load() {
   if (seq !== loadSeq) return;
   if (!r?.ok) {
     if (state.county) { state = { ...state, county: "", town: "" }; return load(); }
-    document.querySelector("main").insertAdjacentHTML("beforeend", `<p class="empty">統計資料暫時無法取得</p>`);
+    setLoading(false);
+    $("asof").textContent = "";
+    $("errBox").textContent = "統計資料暫時無法取得，請稍後再試。";
+    $("errBox").hidden = false;
     return;
   }
   const d = await r.json();
   if (seq !== loadSeq) return;
   data = d;
-  if (!data.groups.includes(state.grp)) state.grp = "全部";  // 網址帶進來的 grp 只接受已知房型
-  if (!load.sent) { load.sent = true; navigator.sendBeacon?.("/api/event", "stats"); }  // 使用統計：開啟一次記一次，換區域不算
+  if (!data.groups.includes(state.grp)) state.grp = "全部";
+  if (!load.sent) { load.sent = true; navigator.sendBeacon?.("/api/event", "stats"); }
+  setLoading(false);
   syncUrl();
   document.title = `${areaName(data.county, data.town)} 區域統計 — 建物查詢平台`;
   renderArea(); renderPrice(); renderDist(); renderRisk();
@@ -166,7 +187,7 @@ function syncUrl() {
   const q = new URLSearchParams();
   for (const k of ["county", "town"]) if (state[k]) q.set(k, state[k]);
   if (state.grp !== "全部") q.set("grp", state.grp);
-  const qs = q.toString();  // 不用 q.size：Safari 17 以前沒有
+  const qs = q.toString();
   history.replaceState(null, "", `${location.pathname}${qs ? `?${qs}` : ""}`);
 }
 
@@ -179,7 +200,6 @@ function renderArea() {
   $("asof").textContent = data.latest_trade ? `成交資料至 ${data.latest_trade}` : "";
 }
 
-// 資料未齊：期間結束日晚於最新成交日前 30 天（申報有時間差）
 function faintFrom(rows, per) {
   if (!data.latest_trade) return null;
   const cutoff = ms(data.latest_trade) - 30 * 864e5;
@@ -188,9 +208,19 @@ function faintFrom(rows, per) {
   return ok.length ? ms(ok.at(-1)[0]) : null;
 }
 
+// 漲跌幅呈現（台灣習慣紅漲綠跌，搭配 ▲／▼ 箭頭不單靠顏色區分）
+function deltaHtml(v, withArrow = true) {
+  if (v == null) return "—";
+  const r = Math.round(v);
+  const cls = r > 0 ? "up" : r < 0 ? "down" : "";
+  const arrow = withArrow ? (r > 0 ? "▲ " : r < 0 ? "▼ " : "") : "";
+  return `<span class="${cls}">${arrow}${r >= 0 ? "+" : ""}${r}%</span>`;
+}
+
 function renderPrice() {
-  $("grp").innerHTML = data.groups.map(g => `<button data-v="${esc(g)}" class="${g === state.grp ? "on" : ""}">${esc(g)}</button>`).join("");
-  document.querySelectorAll("#per button").forEach(b => b.classList.toggle("on", b.dataset.v === state.per));
+  $("grp").innerHTML = data.groups.map(g =>
+    `<button type="button" data-v="${esc(g)}" aria-pressed="${g === state.grp}">${esc(g)}</button>`).join("");
+  document.querySelectorAll("#per button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === state.per)));
   const rows = data.price[state.grp]?.[state.per] || [];
   const prow = data.parent_price?.[state.grp]?.[state.per] || [];
   const name = areaName(data.county, data.town), pname = data.parent ? areaName(...data.parent) : null;
@@ -204,7 +234,6 @@ function renderPrice() {
   $("priceChart").innerHTML = "";
   const ff = faintFrom(rows, state.per);
   const pff = faintFrom(prow, state.per);
-  // KPI：最近一個完整年度
   const yrows = (data.price[state.grp]?.Y || []).filter(r => r[1] >= MIN_N);
   const yff = faintFrom(data.price[state.grp]?.Y || [], "Y");
   const full = yrows.filter(r => yff == null || ms(r[0]) <= yff);
@@ -213,26 +242,25 @@ function renderPrice() {
   const pY = (data.parent_price?.[state.grp]?.Y || []);
   const pLast = pY.find(r => r[0] === last?.[0]), pBack = pY.find(r => back && r[0] === back[0]);
   const chg = (a, b) => a && b ? (a / b - 1) * 100 : null;
-  const sign = v => v == null ? "—" : `${v >= 0 ? "+" : ""}${Math.round(v)}%`;
   const c5 = chg(last?.[3], back?.[3]), pc5 = chg(pLast?.[2], pBack?.[2]);
-  const prev = full.find(r => +r[0].slice(0, 4) === y - 1), vol = chg(last?.[1], prev?.[1]);  // 前一年資料不足時不比
+  const prev = full.find(r => +r[0].slice(0, 4) === y - 1), vol = chg(last?.[1], prev?.[1]);
   $("kpis").innerHTML = last ? `
     <div class="kpi"><div class="l">${y} 年中位數</div><div class="v">${wan(last[3])}<span style="font-size:13px;font-weight:400"> / 坪</span></div>
       <div class="l">${last[1].toLocaleString()} 筆${pLast ? ` · ${esc(pname)} ${wan(pLast[2])}` : ""}</div></div>
-    <div class="kpi"><div class="l">${back ? `${y - 5}→${y} 年` : "近 5 年"}</div><div class="v">${sign(c5)}</div>
-      <div class="l">${pc5 != null ? `${esc(pname)} ${sign(pc5)}` : back ? "" : "資料不足 5 年"}</div></div>
+    <div class="kpi"><div class="l">${back ? `${y - 5}→${y} 年` : "近 5 年"}</div><div class="v">${deltaHtml(c5)}</div>
+      <div class="l">${pc5 != null ? `${esc(pname)} ${deltaHtml(pc5, false)}` : back ? "" : "資料不足 5 年"}</div></div>
     <div class="kpi"><div class="l">${y} 年成交筆數</div><div class="v">${last[1].toLocaleString()}</div>
-      <div class="l">${prev ? `比 ${y - 1} 年 ${sign(vol)}` : ""}</div></div>` : "";
+      <div class="l">${prev ? `比 ${y - 1} 年 ${deltaHtml(vol)}` : ""}</div></div>` : "";
   $("legend").innerHTML = `<span><i style="background:var(--accent)"></i>${esc(name)}</span>`
     + (prow.length ? `<span><i style="background:var(--parent)"></i>${esc(pname)}</span>` : "")
-    + `<span><i style="background:var(--accent);opacity:.15;height:10px"></i>25%–75%</span>`
+    + `<span><i style="background:var(--accent);opacity:.2;height:10px"></i>25%–75%</span>`
     + (ff != null && rows.some(r => ms(r[0]) > ff) ? `<span>虛線：申報未齊</span>` : "");
   const xFmt = state.per === "Y" ? (x => `${new Date(x).getUTCFullYear()} 年`)
     : (x => { const d = new Date(x); return `${d.getUTCFullYear()} Q${d.getUTCMonth() / 3 + 1}`; });
   lineChart($("priceChart"), [
-    ...(prow.length ? [{ name: pname, color: "#94a3b8", dash: "5 4", width: 1.5, faintFrom: pff,
+    ...(prow.length ? [{ name: pname, color: "var(--parent)", dash: "5 4", width: 1.5, faintFrom: pff,
       points: prow.filter(r => r[1] >= MIN_N).map(r => [ms(r[0]), r[2]]) }] : []),
-    { name, color: "#2563eb", faintFrom: ff, points: ok.map(r => [ms(r[0]), r[3]]), band: ok.map(r => [ms(r[0]), r[2], r[4]]) },
+    { name, color: "var(--accent)", faintFrom: ff, points: ok.map(r => [ms(r[0]), r[3]]), band: ok.map(r => [ms(r[0]), r[2], r[4]]) },
   ], { yFmt: v => `${Math.round(v / 1e4)}萬`, xFmt, label: `${name} 每坪單價中位數`, tipFmt: v => `${wan(v)}/坪` });
   barChart($("volChart"), rows.map(r => [ms(r[0]), r[1], ff != null && ms(r[0]) > ff]), { xFmt, label: "成交筆數", color: "#93c5fd" });
 }
@@ -253,7 +281,6 @@ function renderRisk() {
   const pname = data.parent ? areaName(...data.parent) : null;
   $("riskSub").textContent = `${r.doors.toLocaleString()} 個門牌落在各潛勢範圍內的比例` + (pname ? `；黑線為${pname}` : "");
   const rows = RISK_ROWS.map(([k, label]) => [label, r[k] == null ? null : pct(r[k], r.base[k]), p && p[k] != null ? pct(p[k], p.base[k]) : null]);
-  // 沒有消防隊距離（fire_m 空白）＝此區無圖資，不顯示成 0%
   rows.push([`離最近消防隊超過 ${data.fire_far_m / 1000} 公里`, r.fire_m == null ? null : pct(r.fire_far, r.doors),
              p?.fire_m != null ? pct(p.fire_far, p.doors) : null]);
   const max = Math.max(5, ...rows.flatMap(([, a, b]) => [a ?? 0, b ?? 0]));

@@ -1,7 +1,10 @@
 import asyncio
 import io
+import subprocess
+import sys
 import threading
 
+import duckdb
 import pytest
 from fastapi import HTTPException
 from starlette.datastructures import UploadFile
@@ -71,6 +74,7 @@ def test_vendor_files():
     r = server.vendor("maplibre-gl-6.16.0", "maplibre-gl.mjs")
     assert r.media_type == "text/javascript" and "immutable" in r.headers["cache-control"]
     assert server.vendor("maplibre-gl-6.16.0", "maplibre-gl.css").media_type == "text/css"
+    assert server.common_css().media_type == "text/css"
     for pkg, name in [("maplibre-gl-6.16.0", "LICENSE.txt"), ("..", "server.py"), ("maplibre-gl-6.16.0", "nope.mjs"),
                       ("..", "charts.mjs")]:
         with pytest.raises(HTTPException):
@@ -86,7 +90,63 @@ def test_security_headers():
     req = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
     resp = asyncio.run(server.security_headers(req, call_next))
     assert resp.headers["x-content-type-options"] == "nosniff"
-    assert resp.headers["content-security-policy"] == "frame-ancestors 'none'"
+    csp = resp.headers["content-security-policy"]
+    assert "frame-ancestors 'none'" in csp
+    assert "default-src 'self'" in csp
+    assert "https://wmts.nlsc.gov.tw" in csp
+    assert "worker-src 'self' blob:" in csp
+    script_part = next(p for p in csp.split("; ") if p.startswith("script-src "))
+    assert "'unsafe-inline'" not in script_part and "'sha256-" in script_part
+
+
+def test_lazy_imports_on_startup():
+    """冷啟動不預先載入 pandas 與 shapely，省雲端 CPU。"""
+    code = "import sys, app.server; print('pandas' in sys.modules, 'shapely' in sys.modules)"
+    out = subprocess.check_output([sys.executable, "-c", code], text=True).strip()
+    assert out == "False False"
+
+
+def test_pick_towns_precomputed_and_fallback(monkeypatch):
+    con = duckdb.connect()
+    con.execute("CREATE TABLE addresses (county VARCHAR, town VARCHAR, base VARCHAR)")
+    con.execute("CREATE TABLE door_trade (county VARCHAR, town VARCHAR, base VARCHAR)")
+    con.execute("INSERT INTO addresses VALUES ('臺北市', '大安區', '仁愛路1號'), ('臺北市', '信義區', '市府路1號')")
+    con.execute("INSERT INTO door_trade VALUES ('臺北市', '大安區', '仁愛路2號')")
+    monkeypatch.setattr(server, "_cur", con.cursor)
+    server._has_table.cache_clear()
+    server._counties.cache_clear()
+    server._towns.cache_clear()
+    try:
+        # 沒有 pick_towns 表時退回即時彙整
+        assert server._counties() == [{"name": "臺北市", "n": 2}]
+        assert server._towns("臺北市") == [{"name": "大安區", "n": 2}, {"name": "信義區", "n": 1}]
+        # 有 pick_towns 表時直接查預先算好的表
+        con.execute("CREATE TABLE pick_towns AS SELECT '臺北市' AS county, '大安區' AS town, 99 AS n")
+        server._has_table.cache_clear()
+        server._counties.cache_clear()
+        server._towns.cache_clear()
+        assert server._counties() == [{"name": "臺北市", "n": 1}]
+        assert server._towns("臺北市") == [{"name": "大安區", "n": 99}]
+    finally:
+        server._has_table.cache_clear()
+        server._counties.cache_clear()
+        server._towns.cache_clear()
+
+
+def test_cdn_cache_covers_static_and_api():
+    from starlette.responses import Response
+
+    async def call_next(req):
+        return Response("ok")
+
+    for path in ("/", "/stats", "/about", "/common.css", "/charts.js", "/api/dashboard", "/api/pick"):
+        req = Request({"type": "http", "method": "GET", "path": path, "headers": []})
+        resp = asyncio.run(server.cdn_cache(req, call_next))
+        assert "max-age=" in resp.headers.get("vercel-cdn-cache-control", ""), path
+    # 查詢要記使用次數，不快取
+    req = Request({"type": "http", "method": "GET", "path": "/api/lookup", "headers": []})
+    resp = asyncio.run(server.cdn_cache(req, call_next))
+    assert "vercel-cdn-cache-control" not in resp.headers
 
 
 def test_cron_requires_secret_when_set(monkeypatch):

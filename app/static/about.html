@@ -3,30 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f7fa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/favicon.ico?v=3" sizes="16x16 32x32 48x48">
 <link rel="icon" type="image/png" href="/favicon.png?v=3" sizes="64x64">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>資料來源與授權 — 建物查詢平台</title>
+<link rel="stylesheet" href="/common.css?v=1">
 <style>
-  :root { --bg: #f7f7f5; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e2dc; --accent: #1f5fbf; }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #161615; --panel: #1f1f1d; --ink: #ecebe6; --muted: #a3a29b; --line: #34332f; --accent: #7fa8ea; }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "PingFang TC", "Noto Sans TC", sans-serif; line-height: 1.7; }
-  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 64px; }
-  h1 { font-size: 24px; margin: 0 0 4px; }
-  h2 { font-size: 17px; margin: 32px 0 8px; }
-  p, li { font-size: 15px; }
-  a { color: var(--accent); }
-  .muted { color: var(--muted); font-size: 13px; }
-  .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
-  .table-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 13px; }
-  blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--line); color: var(--muted); font-size: 14px; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 64px; }
+  header { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 10px 0; margin: 0 0 8px; }
+  h1 { font-size: var(--fs-h1); line-height: 28px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  h1 img { border-radius: 7px; }
+  h2 { font-size: var(--fs-title); margin: 28px 0 8px; }
+  p, li { font-size: var(--fs-body); line-height: 1.75; }
+  .muted { color: var(--muted); font-size: var(--fs-cap); }
+  .box { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .table-wrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: var(--fs-body); }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 600; font-size: var(--fs-cap); background: var(--soft); }
+  blockquote { margin: 8px 0 14px; padding: 8px 12px; border-left: 3px solid var(--line); color: var(--muted); font-size: var(--fs-body); background: var(--panel); border-radius: 0 8px 8px 0; }
+  code { font-size: .92em; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
 </style>
 <!-- Vercel Web Analytics：瀏覽數與訪客數（不用 cookie；本機開發時這支檔案不存在，無作用） -->
 <script>window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };</script>
@@ -34,13 +35,14 @@
 </head>
 <body>
 <main>
-  <p><a href="/">← 回查詢頁</a></p>
-  <h1 style="display:flex;align-items:center;gap:10px"><img src="/logo.png" alt="" width="40" height="40" style="border-radius:9px">資料來源與授權</h1>
-  <p class="muted">本站整合政府開放資料與 OpenStreetMap，查詢臺灣地址的建物樓層、構造、年份與災害潛勢。</p>
+  <header>
+    <h1><a href="/" aria-label="回查詢頁"><img src="/logo.png" alt="" width="28" height="28"></a>資料來源與授權</h1>
+  </header>
+  <p class="muted" style="margin:0"><a href="/">← 回查詢頁</a> · <a href="/stats">區域統計</a> · 本站整合政府開放資料與 OpenStreetMap，查詢臺灣地址的建物樓層、構造、年份與災害潛勢。</p>
 
   <h2>免責聲明</h2>
   <div class="box">
-    <p>本站為個人製作的非官方查詢工具，<strong>結果僅供參考</strong>，不代表任何政府機關的見解，也未經任何機關建議、認可或贊同。
+    <p style="margin:0">本站為個人製作的非官方查詢工具，<strong>結果僅供參考</strong>，不代表任何政府機關的見解，也未經任何機關建議、認可或贊同。
     推估值（同棟、同巷、附近門牌、OSM 等）可能與實際不符，每筆結果都標示資料來源與信心等級；涉及交易、保險、法律等重要決定，請以建物登記謄本、使用執照等官方文件為準。
     查詢結果列出的實價登錄成交紀錄照原始申報資料顯示，未經調整，本站不提供估價；成交價格以內政部實價登錄公告為準。<a href="/stats">區域統計</a>頁的單價中位數與各項比例為本站依公開資料自行計算的統計描述，計算方式列於該頁，與官方統計可能不同。
     本站不保證資料的正確性、完整性與即時性，使用者應自行判斷並承擔使用風險。</p>
@@ -51,7 +53,8 @@
   <blockquote>此資料係依政府資料開放授權條款（Open Government Data License）進行公眾釋出，使用者於遵守本條款各項規定之前提下，得利用之。政府資料開放授權條款：https://data.gov.tw/license</blockquote>
   <div class="table-wrap">
   <table>
-    <tr><th>提供機關</th><th>資料集</th><th>用途</th></tr>
+    <thead><tr><th scope="col">提供機關</th><th scope="col">資料集</th><th scope="col">用途</th></tr></thead>
+    <tbody>
     <tr><td>內政部</td><td><a href="https://plvr.land.moi.gov.tw/DownloadOpenData" target="_blank" rel="noopener">不動產成交案件實際資訊（實價登錄）</a></td><td>總樓層、建材、建築完成年、建物型態、主要用途、使用分區；買賣的成交日期、樓層與價格；區域統計的單價走勢與建物分布</td></tr>
     <tr><td>臺北市政府地政局</td><td><a href="https://data.gov.tw/dataset/145630" target="_blank" rel="noopener">臺北市實價周報</a></td><td>同上（最新成交）</td></tr>
     <tr><td>臺中市政府數位發展局</td><td><a href="https://data.gov.tw/dataset/158889" target="_blank" rel="noopener">臺中市建物GIS圖資（114年版本）</a></td><td>建物外框、地上樓層</td></tr>
@@ -83,6 +86,7 @@
     <tr><td>經濟部地質調查及礦業管理中心</td><td><a href="https://liquefaction.gsmma.gov.tw/" target="_blank" rel="noopener">土壤液化潛勢查詢系統</a>（<a href="https://data.gov.tw/dataset/28708" target="_blank" rel="noopener">土壤液化潛勢圖</a>）</td><td>建物風險資訊：土壤液化（澎湖、金門、連江沒有圖資）</td></tr>
     <tr><td>內政部國土測繪中心</td><td><a href="https://data.gov.tw/dataset/7441" target="_blank" rel="noopener">鄉鎮市區界線</a></td><td>門牌所屬行政區</td></tr>
     <tr><td>內政部國土測繪中心</td><td><a href="https://maps.nlsc.gov.tw/" target="_blank" rel="noopener">臺灣通用電子地圖（WMTS 圖磚）</a></td><td>底圖</td></tr>
+    </tbody>
   </table>
   </div>
   <p class="muted">本站對上述資料做了正規化、比對與推估（例如以同棟、同巷、附近 100 公尺內門牌推估樓層），結果與原始資料可能不同；原始資料以各機關公告為準。</p>
