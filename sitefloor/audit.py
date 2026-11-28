@@ -137,7 +137,8 @@ def overlaps(con, targets: set[str]) -> dict[str, str]:
     """要檢查的建物附近，照地圖的規則決定畫哪些外框，再找互相大面積重疊的立體。回傳 {uid: 和誰重疊}。"""
     osm_rows = con.execute("""
         SELECT uid, coalesce(curated_floors, trade_floors, permit_floors, levels), height, name, wkb,
-               curated_floors IS NOT NULL FROM osm_buildings WHERE wkb IS NOT NULL""").fetchall()
+               curated_floors IS NOT NULL, coalesce(curated_floors, trade_floors, permit_floors) IS NULL
+        FROM osm_buildings WHERE wkb IS NOT NULL""").fetchall()
     city_rows = con.execute("SELECT uid, floors_above, source, wkb FROM buildings WHERE wkb IS NOT NULL").fetchall()
     og = shapely.from_wkb([r[4] for r in osm_rows])
     cg = shapely.from_wkb([r[3] for r in city_rows])
@@ -150,8 +151,9 @@ def overlaps(con, targets: set[str]) -> dict[str, str]:
     near_c = [i for i in shapely.STRtree(cg).query(area, predicate="intersects")]
     osm = [(osm_rows[i][0], osm_rows[i][1], osm_rows[i][2], osm_rows[i][3], og[i]) for i in near_o]
     trusted = {osm_rows[i][0] for i in near_o if osm_rows[i][5] or osm_rows[i][0] in MODELS}
+    osm_only = {osm_rows[i][0] for i in near_o if osm_rows[i][6]}
     city, drop = resolve_overlaps(osm, [(city_rows[i][0], city_rows[i][1], city_rows[i][2], cg[i]) for i in near_c],
-                                  set(MODELS), trusted, TP_PERMIT_SOURCE)
+                                  set(MODELS), trusted, TP_PERMIT_SOURCE, osm_only)
     drawn = [(u, f, g) for k, (u, f, _, _, g) in enumerate(osm) if k not in drop and u not in MODELS] + \
             [(u, f, g) for u, f, g in city]
     tree = shapely.STRtree([g for _, _, g in drawn])

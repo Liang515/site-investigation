@@ -38,13 +38,15 @@ def _inter_area(a, b) -> float:
 
 
 def resolve_overlaps(osm: list[tuple], city_rows: list[tuple], modeled: set[str], trusted: set[str],
-                     tp_source: str) -> tuple[list[tuple], set[int]]:
+                     tp_source: str, osm_only: set[str] = frozenset()) -> tuple[list[tuple], set[int]]:
     """OSM 建物與市府外框重疊時決定畫哪個（地圖與 audit.py 共用）。
     osm：[(uid, floors, height, name, geom)]；city_rows：[(uid, floors, source, geom)]；
-    modeled：有立體模型的 OSM uid；trusted：人工校正或有模型、一定要畫的 OSM uid；tp_source：臺北建照套繪圖的來源字首。
+    modeled：有立體模型的 OSM uid；trusted：人工校正或有模型、一定要畫的 OSM uid；tp_source：臺北建照套繪圖的來源字首；
+    osm_only：樓層只有 OSM 標註（棟內門牌沒有實價、使照）的 OSM uid。
     回傳 (要畫的市府外框 [(uid, floors, geom)], 不畫的 OSM 索引)。
     - 臺中建物圖（對實價 53%）不如 OSM（70%）→ 畫 OSM。
-    - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM；不一致時保留建照外框，
+    - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致、框內也沒有只靠 OSM 標註而差一兩層的
+      外框時才改畫 OSM；不一致時保留建照外框，
       並拿掉大半落在框內的 OSM 建物（比建照高很多、外框又明顯較小的是裙樓上的塔樓，照畫）。"""
     import shapely
 
@@ -62,7 +64,13 @@ def resolve_overlaps(osm: list[tuple], city_rows: list[tuple], modeled: set[str]
             inter = {k: _inter_area(g, osm[k][4]) for k in hit}
             if sum(inter.values()) / g.area >= CITY_COVERED_MAX:
                 top = max((osm[k][1] for k in inter if osm[k][1] is not None), default=None)
-                if not str(src).startswith(tp_source) or top == f or any(osm[k][0] in trusted for k in inter):
+                # OSM 把同一棟切成好幾塊、其中有塊只靠 OSM 標註而差一兩層：當成同一棟，不畫成一半高一半低。
+                # 有棟內門牌實價或使照的塊是另一棟（例：一張建照包好幾棟的社區），照畫
+                split = f is not None and any(
+                    osm[k][0] in osm_only and osm[k][1] is not None and 0 < abs(osm[k][1] - f) <= TOWER_MARGIN
+                    and osm[k][4].area and a / osm[k][4].area >= 0.5 for k, a in inter.items())
+                if not str(src).startswith(tp_source) or (top == f and not split) \
+                        or any(osm[k][0] in trusted for k in inter):
                     continue  # 改畫 OSM
                 if f is not None and f <= MINOR_PERMIT_FLOORS and top is not None and top > f + TOWER_MARGIN:
                     continue  # 增建小建照，改畫 OSM

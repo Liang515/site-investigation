@@ -83,6 +83,25 @@ def test_resolve_overlaps_same_building_vs_tower():
     assert city == [] and drop == set()
 
 
+def test_resolve_overlaps_split_outline():
+    # OSM 把建照外框切成兩塊、一塊和建照同樓層、另一塊只靠 OSM 標註而差一層：同一棟，只畫建照（不畫成一半高一半低）
+    north, south = shapely.box(-1.5e-4, 0, 1.5e-4, 1.5e-4), shapely.box(-1.5e-4, -1.5e-4, 1.5e-4, 0)
+    split = [("osm:n", 19, None, None, north), ("osm:s", 20, None, None, south)]
+    city, drop = resolve_overlaps(split, [("tp:4", 20, "臺北市建照套繪圖", _sq(0, 0, 30))], set(), set(), "臺北市建照",
+                                  {"osm:n"})
+    assert [c[0] for c in city] == ["tp:4"] and drop == {0, 1}
+    # 差一層的那塊有棟內門牌的實價或使照：是另一棟，照畫 OSM
+    city, drop = resolve_overlaps(split, [("tp:4", 20, "臺北市建照套繪圖", _sq(0, 0, 30))], set(), set(), "臺北市建照")
+    assert city == [] and drop == set()
+    # 兩塊都和建照同樓層、或另一塊是樓層差很多的裙樓：照畫 OSM
+    city, drop = resolve_overlaps([("osm:n", 20, None, None, north), ("osm:s", 20, None, None, south)],
+                                  [("tp:5", 20, "臺北市建照套繪圖", _sq(0, 0, 30))], set(), set(), "臺北市建照")
+    assert city == [] and drop == set()
+    city, drop = resolve_overlaps([("osm:n", 4, None, None, north), ("osm:s", 20, None, None, south)],
+                                  [("tp:6", 20, "臺北市建照套繪圖", _sq(0, 0, 30))], set(), set(), "臺北市建照")
+    assert city == [] and drop == set()
+
+
 def test_resolve_overlaps_invalid_geometry():
     # 自相交（8 字形）的外框不能讓整個範圍的地圖失敗
     bowtie = shapely.Polygon([(0, 0), (3e-4, 3e-4), (3e-4, 0), (0, 3e-4), (0, 0)])

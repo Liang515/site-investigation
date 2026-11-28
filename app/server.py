@@ -555,16 +555,17 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     if has_osm:
         rows = _cur().execute(f"""
             SELECT uid, coalesce(curated_floors, trade_floors, permit_floors, levels), height, name, wkb, curated_height,
-                   curated_floors IS NOT NULL
+                   curated_floors IS NOT NULL, coalesce(curated_floors, trade_floors, permit_floors) IS NULL
             FROM osm_buildings
             WHERE maxlon >= ? AND minlon <= ? AND maxlat >= ? AND minlat <= ? AND wkb IS NOT NULL
             ORDER BY coalesce(curated_floors, trade_floors, permit_floors, levels) IS NULL  -- 超過上限時先保留知道樓層的
             LIMIT {MAX_BUILDINGS}
         """, box).fetchall()
-        osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w, _, _ in rows]
+        osm = [(u, f, h, name, shapely.from_wkb(w)) for u, f, h, name, w, _, _, _ in rows]
         real_h = {r[0]: r[5] for r in rows if r[5] is not None}  # 人工校正的實際高度
         # 人工校正或有手工模型的 OSM 建物一定畫，不被臺北建照外框蓋掉
         trusted = {r[0] for r in rows if r[6] or r[0] in MODELS}
+        osm_only = {r[0] for r in rows if r[7]}  # 樓層只有 OSM 標註
     # 同建照的附屬小外框：套繪圖記的是整張建照的最高樓層，不是它自己的，當成樓層未知（畫成矮的一層）
     annex = "coalesce(annex, false)" if _has_column("buildings", "annex") else "false"
     rows = _cur().execute(f"""
@@ -574,7 +575,7 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
     """, box).fetchall()
     truncated = len(rows) > MAX_BUILDINGS
     city, drop_osm = resolve_overlaps(osm, [(u, f, src, shapely.from_wkb(w)) for u, f, src, w in rows[:MAX_BUILDINGS]],
-                                      set(MODELS), trusted, TP_PERMIT_SOURCE)
+                                      set(MODELS), trusted, TP_PERMIT_SOURCE, osm_only)
     feats: list[dict] = []
     # OSM 分棟（building:part）：分棟各用自己的高度畫，外框只畫扣掉分棟的部分；有手工模型的地標
     # 塔樓改畫模型、外框剩下的部分不畫
