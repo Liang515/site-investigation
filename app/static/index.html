@@ -280,15 +280,19 @@
     #app { display: flex; flex-direction: column; height: auto; }
     aside, aside > section:first-of-type, aside > header { display: contents; }
     aside > * { padding: 0 16px; }
-    .brand-row { order: 1; position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 12px 16px 8px; }
-    .sub { order: 2; margin-top: 0; padding: 0 16px 10px; }
-    #mapWrap { order: 3; height: 45vh; transition: height .2s ease; }
-    #mapWrap.compact { height: 24vh; }
+    /* 標題列壓到一行窄條，免責說明移到最下面，讓地圖多一點空間 */
+    .brand-row { order: 1; position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 6px 12px; }
+    h1 { font-size: 16px; line-height: 22px; }
+    .brand img { width: 22px; height: 22px; border-radius: 5px; }
+    .nav-pill { padding: 3px 8px; }
+    .sub { order: 8; margin: 0 0 24px; padding: 0 16px; }
+    #mapWrap { order: 3; height: 62vh; height: 62svh; transition: height .2s ease; scroll-margin-top: 36px; }
+    #mapWrap.compact { height: 30vh; height: 30svh; }
     #result { order: 4; padding: 0 16px; margin-top: 12px !important; }
     #result:empty { display: none; }
     .tabs { order: 5; margin: 16px 16px 12px; }
     #typeBox, #pickBox, #batchBox { order: 6; padding: 0 16px; }
-    .meta-sec { order: 7; margin: 20px 16px 28px; }
+    .meta-sec { order: 7; margin: 20px 16px 16px; }
     .crumbs button { padding: 6px 12px; }
     .desk-only { display: none; }
     .mob-only { display: inline-flex !important; }
@@ -296,7 +300,12 @@
     input[type=text], #pickFilter, .fbform input, .fbform select, .fbform textarea { font-size: 16px; }
     .tiles { max-height: 230px; overflow-y: auto; overscroll-behavior: contain; }
     #zoomHint { top: auto; bottom: 54px; }
-    #mapLegend { bottom: 8px; left: 8px; padding: 5px 8px; }
+    #mapLegend { bottom: 6px; left: 6px; padding: 4px 6px; width: min(280px, calc(100% - 56px)); }
+    #mapLegend .leg-title { display: none; }
+    .legend { font-size: 10px; white-space: nowrap; }
+    .legend span { padding-top: 8px; } .legend span::before { height: 5px; }
+    .map-tools { top: 8px; left: 8px; }
+    .mbtn { font-size: 12px; }
     aside { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; overflow: visible; }
   }
 </style>
@@ -848,8 +857,12 @@ if ("CommandEvent" in window) {
   });
 }
 
+// 手機地圖小，鏡頭拉遠一級、傾角小一點，才看得到周邊
+const NARROW = matchMedia("(max-width: 760px)");
+const focusZoom = desk => NARROW.matches ? 17 : desk;
+const focusPitch = () => NARROW.matches ? 45 : 55;
 function viewOf(door, bldg) {
-  const view = { center: [door.lon, door.lat], zoom: 18, pitch: 55 };
+  const view = { center: [door.lon, door.lat], zoom: focusZoom(18), pitch: focusPitch() };
   if (!bldg || bldg.lon == null) return view;
   const k = Math.cos(door.lat * Math.PI / 180);
   const dx = (bldg.lon - door.lon) * k, dy = bldg.lat - door.lat;
@@ -1057,8 +1070,8 @@ async function showBuilding(uid, fly = false) {
   syncPageUrl({ bldg: uid }, b.name || first || "建物詳情", b.county, b.town);
   if (fly && b.lon != null && b.lat != null) {
     const near = savedView && Math.hypot(savedView.center[0] - b.lon, savedView.center[1] - b.lat) < 0.005;
-    if (fly === "init") { if (!near) map.jumpTo({ center: [b.lon, b.lat], zoom: 17.5, pitch: 55 }); }
-    else map.flyTo({ center: [b.lon, b.lat], zoom: 17.5, pitch: 55 });
+    if (fly === "init") { if (!near) map.jumpTo({ center: [b.lon, b.lat], zoom: focusZoom(17.5), pitch: focusPitch() }); }
+    else map.flyTo({ center: [b.lon, b.lat], zoom: focusZoom(17.5), pitch: focusPitch() });
   }
   document.getElementById("result").innerHTML = renderCard(b, { isBldg: true, bldg: b });
   const cardEl = document.getElementById("result").querySelector(".card");
@@ -1112,7 +1125,7 @@ async function doLookup(q, via) {
   cardEl.insertAdjacentHTML("beforeend", `<button type="button" class="again bottom-again mob-only">查詢其他地址</button>`);
   hydrateAreaBar(cardEl, r);
   announce(`查詢完成：${fullQ}，地上 ${r.floors_above ?? "未知"} 層，信心${r.confidence || "無"}`);
-  if (matchMedia("(max-width: 760px)").matches) {
+  if (NARROW.matches) {
     document.getElementById("mapWrap").scrollIntoView({ behavior: "smooth", block: "start" });
   } else if (via === "pick") {
     cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
