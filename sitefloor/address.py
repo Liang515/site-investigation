@@ -72,7 +72,7 @@ class Addr:
         return f"{self.base}{f}樓{self.unit}"
 
 
-_FLOOR = re.compile(r"^(?:(地下|B)([0-9一二三四五六七八九十]+)(?:樓|F|層)?|()([0-9一二三四五六七八九十百]+)(?:樓|F|層))(之\d+)?", re.I)
+_FLOOR = re.compile(r"^(?:(地下|B)([0-9一二三四五六七八九十]+)(?:樓|F|層)?|()([0-9一二三四五六七八九十百]+)(?:樓|F|層))(之\d+)?", re.IGNORECASE)
 
 
 _AMBIGUOUS_TOWNS = {t for t in {t for ts in TOWNS.values() for t in ts}
@@ -134,7 +134,7 @@ def parse(text: str, county: str = "", town: str = "") -> Addr:
     a.base, rest = s[: m.end()], s[m.end():]
     # 「73號之2」是一樓附號，屬門牌本身
     sub = re.match(r"^之(\d+)", rest)
-    if sub and not re.match(r"^之\d+(樓|F)", rest, re.I):
+    if sub and not re.match(r"^之\d+(樓|F)", rest, re.IGNORECASE):
         a.base = a.base[:-1] + f"之{sub.group(1)}號"
         rest = rest[sub.end():]
     fm = _FLOOR.match(rest)

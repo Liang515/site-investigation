@@ -4,10 +4,16 @@
 - 圖資：addresses（門牌點）→ buildings（建物圖樓層）
 - 實價：trades（實價登錄／週報的總樓層、建材、建築完成年）
 """
+from __future__ import annotations
+
+import math
 import re
+from typing import TYPE_CHECKING
 
 import duckdb
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from sitefloor import landmarks, names, stats
 from sitefloor.address import parse
@@ -201,6 +207,8 @@ PERMIT_HIGH = ("臺北市使用執照", "臺南市公寓大廈清冊")
 
 def _optional(con: duckdb.DuckDBPyConnection, sql: str, cols: list[str]) -> pd.DataFrame:
     """選配的資料表（例如還沒跑 osm.py）不存在時回空表，不讓查詢失敗。"""
+    import pandas as pd
+
     try:
         return con.execute(sql).df()
     except duckdb.CatalogException:
@@ -227,6 +235,8 @@ _CLEAR_ON_AMBIGUOUS = ["town", "bldg_uid", "floors_above", "floors_below", "stru
 
 
 def _queries(texts: list[str]) -> pd.DataFrame:
+    import pandas as pd
+
     rows = []
     for i, t in enumerate(texts):
         lm = landmarks.resolve(t) if t is not None else None
@@ -246,7 +256,13 @@ def _queries(texts: list[str]) -> pd.DataFrame:
 
 
 def _na(x) -> bool:
-    return x is None or pd.isna(x)
+    if x is None:
+        return True
+    if isinstance(x, float):
+        return math.isnan(x)
+    import pandas as pd
+
+    return bool(pd.isna(x))
 
 
 def _resolve(r, covered: set[str]) -> dict:
@@ -259,25 +275,25 @@ def _resolve(r, covered: set[str]) -> dict:
                and isinstance(r.town_q, str) and r.town_q)
     if not has_addr and not has_trade and not nb_only:
         if r.county_q and r.county_q not in covered:
-            return dict(confidence="無", note=f"{r.county_q}尚未建置")
+            return {"confidence": "無", "note": f"{r.county_q}尚未建置"}
         if not str(r.base).endswith("號"):
-            return dict(confidence="無", note="地址缺少門牌號")
-        return dict(confidence="無", note="查無此門牌")
+            return {"confidence": "無", "note": "地址缺少門牌號"}
+        return {"confidence": "無", "note": "查無此門牌"}
     if (has_addr and r.n_town > 1) or (has_trade and r.t_ntown > 1):
         n = int(max(r.n_town if has_addr else 0, r.t_ntown if has_trade else 0))
-        return dict(confidence="待確認", note=f"{n} 個行政區都有此門牌，請補鄉鎮市區", ambiguous=True)
+        return {"confidence": "待確認", "note": f"{n} 個行政區都有此門牌，請補鄉鎮市區", "ambiguous": True}
 
     b_attr = r.mrank == 0 or _na(r.osm_uid)  # 門牌已落在 OSM 建物內時，不跨巷借用鄰近（nearest）建照外框的年份與構造
-    out = dict(
-        county=r.county if has_addr else r.t_county, town=r.town if has_addr else r.t_town,
-        floors_below=next((x for x in (r.c_below, r.p_below, r.floors_below if b_attr else None) if not _na(x)), None),
-        structure=next((x for x in (r.t_structure, r.p_structure, r.b_structure if b_attr else None) if not _na(x)), None),
-        btype=r.t_btype if not _na(r.t_btype) else (r.b_btype if b_attr else None),
-        year=next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year if b_attr else None) if not _na(x)), None),
-        year_kind="竣工年（人工校正）" if not _na(r.c_year) else "建築完成年" if not _na(r.t_year) else (
+    out = {
+        "county": r.county if has_addr else r.t_county, "town": r.town if has_addr else r.t_town,
+        "floors_below": next((x for x in (r.c_below, r.p_below, r.floors_below if b_attr else None) if not _na(x)), None),
+        "structure": next((x for x in (r.t_structure, r.p_structure, r.b_structure if b_attr else None) if not _na(x)), None),
+        "btype": r.t_btype if not _na(r.t_btype) else (r.b_btype if b_attr else None),
+        "year": next((x for x in (r.c_year, r.t_year, r.p_year, r.b_year if b_attr else None) if not _na(x)), None),
+        "year_kind": "竣工年（人工校正）" if not _na(r.c_year) else "建築完成年" if not _na(r.t_year) else (
             "竣工年（使照）" if not _na(r.p_year) else None if (not b_attr or _na(r.b_year)) else r.b_year_kind),
-        level=LEVEL_NAME.get(min((x for x in (r.lvl, r.tlvl) if not _na(x)), default=2)),
-    )
+        "level": LEVEL_NAME.get(min((x for x in (r.lvl, r.tlvl) if not _na(x)), default=2)),
+    }
     b, t = r.b_floors, r.t_floors
     notes = ["門牌點位資料沒有此門牌，請確認門牌存在"] if nb_only else []
     if not _na(t) and r.t_nfloors > 1:
@@ -369,6 +385,8 @@ def _resolve(r, covered: set[str]) -> dict:
 
 
 def lookup_many(con: duckdb.DuckDBPyConnection, texts: list[str]) -> pd.DataFrame:
+    import pandas as pd
+
     q = _queries(texts)
     con.register("q", q.loc[q.base.str.endswith("號"), ["idx", "county", "town", "base", "base_main", "full", "floor"]])
     hit = con.execute(_SQL).df()
@@ -452,6 +470,8 @@ def _add_usage(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame
 def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
     """建物風險資訊：門牌（找不到用主號）的災害潛勢與使用性質。
     災害欄位：在範圍內＝等級／名稱；不在範圍內＝「未在範圍內」；該縣市沒有圖資＝「此區無圖資」；沒有座標＝空白。"""
+    import pandas as pd
+
     keys = pd.DataFrame({"i": df.index, "county": df.county, "town": df.town,
                          "base": df.base_q if "base_q" in df else df.base, "base_main": df.base_main})
     con.register("rk", keys)
@@ -482,6 +502,8 @@ def _add_risk(con: duckdb.DuckDBPyConnection, df: pd.DataFrame) -> pd.DataFrame:
 
 
 def lookup(con: duckdb.DuckDBPyConnection, text: str) -> dict:
+    import pandas as pd
+
     # 建物／建案名稱（不在地標清單、沒有門牌號碼）：名稱完全相符而且只對到一個門牌時，改查那個門牌
     named = None
     if text and not re.search(r"\d", text) and not landmarks.resolve(text):
@@ -551,6 +573,8 @@ RISK_FIELDS = [*RISK_HAZARDS, "usage", "usage_floors", "usage_source", "zoning",
 
 def building_risk(con: duckdb.DuckDBPyConnection, doors: pd.DataFrame) -> dict:
     """一棟建物的建物風險資訊（doors：棟內門牌 county, town, base, lon）。沒有門牌就回空 dict。"""
+    import pandas as pd
+
     if doors.empty:
         return {}
     df = doors.assign(base_main=doors.base).reset_index(drop=True)

@@ -31,7 +31,7 @@ EXPR = {"trades": {c: SALE_ONLY.format(c=c) for c in ("total_price", "unit_price
 # 表 → (欄位, 排序)；欄位 None＝全部
 TABLES = {
     "addresses": (None, "base, county, town"),
-    "buildings": (None, "minlon, minlat"),
+    "buildings": (None, "uid"),
     "trades": (
         ("county, town, base, floor, total_floors, structure, btype, built_year, trade_date, source, kind, "
          "total_price, unit_price, park_price, note"),
@@ -42,6 +42,7 @@ TABLES = {
     "same_bldg": (None, "base, county, town"),
     "trade_pts": (None, "county, gy, gx"),
     "roads": (None, "county, town, road"),
+    "pick_towns": (None, "county, n DESC"),
     "pillars": (None, "lat, lon"),
     "bldg_names": (None, "key"),
     "coverage": (None, "county"),

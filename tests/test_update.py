@@ -59,7 +59,7 @@ def test_addr_auto_rebuild(monkeypatch, tmp_path):
     from sitefloor import update
 
     monkeypatch.setattr(update, "head_token", lambda url, tries=2: "same")
-    monkeypatch.setattr(update, "new_seasons", lambda: [])
+    monkeypatch.setattr(update, "new_seasons", list)
     monkeypatch.setattr(update, "ROOT", tmp_path)  # 沒有人工校正表
     ver = {ds: "v1" for ds in update.WATCH_ONLY.values()}
     state = {"plvr_current": "same", "osm": "same", **{f"watch:{ds}": v for ds, v in ver.items()}}

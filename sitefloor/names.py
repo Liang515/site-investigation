@@ -9,13 +9,18 @@ key 是 landmarks.key()（去空白、全形轉半形、台→臺、英文小寫
 建表：osm.py 最後呼叫 build()（要 door_osm、door_trade）；單獨重建：uv run python -m sitefloor.names
 """
 
+from __future__ import annotations
+
 import csv
 import re
 import zipfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import duckdb
-import pandas as pd
+
+if TYPE_CHECKING:
+    import pandas as pd
 
 from sitefloor import landmarks
 from sitefloor.address import parse
@@ -31,6 +36,8 @@ MULTI_NO = re.compile(r"(\d+)(?:[、，,及]\d+)+號")
 
 def _presale() -> pd.DataFrame:
     """預售屋季檔的（建案名稱, 縣市, 鄉鎮, 門牌）：只收有門牌號的紀錄。"""
+    import pandas as pd
+
     from sitefloor.trades import PLVR_COUNTY
 
     parts = []
@@ -64,6 +71,8 @@ def _presale() -> pd.DataFrame:
 
 
 def _aliases() -> pd.DataFrame:
+    import pandas as pd
+
     rows = []
     if CURATED.exists():
         with CURATED.open(encoding="utf-8") as f:

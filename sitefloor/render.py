@@ -1,7 +1,5 @@
 """地圖立體繪製用的小工具（不碰資料庫、不用建庫套件，部署環境也能用）。"""
 
-import shapely
-
 FLOOR_M = 3.2  # 立體高度：每層公尺數
 TOWER_MARGIN = 2  # OSM 建物比臺北建照外框高出這麼多層以上，視為裙樓上的塔樓
 TOWER_MAX_SHARE = 0.5  # 塔樓外框要小於建照外框的這個比例；差不多大的是同一棟、只是樓層不同
@@ -31,6 +29,8 @@ def part_extent(levels, min_level, height, min_height, parent_floors=None):
 
 def _inter_area(a, b) -> float:
     """兩個外框重疊面積；來源資料有自相交等無效外框時，先修正再算（否則整個範圍的地圖都畫不出來）。"""
+    import shapely
+
     try:
         return shapely.intersection(a, b).area
     except shapely.errors.GEOSException:
@@ -46,6 +46,8 @@ def resolve_overlaps(osm: list[tuple], city_rows: list[tuple], modeled: set[str]
     - 臺中建物圖（對實價 53%）不如 OSM（70%）→ 畫 OSM。
     - 臺北建照套繪圖（96%）比 OSM（64%）準 → 只有 OSM 最高樓層和建照一致時才改畫 OSM；不一致時保留建照外框，
       並拿掉大半落在框內的 OSM 建物（比建照高很多、外框又明顯較小的是裙樓上的塔樓，照畫）。"""
+    import shapely
+
     city: list[tuple] = []
     drop_osm: set[int] = set()
     # 只有「知道樓層」的 OSM 建物能取代市府外框；樓層未知的（灰色）不能蓋掉有樓層的臺中／臺北外框。

@@ -13,7 +13,7 @@
 
 import duckdb
 
-from sitefloor.trades import M2_PER_PING
+M2_PER_PING = 3.305785  # 1 坪＝3.305785 m²（獨立定義，不拉進 trades.py 的 pandas）
 
 START_YEAR = 2013  # 實價登錄 2012 年 8 月開始，第一個完整年度
 FIRE_FAR_M = 3000  # 離最近消防隊超過這個距離（直線）算「偏遠」

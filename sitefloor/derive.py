@@ -105,10 +105,17 @@ FROM (SELECT county, town, regexp_extract(prefix, '{SUGGEST_LANE}', 1) AS road F
 WHERE road <> '' AND NOT starts_with(road, county) AND NOT starts_with(road, town)
   AND NOT regexp_matches(road, '[．、,，~～\\-]|\\d$')  -- 「266．268號」這類合併門牌拆出的殘段
 GROUP BY 1, 2, 3;
+
+-- 鄉鎮選單預先彙整（/api/pick 縣市／鄉鎮兩層直接讀這張表，冷啟動不再重掃 addresses 與 door_trade）
+CREATE OR REPLACE TABLE pick_towns AS
+SELECT county, town, count(DISTINCT base)::INT AS n FROM (
+    SELECT county, town, base FROM addresses
+    UNION ALL SELECT county, town, base FROM door_trade
+) WHERE town IS NOT NULL GROUP BY 1, 2;
 """
 
 if __name__ == "__main__":
     con = connect(write=True)
     con.execute(SQL)
-    for t in ("door_trade", "trade_doors", "same_bldg", "trade_pts", "roads"):
+    for t in ("door_trade", "trade_doors", "same_bldg", "trade_pts", "roads", "pick_towns"):
         print(t, f"{con.execute(f'SELECT count(*) FROM {t}').fetchall()[0][0]:,}")

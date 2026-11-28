@@ -9,8 +9,6 @@
 
 import math
 
-import shapely
-
 M_PER_DEG_LAT = 110_574
 
 
@@ -125,6 +123,8 @@ def presidential_office(_g=None) -> list[tuple[list, float, float]]:
 
 def _meters(g):
     """經緯度外框 → 以外框中心為原點的公尺座標（回傳外框與反轉換）。"""
+    import shapely
+
     c = g.centroid
     kx, ky = 111_320 * math.cos(math.radians(c.y)), M_PER_DEG_LAT
     fwd = shapely.transform(g, lambda a: (a - [c.x, c.y]) * [kx, ky])
@@ -133,6 +133,8 @@ def _meters(g):
 
 def _coords(g) -> list:
     """shapely 面 → 模型外框（[外圈, 洞…]；多塊時取最大塊）。"""
+    import shapely
+
     if g.geom_type == "MultiPolygon":
         g = max(g.geoms, key=lambda p: p.area)
     g = shapely.geometry.polygon.orient(g, 1.0)  # 外圈逆時針、洞順時針（MapLibre 依繞行方向認洞）
@@ -159,6 +161,8 @@ def xinzhuang_gym(g) -> list[tuple[list, float, float]]:
 
 def stadium_stands(g, top: float, n: int = 3) -> list[tuple[list, float, float]]:
     """環形看台（外框中間的洞＝球場）：從球場往外分 n 圈，越外圈越高，最外圈到 top 公尺。"""
+    import shapely
+
     m, back = _meters(g)
     poly = max(getattr(m, "geoms", [m]), key=lambda p: p.area)
     if not poly.interiors:
@@ -211,6 +215,8 @@ def podium_tower(g, podium: float, inset: float, body_top: float, roof: float, c
 
 def boat_outline(g, width: float, tip: float = 4, n: int = 24):
     """依外框東西向範圍畫扁船形（中間最寬 width 公尺、兩端收尖到 tip 公尺）的平面，回傳經緯度面。"""
+    import shapely
+
     m, back = _meters(g)
     x0, y0, x1, y1 = m.bounds
     cx, cy, half = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2

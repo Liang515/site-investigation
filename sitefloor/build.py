@@ -292,7 +292,11 @@ def build_road_towns(con):
         rows += [(county, r.name, r.TOWNNAME, round(r.share, 3)) for r in ok.itertuples()]
         print(f"  {county}：道路 {g.name.nunique():,} 條，可判斷區別 {len(ok):,} 條")
     df = pd.DataFrame(rows, columns=["county", "road", "town", "share"])
-    con.execute("CREATE OR REPLACE TABLE road_towns AS SELECT * FROM df")
+    con.register("road_towns_df", df)
+    try:
+        con.execute("CREATE OR REPLACE TABLE road_towns AS SELECT * FROM road_towns_df")
+    finally:
+        con.unregister("road_towns_df")
 
 
 BUILDERS = {"taichung": build_taichung, "taipei": build_taipei, "osm_addr": build_osm_addr,
