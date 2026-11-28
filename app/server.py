@@ -39,7 +39,7 @@ from sitefloor.lookup import (
     lookup_many,
     trade_records,
 )
-from sitefloor.models import MODELS, REPLACED_PARTS
+from sitefloor.models import MODEL_FLOORS, MODELS, REPLACED_PARTS
 from sitefloor.render import FLOOR_M, extrude_height, part_extent, resolve_overlaps
 from sitefloor.suggest import Suggester, split_base
 
@@ -454,17 +454,40 @@ def api_dashboard(county: str = "", town: str = ""):
     return JSONResponse(out, headers={"Cache-Control": "public, max-age=3600"})
 
 
+def _project_name(cur, county: str | None, town: str | None, bases: list[str]) -> str | None:
+    """從 bldg_names 補查建物／建案名稱（人工別名 > 實價預售建案 > OSM 名稱）。"""
+    clean = [b for b in bases if b]
+    if not county or not clean or not _has_table("bldg_names"):
+        return None
+    row = cur.execute(
+        """SELECT name FROM bldg_names
+           WHERE county = ? AND (? IS NULL OR town = ?) AND list_contains(?, base)
+           ORDER BY source = 'alias' DESC, source = 'presale' DESC, n DESC LIMIT 1""",
+        [county, town, town, clean],
+    ).fetchone()
+    return row[0] if row else None
+
+
 @app.get("/api/lookup")
 def api_lookup(q: str, via: str | None = None):
-    r = lookup(_cur(), q)
+    cur = _cur()
+    r = lookup(cur, q)
     uid = r.get("osm_uid") or r.get("bldg_uid")
     popularity.incr(uid)  # 只記建物被查次數
     usage.record(usage.lookup_fields(r, via))  # 每天各項次數（不記地址）
     # 建物資料一起回傳，網頁不用等查詢結果回來再發第二個請求
     try:
-        r["building"] = _building(uid, risk=False) if uid else None  # 卡片用不到整棟的風險資訊與成交紀錄
+        bldg = _building(uid, risk=False) if uid else None  # 卡片用不到整棟的風險資訊與成交紀錄
     except HTTPException:
-        r["building"] = None
+        bldg = None
+    r["building"] = bldg
+    if not r.get("name"):
+        tw = r.get("town") or ""
+        norm = (r.get("normalized") or "").removeprefix(r.get("county") or "").removeprefix(tw)
+        bases = [x for x in (norm, r.get("trades_base")) if x]
+        if bldg and bldg.get("addresses") and tw:
+            bases += [a.removeprefix(tw) for a in bldg["addresses"] if a.startswith(tw)]
+        r["name"] = _project_name(cur, r.get("county"), tw or None, list(dict.fromkeys(bases))) or (bldg.get("name") if bldg else None)
     return r
 
 
@@ -600,9 +623,10 @@ def api_buildings(bbox: str = Query(..., description="minlon,minlat,maxlon,maxla
             feats.append(_feature(len(feats), json.loads(shapely.to_geojson(pg)), uid=pu, floors=lv or f,
                                   h=top, base=base, name=name, src="osm_part"))
         if u in MODELS:
+            mf = f if f is not None else MODEL_FLOORS.get(u)
             for ring, z0, z1 in MODELS[u](g):
                 coords = ring if isinstance(ring[0][0], list) else [ring]  # 有中庭：[外圈, 中庭…]
-                feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": coords}, uid=u, floors=f,
+                feats.append(_feature(len(feats), {"type": "Polygon", "coordinates": coords}, uid=u, floors=mf,
                                       h=z1, base=z0, name=name, src="model"))
             continue
         if parts.get(u):
@@ -784,8 +808,11 @@ def _osm_building(uid: str, risk: bool = True) -> dict:
             return _osm_part(uid, risk)
         raise HTTPException(404)
     u, name, _btype, levels, tf, h, lon, lat, cf, pf = r
-    addrs = cur.execute("SELECT town || base FROM door_osm WHERE osm_uid = ? ORDER BY 1 LIMIT 30", [uid]).fetchall()
+    door_rows = cur.execute("SELECT town, base FROM door_osm WHERE osm_uid = ? ORDER BY 1, 2 LIMIT 30", [uid]).fetchall()
+    addrs = [t + b for t, b in door_rows]
     n, county = cur.execute("SELECT count(*), any_value(county) FROM door_osm WHERE osm_uid = ?", [uid]).fetchone()
+    if not name and door_rows and county:
+        name = _project_name(cur, county, door_rows[0][0], [b for _, b in door_rows])
     below = year = None
     if cf is not None:  # 人工校正的地下樓層、竣工年
         below, year = cur.execute(
@@ -802,7 +829,7 @@ def _osm_building(uid: str, risk: bool = True) -> dict:
         note.append(f"OSM 標高 {h:g} m（地圖高度統一用 樓層×3.2m）")
     out = {"uid": u, "source": src, "floors_above": known_floors, "floors_below": below,
            "structure": None, "btype": None, "year": year,
-           "year_kind": "竣工年（人工校正）" if year is not None else None, "lon": lon, "lat": lat, "addresses": [a for (a,) in addrs], "n_units": n,
+           "year_kind": "竣工年（人工校正）" if year is not None else None, "lon": lon, "lat": lat, "addresses": addrs, "n_units": n,
            "note": "；".join(note), "osm": True, "county": county, "name": name}
     if known_floors is None:
         full = [c + t + b for c, t, b in cur.execute(
@@ -834,12 +861,14 @@ def _building(uid: str, risk: bool = True) -> dict:
     if row is None:
         raise HTTPException(404)
     uids = _door_uids(uid)
-    addrs = cur.execute("""
-        SELECT DISTINCT town || base AS addr FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 1 LIMIT 30
+    door_rows = cur.execute("""
+        SELECT DISTINCT town, base FROM addresses WHERE list_contains(?, bldg_uid) ORDER BY 1, 2 LIMIT 30
     """, [uids]).fetchall()
+    addrs = [t + b for t, b in door_rows]
     n = cur.execute("SELECT count(*) FROM addresses WHERE list_contains(?, bldg_uid)", [uids]).fetchone()[0]
     out = {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in zip(_BLDG_COLS, row)}
-    out.update(addresses=[a for (a,) in addrs], n_units=n)
+    name = _project_name(cur, out.get("county"), door_rows[0][0] if door_rows else None, [b for _, b in door_rows])
+    out.update(addresses=addrs, n_units=n, name=name)
     if _has_column("buildings", "annex") and cur.execute("SELECT annex FROM buildings WHERE uid = ?", [uid]).fetchone()[0]:
         out["note"] = (f"同一張建照拆出來的附屬小外框；套繪圖記的 {out['floors_above']} 層是整張建照的最高樓層，"
                        "不是這塊的樓層")

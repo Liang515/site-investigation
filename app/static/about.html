@@ -13,10 +13,19 @@
 <title>資料來源與授權 — 建物查詢平台</title>
 <link rel="stylesheet" href="/common.css?v=1">
 <style>
-  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 64px; }
-  header { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 10px 0; margin: 0 0 8px; }
+  main { max-width: 860px; margin: 0 auto; padding: 0 16px 64px; }
+  header.topbar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); padding: 12px 0; margin: 0 0 16px;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .top-left { display: flex; align-items: center; gap: 10px; }
+  .back-btn, .nav-pill { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink); font-size: 13px; font-weight: 600;
+    text-decoration: none; box-shadow: var(--shadow); transition: border-color .15s, color .15s, background .15s; }
+  .back-btn:hover, .nav-pill:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+  .nav-pill { background: var(--soft); box-shadow: none; font-size: var(--fs-cap); padding: 5px 10px; }
   h1 { font-size: var(--fs-h1); line-height: 28px; margin: 0; display: flex; align-items: center; gap: 8px; }
-  h1 img { border-radius: 7px; }
+  h1 a { display: inline-flex; align-items: center; }
+  h1 img { border-radius: 7px; display: block; }
   h2 { font-size: var(--fs-title); margin: 28px 0 8px; }
   p, li { font-size: var(--fs-body); line-height: 1.75; }
   .muted { color: var(--muted); font-size: var(--fs-cap); }
@@ -35,10 +44,14 @@
 </head>
 <body>
 <main>
-  <header>
-    <h1><a href="/" aria-label="回查詢頁"><img src="/logo.png" alt="" width="28" height="28"></a>資料來源與授權</h1>
+  <header class="topbar">
+    <div class="top-left">
+      <a class="back-btn" href="/">← 返回查詢</a>
+      <h1><a href="/" aria-label="回查詢頁"><img src="/logo.png" alt="" width="28" height="28"></a>資料來源與授權</h1>
+    </div>
+    <a class="nav-pill" href="/stats">區域統計</a>
   </header>
-  <p class="muted" style="margin:0"><a href="/">← 回查詢頁</a> · <a href="/stats">區域統計</a> · 本站整合政府開放資料與 OpenStreetMap，查詢臺灣地址的建物樓層、構造、年份與災害潛勢。</p>
+  <p class="muted" style="margin:0">本站整合政府開放資料與 OpenStreetMap，查詢臺灣地址的建物樓層、構造、年份與災害潛勢。</p>
 
   <h2>免責聲明</h2>
   <div class="box">
@@ -104,5 +117,13 @@
   <h2>個人資料</h2>
   <p>本站提供建物層級的資訊（樓層、構造、年份），以及內政部已公開的實價登錄買賣紀錄（成交日期、樓層、價格、備註）；不顯示租賃紀錄，不與任何人的身分資料串接，也不保存使用執照上的起造人、設計人等姓名。本站不另外保存查詢內容，只統計每棟建物被查詢的次數（不含 IP、查詢文字與時間），用來決定優先查證哪些建物的資料；另統計每天各功能的使用次數（例：查詢幾次、各縣市幾次、查詢方式、結果的信心等級、定位按鈕、區域統計頁與價格走勢圖用了幾次），只有日期與次數，不含地址、IP 或個人的操作順序，用來改善網站；另以 Vercel Web Analytics 統計網站瀏覽數與訪客數（不使用 cookie，只看得到頁面網址、來源網站、國家與裝置類型等彙總數字，看不到查詢的地址）；上傳的整批查詢檔案只在記憶體中處理、不存檔。使用地圖右上角的定位按鈕時，所在位置只在瀏覽器裡用來移動地圖，不會送到本站伺服器（之後載入該區建物時，伺服器只會收到地圖畫面的範圍，和平常移動地圖相同）。主機的存取紀錄（含請求網址，可能包含查詢的地址）會因維運需要短期保留。使用「回報問題」時，填寫的地址、問題類型、樓層或說明、依據與聯絡方式（選填）會存放在本站維護者的 GitHub 私人儲存庫，並透過推播服務 ntfy.sh 通知維護者，只用於查證後更新資料，不會公開。</p>
 </main>
+<script>
+try {
+  const backUrl = sessionStorage.getItem("lastQueryUrl");
+  if (backUrl && backUrl.startsWith("/")) {
+    document.querySelectorAll('a[href="/"]').forEach(a => { a.href = backUrl; });
+  }
+} catch {}
+</script>
 </body>
 </html>

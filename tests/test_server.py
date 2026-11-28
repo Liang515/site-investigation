@@ -162,3 +162,22 @@ def test_cron_requires_secret_when_set(monkeypatch):
     with pytest.raises(HTTPException) as e:
         server.api_cron_weekly(req({"authorization": "Bearer wrong"}))
     assert e.value.status_code == 401
+
+
+def test_project_name_priority(monkeypatch):
+    con = duckdb.connect()
+    con.execute("CREATE TABLE bldg_names (key VARCHAR, name VARCHAR, county VARCHAR, town VARCHAR, base VARCHAR, source VARCHAR, n INT)")
+    con.execute("""INSERT INTO bldg_names VALUES
+        ('k1', 'OSM名', '臺北市', '大安區', '忠孝東路三段268號', 'osm', 50),
+        ('k2', '預售名', '臺北市', '大安區', '忠孝東路三段268號', 'presale', 10),
+        ('k3', '台北之星', '臺北市', '大安區', '忠孝東路三段268號', 'alias', 0)""")
+    monkeypatch.setattr(server, "_cur", con.cursor)
+    server._has_table.cache_clear()
+    try:
+        assert server._project_name(con.cursor(), "臺北市", "大安區", ["忠孝東路三段268號"]) == "台北之星"
+        con.execute("DELETE FROM bldg_names WHERE source = 'alias'")
+        assert server._project_name(con.cursor(), "臺北市", "大安區", ["忠孝東路三段268號"]) == "預售名"
+        con.execute("DELETE FROM bldg_names WHERE source = 'presale'")
+        assert server._project_name(con.cursor(), "臺北市", "大安區", ["忠孝東路三段268號"]) == "OSM名"
+    finally:
+        server._has_table.cache_clear()

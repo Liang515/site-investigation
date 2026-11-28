@@ -243,6 +243,71 @@ def fubon_a25_podium(g) -> list[tuple[list, float, float]]:
     return [(_coords(g), 0, 20)]
 
 
+def dome_roof(g, wall: float, top: float, inset: float, n: int = 7) -> list[tuple[list, float, float]]:
+    """外框當牆身到 wall 公尺，上方以橢圓弧線分 n 段往內收 inset 公尺到 top（巨蛋圓頂）。"""
+    m, back = _meters(g)
+    segs = [(_coords(g), 0, wall)]
+    for i in range(n):
+        t0, t1 = i / n, (i + 1) / n
+        z0 = wall + (top - wall) * math.sin(t0 * math.pi / 2)
+        z1 = wall + (top - wall) * math.sin(t1 * math.pi / 2)
+        shrink = inset * (1 - math.cos((t0 + t1) / 2 * math.pi / 2))
+        shrunk = m.buffer(-shrink, join_style="mitre") if shrink > 0 else m
+        if shrunk.is_empty:
+            break
+        segs.append((_coords(back(shrunk)), z0, z1))
+    return segs
+
+
+def taipei_dome(g) -> list[tuple[list, float, float]]:
+    """臺北大巨蛋（2023）：橢圓形巨蛋屋頂，總高約 74.5 m。"""
+    return dome_roof(g, 24, 74.5, 70, n=8)
+
+
+def taipei_arena(g) -> list[tuple[list, float, float]]:
+    """臺北小巨蛋（2005）：弧形圓頂體育館，總高約 38 m。"""
+    return dome_roof(g, 16, 38, 52, n=6)
+
+
+def kaohsiung_85(_g=None) -> list[tuple[list[list[float]], float, float]]:
+    """高雄八五大樓（1997，李祖原）：「高」字形雙塔結構，地上 85 層，屋頂 347.5 m、尖塔 378 m。
+    底層裙樓 0–36 m；雙側塔樓 36–144 m（中央留出標誌性鏤空拱門）；35–41 樓空中橋接層 144–168 m；
+    中央主塔 168–310 m；金字塔收分冠頂 310–347.5 m；天線尖塔 347.5–378 m。"""
+    lon, lat, deg = 120.300160, 22.611616, -71.2
+    segs: list[tuple[list[tuple[float, float]], float, float]] = [
+        (_rect(128, 56), 0, 36),
+        (_rect(38, 52, -41), 36, 144),
+        (_rect(38, 52, 41), 36, 144),
+        (_rect(118, 52), 144, 168),
+        (_rect(52, 50), 168, 310),
+    ]
+    segs += [(_rect(w, w * 0.96), z0, z1) for z0, z1, w in _taper(310, 347.5, 48, 18, 4)]
+    segs += [(_rect(w, w), z0, z1) for z0, z1, w in _taper(347.5, 378, 5, 1.8, 2)]
+    return [(_local(lon, lat, deg, pts), z0, z1) for pts, z0, z1 in segs]
+
+
+def tao_zhu_yin_yuan(_g=None) -> list[tuple[list[list[float]], float, float]]:
+    """陶朱隱園（2018，Vincent Callebaut）：地上 21 層、高 93.2 m。
+    雙螺旋 DNA 扭轉結構：每層繞中央核心旋轉 4.5 度，20 層共旋轉 90 度。"""
+    lon, lat, base_deg = 121.570361, 25.038539, -45.0
+    segs: list[tuple[list[list[float]], float, float]] = [
+        (_local(lon, lat, base_deg, _octagon(42)), 0, 8),
+        (_local(lon, lat, base_deg, _octagon(16)), 8, 93.2),
+    ]
+    n_floors = 20
+    step = (93.2 - 8) / n_floors
+    for i in range(n_floors):
+        z0 = 8 + i * step
+        z1 = 8 + (i + 1) * step
+        segs.append((_local(lon, lat, base_deg + i * 4.5, _rect(56, 17)), z0, z1))
+    return segs
+
+
+def sky_taipei(g) -> list[tuple[list, float, float]]:
+    """台北天空塔 The Sky Taipei：地上 47 層（臺北市使用執照）、總高 280 m，裙樓＋竹筍收分雙階冠頂。"""
+    return podium_tower(g, 32, 4, 210, 280, 12, n=5)
+
+
 def fubon_a25(g) -> list[tuple[list, float, float]]:
     """富邦人壽大樓（富邦A25，2022）：地上 54 層、高 266 m（維基百科）。"""
     return tower_crown(g, 252, 266, 4, 2)
@@ -256,6 +321,11 @@ def shin_kong_tower(g) -> list[tuple[list, float, float]]:
 # 模型已經畫進去的 OSM 分棟，地圖不另外畫
 REPLACED_PARTS = {"osm:1052759759", "osm:r19378990"}
 
+# OSM 建物本身還沒填樓層時的已知地標地上樓層（讓地圖 Hover 與點選卡片一致，不顯示「樓層未知」）
+MODEL_FLOORS = {
+    "osm:1339580862": 47,  # 台北天空塔（臺北市使用執照 地上 47 層、地下 5 層）
+}
+
 # OSM 建物 uid → 模型
 MODELS = {
     "osm:1159328965": taipei101,
@@ -268,6 +338,11 @@ MODELS = {
     "osm:378443967": cathay_landmark,
     "osm:1010525370": fubon_a25,
     "osm:1131522119": fubon_a25_podium,
+    "osm:383731055": tao_zhu_yin_yuan,
+    "osm:1339580862": sky_taipei,
+    "osm:442195153": taipei_dome,
+    "osm:244001544": taipei_arena,
+    "osm:34170948": kaohsiung_85,
     "osm:230984631": xinzhuang_gym,
     "osm:r9106110": xinzhuang_baseball_stands,
     "osm:665628025": lambda _g=None: [],  # 球場整座外框（含草皮）不畫，看台另外畫

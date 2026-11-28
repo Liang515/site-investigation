@@ -75,3 +75,37 @@ def test_boat_outline_is_one_pointed_shape():
     b = boat_outline(g, 50)
     assert b.geom_type == "Polygon" and b.is_valid  # 兩個方塊近似的外框 → 一個扁船形
     assert b.bounds[0] == g.bounds[0] and abs(b.bounds[2] - g.bounds[2]) < 1e-9
+
+
+def test_kaohsiung_85_has_twin_legs_and_spire():
+    from sitefloor.models import kaohsiung_85
+    segs = kaohsiung_85()
+    assert max(z1 for _, _, z1 in segs) == 378
+    # 36–144 m 為左右雙塔（共兩塊，中央留空形成「高」字拱門）
+    legs = [s for s in segs if s[1] == 36 and s[2] == 144]
+    assert len(legs) == 2
+    assert all(ring[0] == ring[-1] and z0 < z1 for ring, z0, z1 in segs)
+    assert "osm:34170948" in MODELS
+
+
+def test_tao_zhu_yin_yuan_twists_20_floors():
+    from sitefloor.models import tao_zhu_yin_yuan
+    segs = tao_zhu_yin_yuan()
+    assert abs(max(z1 for _, _, z1 in segs) - 93.2) < 1e-6
+    assert len(segs) == 22  # 基座＋中央核心＋20 個旋轉樓層
+    assert all(ring[0] == ring[-1] and z0 < z1 for ring, z0, z1 in segs)
+    assert "osm:383731055" in MODELS
+
+
+def test_dome_roof_curves_inward():
+    import shapely
+
+    from sitefloor.models import dome_roof, sky_taipei
+    g = shapely.box(121.558, 25.041, 121.560, 25.0425)  # 約 200×165 m
+    segs = dome_roof(g, 24, 74.5, 60, n=6)
+    assert segs[0][1:] == (0, 24) and abs(segs[-1][2] - 74.5) < 1e-6
+    areas = [shapely.Polygon(ring[0]).area for ring, _, _ in segs]
+    assert areas == sorted(areas, reverse=True)  # 越往屋頂越收窄
+    sky_segs = sky_taipei(shapely.box(121.5658, 25.0360, 121.5662, 25.0369))
+    assert max(z1 for _, _, z1 in sky_segs) == 280
+    assert {"osm:442195153", "osm:244001544", "osm:1339580862"} <= MODELS.keys()
